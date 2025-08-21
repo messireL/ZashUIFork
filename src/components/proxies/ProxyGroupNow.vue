@@ -1,20 +1,22 @@
 <template>
   <template v-if="proxyGroup.now">
-    <LockClosedIcon
-      class="h-4 w-4 shrink-0"
-      v-if="proxyGroup.fixed === proxyGroup.now"
+    <Component
+      class="h-4 w-4 shrink-0 outline-none"
+      :is="isFixed ? LockClosedIcon : ArrowRightCircleIcon"
       @mouseenter="tipForFixed"
-    />
-    <ArrowRightCircleIcon
-      class="h-4 w-4 shrink-0"
-      v-else-if="!mobile || !manageHiddenGroup"
     />
 
     <ProxyName
       :name="proxyGroup.now"
       class="text-base-content/80 text-xs md:text-sm"
-      @mouseenter="tipForNow"
     />
+    <template v-if="finalOutbound && displayFinalOutbound">
+      <ArrowRightCircleIcon class="h-4 w-4 shrink-0" />
+      <ProxyName
+        :name="finalOutbound"
+        class="text-base-content/80 text-xs md:text-sm"
+      />
+    </template>
   </template>
   <template v-else-if="proxyGroup.type.toLowerCase() === PROXY_TYPE.LoadBalance">
     <CheckCircleIcon class="h-4 w-4 shrink-0" />
@@ -28,7 +30,7 @@
 import { PROXY_TYPE } from '@/constant'
 import { useTooltip } from '@/helper/tooltip'
 import { getNowProxyNodeName, proxyMap } from '@/store/proxies'
-import { manageHiddenGroup } from '@/store/settings'
+import { displayFinalOutbound } from '@/store/settings'
 import { ArrowRightCircleIcon, CheckCircleIcon, LockClosedIcon } from '@heroicons/vue/24/outline'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -39,21 +41,30 @@ const props = defineProps<{
   mobile?: boolean
 }>()
 const proxyGroup = computed(() => proxyMap.value[props.name])
-
 const { showTip } = useTooltip()
-const tipForNow = (e: Event) => {
-  const nowNode = getNowProxyNodeName(props.name)
-  if (!nowNode || nowNode === proxyGroup.value.now || props.mobile) return
-
-  showTip(e, nowNode, {
-    delay: [500, 0],
-  })
-}
-
 const { t } = useI18n()
+
+const isFixed = computed(() => {
+  return proxyGroup.value.fixed === proxyGroup.value.now
+})
+
 const tipForFixed = (e: Event) => {
+  if (!isFixed.value) {
+    return
+  }
+
   showTip(e, t('tipForFixed'), {
     delay: [500, 0],
   })
 }
+
+const finalOutbound = computed(() => {
+  const now = getNowProxyNodeName(proxyGroup.value.now)
+
+  if (now === proxyGroup.value.now) {
+    return ''
+  }
+
+  return now
+})
 </script>

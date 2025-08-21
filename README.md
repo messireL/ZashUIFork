@@ -66,6 +66,7 @@ docker run -d -p 80:80 ghcr.io/zephyruso/zashboard:latest
 2. The connection table can be dragged with the left mouse button, and right-clicking can copy cell content.
 3. Right-clicking on a node / node group card will perform a speedtest for the node / node group.
 4. The proxy group sorting is based on the node order in the GLOBAL group. In Mihomo, it follows the configuration file order, while in sing-box, route.final is placed first, with the rest following the configuration file order. If you need custom ordering, you can specify the order by overriding the GLOBAL group.
+5. The dashboard supports PWA (Progressive Web App), which can provide a native app-like experience on mobile devices through "Add to Home Screen".
 
 ## 提示
 
@@ -73,6 +74,7 @@ docker run -d -p 80:80 ghcr.io/zephyruso/zashboard:latest
 2. 连接表格可被鼠标左键拖动，右键可复制单元格内容。
 3. 右键点击节点/节点组卡片可对节点/节点组进行测速。
 4. 面板的节点组排序是根据GLOBAL组中的节点顺序排序的，在Mihomo中会是按配置文件的顺序，在sing-box中会把route.final放到第一位，其余按照配置文件顺序，如果你需要自定义顺序，可通过覆盖GLOBAL组指定顺序
+5. 面板支持PWA（Progressive Web App），可以在移动设备上通过"添加到主屏幕"获得类原生app的体验
 
 ## URL params format
 

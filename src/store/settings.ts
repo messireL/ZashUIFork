@@ -103,6 +103,7 @@ export const displayProxiesRelationship = useStorage('config/display-proxies-rel
 
 // proxies
 export const collapseGroupMap = useStorage<Record<string, boolean>>('config/collapse-group-map', {})
+export const displayFinalOutbound = useStorage('config/show-seleted-for-now-node', false)
 export const twoColumnProxyGroup = useStorage('config/two-columns', true)
 export const speedtestUrl = useStorage<string>('config/speedtest-url', TEST_URL)
 export const independentLatencyTest = useStorage('config/independent-latency-test', false)

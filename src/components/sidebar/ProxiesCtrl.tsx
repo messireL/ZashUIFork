@@ -16,6 +16,7 @@ import {
 import {
   automaticDisconnection,
   collapseGroupMap,
+  displayFinalOutbound,
   groupProxiesByProvider,
   hideUnavailableProxies,
   manageHiddenGroup,
@@ -277,6 +278,14 @@ export default defineComponent({
                   class="toggle"
                   type="checkbox"
                   v-model={automaticDisconnection.value}
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                {t('displayFinalOutbound')}
+                <input
+                  class="toggle"
+                  type="checkbox"
+                  v-model={displayFinalOutbound.value}
                 />
               </div>
               <div class="flex items-center gap-2">
