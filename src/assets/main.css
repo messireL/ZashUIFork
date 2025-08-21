@@ -7,17 +7,17 @@
 }
 
 @theme {
-  --font-MiSans-NotoEmoji: 'NotoEmoji', 'MiSans-VF', system-ui;
-  --font-SarasaUI-NotoEmoji: 'NotoEmoji', 'SarasaUiSC-Regular', system-ui;
-  --font-PingFang-NotoEmoji: 'NotoEmoji', 'PingFangSC-Regular', system-ui;
-  --font-FiraSans-NotoEmoji: 'NotoEmoji', 'Fira Sans', system-ui;
+  --font-MiSans-NotoEmoji: 'MiSans-VF', 'NotoEmoji', system-ui;
+  --font-SarasaUI-NotoEmoji: 'SarasaUiSC-Regular', 'NotoEmoji', system-ui;
+  --font-PingFang-NotoEmoji: 'PingFangSC-Regular', 'NotoEmoji', system-ui;
+  --font-FiraSans-NotoEmoji: 'Fira Sans', 'NotoEmoji', system-ui;
   --font-SystemUI-NotoEmoji: 'NotoEmoji', system-ui;
 
-  --font-MiSans-Twemoji: 'Twemoji', 'MiSans-VF', system-ui;
-  --font-SarasaUI-Twemoji: 'Twemoji', 'SarasaUiSC-Regular', system-ui;
-  --font-PingFang-Twemoji: 'Twemoji', 'PingFangSC-Regular', system-ui;
-  --font-FiraSans-Twemoji: 'Twemoji', 'Fira Sans', system-ui;
-  --font-SystemUI-Twemoji: 'Twemoji', 'NotoEmoji', system-ui;
+  --font-MiSans-Twemoji: 'MiSans-VF', 'Twemoji', system-ui;
+  --font-SarasaUI-Twemoji: 'SarasaUiSC-Regular', 'Twemoji', system-ui;
+  --font-PingFang-Twemoji: 'PingFangSC-Regular', 'Twemoji', system-ui;
+  --font-FiraSans-Twemoji: 'Fira Sans', 'Twemoji', system-ui;
+  --font-SystemUI-Twemoji: 'Twemoji', system-ui;
 }
 
 @layer utilities {
