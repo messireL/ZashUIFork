@@ -20,7 +20,7 @@ import { isProxyGroup } from '@/helper'
 import { showNotification } from '@/helper/notification'
 import type { Proxy, ProxyProvider } from '@/types'
 import { useStorage } from '@vueuse/core'
-import { debounce, last } from 'lodash'
+import { last } from 'lodash'
 import { computed, ref } from 'vue'
 import { activeConnections } from './connections'
 import {
@@ -228,32 +228,30 @@ const latencyTip = (finished: number, total: number, failed: number) => {
   }
 }
 
-const fetchProxiesDebounced = debounce(fetchProxies, 800)
-const proxyLatencyTestDebounced = async (
-  proxyName: string,
-  url = speedtestUrlWithDefault.value,
-  timeout = speedtestTimeout.value,
-) => {
-  const res = await latencyTestForSingle(proxyName, url, timeout)
-  await fetchProxiesDebounced()
-  return res
+const setHistory = (proxyName: string, delay: number) => {
+  const history = getHistoryByName(proxyName)
+  const now = new Date()
+
+  history.push({
+    time: now.toISOString(),
+    delay,
+  })
 }
 
 const testLatencyOneByOneWithTip = async (nodes: string[], url = speedtestUrlWithDefault.value) => {
   let testDone = 0
   let testFailed = 0
 
-  return await Promise.allSettled(
+  await Promise.allSettled(
     nodes.map(async (name) => {
       try {
-        const res = await proxyLatencyTestDebounced(
-          name,
-          url,
-          Math.min(3000, speedtestTimeout.value),
-        )
+        const res = await latencyTestForSingle(name, url, Math.min(3000, speedtestTimeout.value))
         testDone++
         if (res.status !== 200) {
           testFailed++
+          setHistory(name, NOT_CONNECTED)
+        } else {
+          setHistory(name, res.data.delay)
         }
         latencyTip(testDone, nodes.length, testFailed)
         return res
@@ -265,6 +263,7 @@ const testLatencyOneByOneWithTip = async (nodes: string[], url = speedtestUrlWit
       }
     }),
   )
+  await fetchProxies()
 }
 
 export const proxyGroupLatencyTest = async (proxyGroupName: string) => {
