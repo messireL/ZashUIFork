@@ -1,5 +1,6 @@
 <template>
   <div
+    <SourceIPStats class="mb-2" />
     ref="parentRef"
     class="h-full overflow-auto p-2"
     :class="{
@@ -249,6 +250,7 @@ import { twMerge } from 'tailwind-merge'
 import { computed, h, ref, type VNode } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ProxyName from '../proxies/ProxyName.vue'
+import SourceIPStats from './SourceIPStats.vue'
 
 const { handlerInfo } = useConnections()
 

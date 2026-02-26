@@ -1,4 +1,8 @@
 <template>
+  <div>
+    <SourceIPStats class="mb-2" />
+
+    <template v-if="!renderConnections.length">
   <template v-if="!renderConnections.length">
     <div class="card m-2 flex-row p-2 text-sm">
       {{ $t('noContent') }}
@@ -16,6 +20,7 @@
       ></ConnectionCard>
     </template>
   </VirtualScroller>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -25,6 +30,7 @@ import type { Connection } from '@/types'
 import { computed } from 'vue'
 import VirtualScroller from '../common/VirtualScroller.vue'
 import ConnectionCard from './ConnectionCard'
+import SourceIPStats from './SourceIPStats.vue'
 
 const size = computed(() => {
   return connectionCardLines.value.length * 28 + 4
