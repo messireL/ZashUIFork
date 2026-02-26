@@ -1,6 +1,5 @@
 <template>
   <div
-    <SourceIPStats class="mb-2" />
     ref="parentRef"
     class="h-full overflow-auto p-2"
     :class="{
@@ -14,6 +13,7 @@
     @mouseup="handleMouseUp"
     @mouseleave="handleMouseUp"
   >
+    <SourceIPStats class="mb-2" />
     <div :style="{ height: `${totalSize}px` }">
       <table
         :class="[
