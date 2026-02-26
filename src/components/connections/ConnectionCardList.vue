@@ -1,7 +1,6 @@
 <template>
   <div>
     <SourceIPStats class="mb-2" />
-
     <template v-if="!renderConnections.length">
   <template v-if="!renderConnections.length">
     <div class="card m-2 flex-row p-2 text-sm">
