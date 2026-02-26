@@ -13,7 +13,7 @@
     @mouseup="handleMouseUp"
     @mouseleave="handleMouseUp"
   >
-    <SourceIPStats class="mb-2" />
+  <SourceIPStats class="mb-2" />
     <div :style="{ height: `${totalSize}px` }">
       <table
         :class="[
