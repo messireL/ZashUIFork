@@ -1,24 +1,25 @@
 <template>
   <div>
     <SourceIPStats class="mb-2" />
+
     <template v-if="!renderConnections.length">
-  <template v-if="!renderConnections.length">
-    <div class="card m-2 flex-row p-2 text-sm">
-      {{ $t('noContent') }}
-    </div>
-  </template>
-  <VirtualScroller
-    v-else
-    :data="renderConnections"
-    :size="size"
-  >
-    <template v-slot="{ item }: { item: Connection }">
-      <ConnectionCard
-        class="mb-1"
-        :conn="item"
-      ></ConnectionCard>
+      <div class="card m-2 flex-row p-2 text-sm">
+        {{ $t('noContent') }}
+      </div>
     </template>
-  </VirtualScroller>
+
+    <VirtualScroller
+      v-else
+      :data="renderConnections"
+      :size="size"
+    >
+      <template v-slot="{ item }: { item: Connection }">
+        <ConnectionCard
+          class="mb-1"
+          :conn="item"
+        />
+      </template>
+    </VirtualScroller>
   </div>
 </template>
 
