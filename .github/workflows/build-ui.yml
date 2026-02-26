@@ -2,7 +2,7 @@ name: Build UI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
@@ -17,10 +17,12 @@ jobs:
           node-version: "22"
 
       - name: Enable corepack (pnpm)
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.12.1 --activate
 
       - name: Install deps
-        run: pnpm i --frozen-lockfile
+        run: pnpm i
 
       - name: Build
         run: pnpm build
