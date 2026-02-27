@@ -34,6 +34,19 @@ axios.interceptors.response.use(
         showNotification({ content: 'unauthorizedTip' })
       })
     } else if (!error.config?.url?.endsWith('/delay')) {
+      const h: any = (error.config as any)?.headers || {}
+      const silent =
+        (error.config as any)?.silent === true ||
+        h['X-Zash-Silent'] ||
+        h['x-zash-silent'] ||
+        h['X-ZASH-SILENT'] ||
+        h?.get?.('X-Zash-Silent') ||
+        h?.get?.('x-zash-silent')
+
+      if (silent) {
+        return Promise.reject(error)
+      }
+
       const errorMessage = error.response?.data?.message || error.message
 
       showNotification({

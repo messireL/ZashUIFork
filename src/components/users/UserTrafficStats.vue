@@ -79,20 +79,20 @@
               <td class="text-right font-mono">{{ format(row.dl) }}</td>
               <td class="text-right font-mono">{{ format(row.ul) }}</td>
               <td class="text-right font-mono">{{ format(row.dl + row.ul) }}</td>
-              <td class="text-right">
-                <div class="flex justify-end gap-1">
+              <td class="text-right relative z-30 pointer-events-auto">
+                <div class="flex justify-end gap-1 pointer-events-auto">
 <template v-if="editingUser === row.user">
                   <button
                     type="button" class="btn btn-ghost btn-circle btn-xs relative z-20"
                     :disabled="!editingName.trim()"
-                    @click.stop="saveEdit" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
+                    @click.stop.prevent="saveEdit" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
                     :title="$t('save')"
                   >
                     <CheckIcon class="h-4 w-4" />
                   </button>
                   <button
                     type="button" class="btn btn-ghost btn-circle btn-xs relative z-20"
-                    @click.stop="cancelEdit" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
+                    @click.stop.prevent="cancelEdit" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
                     :title="$t('cancel')"
                   >
                     <XMarkIcon class="h-4 w-4" />
@@ -101,7 +101,7 @@
                 <template v-else>
                   <button
                     type="button" class="btn btn-ghost btn-circle btn-xs relative z-20"
-                    @click.stop="startEdit(row.user)" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
+                    @click.stop.prevent="startEdit(row.user)" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
                     :title="$t('edit')"
                   >
                     <PencilSquareIcon class="h-4 w-4" />
@@ -109,7 +109,7 @@
                   <button
                     type="button" class="btn btn-ghost btn-circle btn-xs relative z-20"
                     :disabled="!hasMapping(row.user)"
-                    @click.stop="removeUser(row.user)" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
+                    @click.stop.prevent="removeUser(row.user)" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
                     :title="$t('delete')"
                   >
                     <TrashIcon class="h-4 w-4" />

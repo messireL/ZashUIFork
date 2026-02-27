@@ -36,8 +36,17 @@
           <div v-if="subscriptionInfo">
             {{ subscriptionInfo.expireStr }}
           </div>
-          <div v-if="subscriptionInfo">
-            {{ subscriptionInfo.usageStr }}
+          <div v-if="subscriptionInfo" class="flex items-center gap-2">
+            <span>{{ subscriptionInfo.usageStr }}</span>
+            <button
+              v-if="subscriptionInfo.totalLabel === '—'"
+              type="button"
+              class="btn btn-ghost btn-xs"
+              @click.stop="showRawSub = !showRawSub"
+              :title="'subscriptionInfo'"
+            >
+              raw
+            </button>
           </div>
           <progress
             v-if="subscriptionInfo.percent !== null"
@@ -45,6 +54,11 @@
             :value="subscriptionInfo.percent"
             max="100"
           ></progress>
+
+          <pre
+            v-if="subscriptionInfo.totalLabel === '—' && showRawSub"
+            class="mt-2 text-xs opacity-70 whitespace-pre-wrap break-all"
+          >{{ subscriptionInfo.raw }}</pre>
 
           <div
             v-if="providerStats.connections > 0 || providerStats.bytes > 0"
@@ -230,10 +244,12 @@ const subscriptionInfo = computed(() => {
     return { download, upload, total, expire }
   }
 
-  const rawDownload = getAny(info, ['Download', 'download'])
-  const rawUpload = getAny(info, ['Upload', 'upload'])
-  const rawTotal = getAny(info, ['Total', 'total', 'quota', 'limit'])
-  const rawExpire = getAny(info, ['Expire', 'expire', 'expiry', 'expiration'])
+  const providerObj: any = proxyProvider.value as any
+
+  const rawDownload = getAny(info, ['Download', 'download']) ?? getAny(providerObj, ['Download', 'download'])
+  const rawUpload = getAny(info, ['Upload', 'upload']) ?? getAny(providerObj, ['Upload', 'upload'])
+  const rawTotal = getAny(info, ['Total', 'total', 'quota', 'limit']) ?? getAny(providerObj, ['Total', 'total', 'quota', 'limit'])
+  const rawExpire = getAny(info, ['Expire', 'expire', 'expiry', 'expiration']) ?? getAny(providerObj, ['Expire', 'expire', 'expiry', 'expiration'])
 
   let Download = parseBytes(rawDownload)
   let Upload = parseBytes(rawUpload)
@@ -260,7 +276,7 @@ const subscriptionInfo = computed(() => {
   const used = prettyBytesHelper(usedBytes, { binary: true })
 
   const isUnlimited =
-    (rawTotal === 0 || rawTotal === '0' || rawTotal === '0B' || rawTotal === '0b') && usedBytes > 0
+    (rawTotal === 0 || rawTotal === '0' || rawTotal === '0B' || rawTotal === '0b' || rawTotal === -1 || rawTotal === '-1') && usedBytes > 0
 
   const totalLabel = Total > 0 ? prettyBytesHelper(Total, { binary: true }) : isUnlimited ? '∞' : '—'
   const percentage = Total > 0 ? ((usedBytes / Total) * 100).toFixed(2) : ''
@@ -278,9 +294,13 @@ const subscriptionInfo = computed(() => {
     expireStr,
     usageStr,
     percent: percentNumber,
+    totalLabel,
+    raw: JSON.stringify(info, null, 2),
   }
 })
 
+
+const showRawSub = ref(false)
 
 const isUpdating = ref(false)
 const isHealthChecking = ref(false)
