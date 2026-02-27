@@ -6,29 +6,29 @@
     </div>
 
     <div class="card-body grid grid-cols-1 gap-2 lg:grid-cols-2">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center justify-between gap-2">
         {{ $t('splitOverviewPage') }}
         <input class="toggle" type="checkbox" v-model="splitOverviewPage" />
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center justify-between gap-2">
         {{ $t('showIPAndConnectionInfo') }}
         <input class="toggle" type="checkbox" v-model="showIPAndConnectionInfo" />
       </div>
 
       <template v-if="showIPAndConnectionInfo">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between gap-2">
           {{ $t('autoIPCheckWhenStart') }}
           <input class="toggle" type="checkbox" v-model="autoIPCheck" />
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between gap-2">
           {{ $t('autoConnectionCheckWhenStart') }}
           <input class="toggle" type="checkbox" v-model="autoConnectionCheck" />
         </div>
 
         <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center justify-between gap-2">
             {{ $t('twoIpTokens') }}
           </div>
           <textarea class="textarea textarea-sm" v-model="twoIpTokensText" :placeholder="$t('optional')" rows="3"></textarea>
@@ -38,18 +38,18 @@
         </div>
       </template>
 
-      <div class="flex items-center gap-2" v-if="splitOverviewPage">
+      <div class="flex items-center justify-between gap-2" v-if="splitOverviewPage">
         {{ $t('displayProxiesRelationship') }}
         <input class="toggle" type="checkbox" v-model="displayProxiesRelationship" />
       </div>
 
-      <div class="flex items-center gap-2" v-if="displayProxiesRelationship">
+      <div class="flex items-center justify-between gap-2" v-if="displayProxiesRelationship">
         {{ $t('proxiesRelationshipSources') }}
         <input class="toggle" type="checkbox" v-model="proxiesRelationshipUseSources" />
       </div>
 
       <div class="flex flex-col gap-1" v-if="displayProxiesRelationship">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between gap-2">
           {{ $t('proxiesRelationshipWeight') }}
           <select class="select select-sm min-w-28" v-model="proxiesRelationshipWeightMode">
             <option value="traffic">{{ $t('traffic') }}</option>
@@ -57,7 +57,7 @@
           </select>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between gap-2">
           {{ $t('proxiesRelationshipColor') }}
           <select class="select select-sm min-w-28" v-model="proxiesRelationshipColorMode">
             <option value="proxy">{{ $t('proxies') }}</option>
@@ -67,7 +67,7 @@
           </select>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between gap-2">
           {{ $t('proxiesRelationshipSourceMode') }}
           <select class="select select-sm min-w-28" v-model="proxiesRelationshipSourceMode">
             <option value="auto">{{ $t('auto') }}</option>
@@ -77,13 +77,13 @@
           </select>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between gap-2">
           {{ $t('proxiesRelationshipTopN') }}
           <input class="range range-xs" type="range" min="10" max="100" step="5" v-model.number="proxiesRelationshipTopN" />
           <span class="text-xs opacity-70 w-10 text-right">{{ proxiesRelationshipTopN }}</span>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between gap-2">
           {{ $t('proxiesRelationshipTopNChain') }}
           <input class="range range-xs" type="range" min="10" max="60" step="2" v-model.number="proxiesRelationshipTopNChain" />
           <span class="text-xs opacity-70 w-10 text-right">{{ proxiesRelationshipTopNChain }}</span>

@@ -45,6 +45,18 @@
             :value="subscriptionInfo.percent"
             max="100"
           ></progress>
+
+          <div
+            v-if="providerStats.connections > 0 || providerStats.bytes > 0"
+            class="mt-1 text-xs opacity-70"
+          >
+            {{ $t('connections') }}: {{ providerStats.connections }}
+            · {{ $t('proxies') }}: {{ proxiesCount }}
+            · {{ $t('traffic') }}: {{ prettyBytesHelper(providerStats.bytes, { binary: true }) }}
+            <template v-if="providerStats.speed > 0">
+              ({{ prettyBytesHelper(providerStats.speed, { binary: true }) }}/s)
+            </template>
+          </div>
         </div>
         <div>{{ $t('updated') }} {{ fromNow(proxyProvider.updatedAt) }}</div>
       </div>
@@ -73,6 +85,7 @@ import { useBounceOnVisible } from '@/composables/bouncein'
 import { useRenderProxies } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { fetchProxies, proxyProviederList } from '@/store/proxies'
+import { activeConnections } from '@/store/connections'
 import { twoColumnProxyGroup } from '@/store/settings'
 import { ArrowPathIcon, BoltIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
@@ -94,21 +107,60 @@ const proxyProvider = computed(
 const allProxies = computed(() => proxyProvider.value.proxies.map((node) => node.name) ?? [])
 const { renderProxies, proxiesCount } = useRenderProxies(allProxies)
 
+const providerStats = computed(() => {
+  const set = new Set(allProxies.value || [])
+  let connections = 0
+  let bytes = 0
+  let speed = 0
+
+  for (const c of activeConnections.value || []) {
+    const proxy = (c as any)?.chains?.[0]
+    if (!proxy || !set.has(proxy)) continue
+    connections++
+    bytes += (Number((c as any).download) || 0) + (Number((c as any).upload) || 0)
+    speed += (Number((c as any).downloadSpeed) || 0) + (Number((c as any).uploadSpeed) || 0)
+  }
+
+  return { connections, bytes, speed }
+})
+
 const subscriptionInfo = computed(() => {
   const info = proxyProvider.value.subscriptionInfo
 
   if (info) {
-    const getNum = (obj: any, ...keys: string[]) => {
-      for (const k of keys) {
-        if (obj?.[k] !== undefined && obj?.[k] !== null) return Number(obj[k]) || 0
+    const parseBytes = (v: any): number => {
+      if (v === null || v === undefined) return 0
+      if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+      if (typeof v === 'string') {
+        const s = v.trim()
+        if (!s) return 0
+        // plain number string
+        if (/^[0-9]+(\.[0-9]+)?$/.test(s)) return Number(s) || 0
+        const m = s.match(/^\s*([0-9]+(?:\.[0-9]+)?)\s*([kmgtpe]?i?b?)\s*$/i)
+        if (!m) return Number(s) || 0
+        const num = Number(m[1])
+        const unit = (m[2] || '').toUpperCase()
+        const pow10 = { K: 1, M: 2, G: 3, T: 4, P: 5, E: 6 }
+        const base = unit.includes('I') ? 1024 : 1000
+        const letter = unit.replace('IB', '').replace('B', '')
+        const p = (pow10 as any)[letter] || 0
+        return num * Math.pow(base, p)
       }
       return 0
     }
 
-    const Download = getNum(info, 'Download', 'download')
-    const Upload = getNum(info, 'Upload', 'upload')
-    const Total = getNum(info, 'Total', 'total')
-    const Expire = getNum(info, 'Expire', 'expire')
+    const getValCI = (obj: any, key: string) => {
+      if (!obj) return undefined
+      const direct = obj[key]
+      if (direct !== undefined && direct !== null) return direct
+      const k = Object.keys(obj).find((x) => x.toLowerCase() === key.toLowerCase())
+      return k ? obj[k] : undefined
+    }
+
+    const Download = parseBytes(getValCI(info, 'Download'))
+    const Upload = parseBytes(getValCI(info, 'Upload'))
+    const Total = parseBytes(getValCI(info, 'Total'))
+    const Expire = Number(getValCI(info, 'Expire')) || 0
 
     if (Download === 0 && Upload === 0 && Total === 0 && Expire === 0) {
       return null

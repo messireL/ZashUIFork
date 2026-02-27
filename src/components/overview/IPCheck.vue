@@ -1,7 +1,7 @@
 <template>
   <div class="bg-base-200/50 relative flex min-h-28 flex-col gap-1 rounded-lg p-2">
     <div class="grid grid-cols-[auto_auto_1fr] gap-x-2 gap-y-1">
-      <div class="text-left text-sm">ipip.net</div>
+      <div :class="['text-left text-sm', statusClass(ipForChina)]">ipip.net</div>
       <div class="text-right text-sm">:</div>
       <div class="text-sm">
         {{ showPrivacy ? ipForChina.ipWithPrivacy[0] : ipForChina.ip[0] }}
@@ -10,7 +10,7 @@
         </span>
       </div>
 
-      <div class="text-left text-sm">2ip.ru</div>
+      <div :class="['text-left text-sm', statusClass(ipFor2ipRu)]">2ip.ru</div>
       <div class="text-right text-sm">:</div>
       <div class="text-sm">
         {{ showPrivacy ? ipFor2ipRu.ipWithPrivacy[0] : ipFor2ipRu.ip[0] }}
@@ -19,7 +19,7 @@
         </span>
       </div>
 
-      <div class="text-left text-sm">2ip.io</div>
+      <div :class="['text-left text-sm', statusClass(ipFor2ipIo)]">2ip.io</div>
       <div class="text-right text-sm">:</div>
       <div class="text-sm">
         {{ showPrivacy ? ipFor2ipIo.ipWithPrivacy[0] : ipFor2ipIo.ip[0] }}
@@ -28,7 +28,7 @@
         </span>
       </div>
 
-      <div class="text-left text-sm">ip.sb</div>
+      <div :class="['text-left text-sm', statusClass(ipForIpsb)]">ip.sb</div>
       <div class="text-right text-sm">:</div>
       <div class="text-sm">
         {{ showPrivacy ? ipForIpsb.ipWithPrivacy[0] : ipForIpsb.ip[0] }}
@@ -37,7 +37,7 @@
         </span>
       </div>
 
-      <div class="text-left text-sm">ipwho.is</div>
+      <div :class="['text-left text-sm', statusClass(ipForIpwhois)]">ipwho.is</div>
       <div class="text-right text-sm">:</div>
       <div class="text-sm">
         {{ showPrivacy ? ipForIpwhois.ipWithPrivacy[0] : ipForIpwhois.ip[0] }}
@@ -46,12 +46,21 @@
         </span>
       </div>
 
-      <div class="text-left text-sm">ipapi.is</div>
+      <div :class="['text-left text-sm', statusClass(ipForIpapi)]">ipapi.is</div>
       <div class="text-right text-sm">:</div>
       <div class="text-sm">
         {{ showPrivacy ? ipForIpapi.ipWithPrivacy[0] : ipForIpapi.ip[0] }}
         <span class="text-xs" v-if="ipForIpapi.ip[1]">
           ({{ showPrivacy ? ipForIpapi.ipWithPrivacy[1] : ipForIpapi.ip[1] }})
+        </span>
+      </div>
+
+      <div :class="['text-left text-sm', statusClass(ipForWhatismyip)]">whatismyip</div>
+      <div class="text-right text-sm">:</div>
+      <div class="text-sm">
+        {{ showPrivacy ? ipForWhatismyip.ipWithPrivacy[0] : ipForWhatismyip.ip[0] }}
+        <span class="text-xs" v-if="ipForWhatismyip.ip[1]">
+          ({{ showPrivacy ? ipForWhatismyip.ipWithPrivacy[1] : ipForWhatismyip.ip[1] }})
         </span>
       </div>
     </div>
@@ -145,6 +154,7 @@ const CACHE_KEY_2IP_IO = 'cache/ipcheck-2ip-io'
 const CACHE_KEY_IPSB = 'cache/ipcheck-ipsb'
 const CACHE_KEY_IPWHOIS = 'cache/ipcheck-ipwhois'
 const CACHE_KEY_IPAPI = 'cache/ipcheck-ipapi'
+const CACHE_KEY_WHATISMYIP = 'cache/ipcheck-whatismyip-v1'
 
 const safeText = (s: any) => (typeof s === 'string' ? s.trim() : '')
 const pick = (obj: any, path: string[]) => {
@@ -154,6 +164,14 @@ const pick = (obj: any, path: string[]) => {
     cur = cur[k]
   }
   return cur
+}
+
+const statusClass = (b: IPBlock) => {
+  const v = (b?.ipWithPrivacy?.[1] || b?.ip?.[1] || '').toString().trim()
+  const msg = (b?.ip?.[0] || '').toString()
+  if (!v && msg === t('getting')) return 'text-base-content/60'
+  if (!v && (msg === t('testFailedTip') || msg === t('twoIpTokenMissing'))) return 'text-error'
+  return v ? 'text-success' : 'text-base-content/60'
 }
 
 const format2ipIo = (data: any): { text: string; ip: string } => {
@@ -217,6 +235,7 @@ const getIPs = (force = false) => {
   ipForIpsb.value = { ...QUERYING_IP_INFO }
   ipForIpwhois.value = { ...QUERYING_IP_INFO }
   ipForIpapi.value = { ...QUERYING_IP_INFO }
+  ipForWhatismyip.value = { ...QUERYING_IP_INFO }
 
   // china (ipip.net)
   getIPFromIpipnetAPI()
@@ -303,6 +322,7 @@ const getIPs = (force = false) => {
   loadGlobal(CACHE_KEY_IPSB, () => getIPInfoFromIPSB(), ipForIpsb, force)
   loadGlobal(CACHE_KEY_IPWHOIS, () => getIPInfoFromIPWHOIS(), ipForIpwhois, force)
   loadGlobal(CACHE_KEY_IPAPI, () => getIPInfoFromIPAPI(), ipForIpapi, force)
+  loadGlobal(CACHE_KEY_WHATISMYIP, () => getIPInfoFromWHATISMYIP(), ipForWhatismyip, force)
 }
 
 onMounted(() => {

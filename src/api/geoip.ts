@@ -246,6 +246,24 @@ export const getIPInfoFromIPAPI = async (ip = ''): Promise<IPInfo> => {
   }
 }
 
+
+
+export const getIPInfoFromWHATISMYIP = async (ip = ''): Promise<IPInfo> => {
+  const url =
+    'https://www.whatismyip.net/geoip/' +
+    (ip ? '?ip=' + encodeURIComponent(ip) + '&t=' + Date.now() : '?t=' + Date.now())
+  const response = await fetch(url)
+  const data: any = await response.json()
+
+  return {
+    ip: String(data?.ip || ip || ''),
+    country: String(data?.country || data?.country_name || ''),
+    region: String(data?.region || data?.state || data?.region_name || ''),
+    city: String(data?.city || ''),
+    asn: String(data?.asn || data?.as || data?.as_number || ''),
+    organization: String(data?.org || data?.isp || data?.organization || ''),
+  }
+}
 export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
   switch (IPInfoAPI.value) {
     case IP_INFO_API.IPAPI: {

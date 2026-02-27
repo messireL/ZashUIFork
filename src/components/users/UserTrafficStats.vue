@@ -36,11 +36,26 @@
         <table class="table table-sm">
           <thead>
             <tr>
-              <th>{{ $t('user') }}</th>
-              <th class="max-md:hidden">{{ $t('keys') }}</th>
-              <th class="text-right">{{ $t('download') }}</th>
-              <th class="text-right">{{ $t('upload') }}</th>
-              <th class="text-right">{{ $t('total') }}</th>
+              <th class="cursor-pointer select-none" @click="setSort('user')">
+                {{ $t('user') }}
+                <span class="opacity-60" v-if="sortKey === 'user'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th class="max-md:hidden cursor-pointer select-none" @click="setSort('keys')">
+                {{ $t('keys') }}
+                <span class="opacity-60" v-if="sortKey === 'keys'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th class="text-right cursor-pointer select-none" @click="setSort('dl')">
+                {{ $t('download') }}
+                <span class="opacity-60" v-if="sortKey === 'dl'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th class="text-right cursor-pointer select-none" @click="setSort('ul')">
+                {{ $t('upload') }}
+                <span class="opacity-60" v-if="sortKey === 'ul'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th class="text-right cursor-pointer select-none" @click="setSort('total')">
+                {{ $t('total') }}
+                <span class="opacity-60" v-if="sortKey === 'total'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+              </th>
               <th class="text-right">{{ $t('actions') }}</th>
             </tr>
           </thead>
@@ -69,14 +84,14 @@
                   <button
                     class="btn btn-ghost btn-circle btn-xs"
                     :disabled="!editingName.trim()"
-                    @click="saveEdit"
+                    @click.stop="saveEdit"
                     :title="$t('save')"
                   >
                     <CheckIcon class="h-4 w-4" />
                   </button>
                   <button
                     class="btn btn-ghost btn-circle btn-xs"
-                    @click="cancelEdit"
+                    @click.stop="cancelEdit"
                     :title="$t('cancel')"
                   >
                     <XMarkIcon class="h-4 w-4" />
@@ -85,16 +100,15 @@
                 <template v-else>
                   <button
                     class="btn btn-ghost btn-circle btn-xs"
-                    :disabled="!canManage(row.user)"
-                    @click="startEdit(row.user)"
+                    @click.stop="startEdit(row.user)"
                     :title="$t('edit')"
                   >
                     <PencilSquareIcon class="h-4 w-4" />
                   </button>
                   <button
                     class="btn btn-ghost btn-circle btn-xs"
-                    :disabled="!canManage(row.user)"
-                    @click="removeUser(row.user)"
+                    :disabled="!hasMapping(row.user)"
+                    @click.stop="removeUser(row.user)"
                     :title="$t('delete')"
                   >
                     <TrashIcon class="h-4 w-4" />
@@ -122,6 +136,7 @@ import { clearUserTrafficHistory, formatTraffic, getTrafficRange, userTrafficSto
 import { sourceIPLabelList } from '@/store/settings'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
+import { v4 as uuidv4 } from 'uuid'
 import { CheckIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 
 type Row = { user: string; keys: string; dl: number; ul: number }
@@ -129,14 +144,24 @@ type Row = { user: string; keys: string; dl: number; ul: number }
 const editingUser = ref<string | null>(null)
 const editingName = ref('')
 
-const canManage = (user: string) => {
-  return sourceIPLabelList.value.some((it) => (it.label || it.key) === user)
+const looksLikeIP = (s: string) => {
+  const v = (s || '').trim()
+  if (!v) return false
+  const v4 = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(v)
+  const v6 = v.includes(':')
+  return v4 || v6
+}
+
+const hasMapping = (user: string) => {
+  const u = (user || '').trim()
+  if (!u) return false
+  return sourceIPLabelList.value.some((it) => (it.label || it.key) === u || it.key === u)
 }
 
 const startEdit = (user: string) => {
-  if (!canManage(user)) return
   editingUser.value = user
-  editingName.value = user
+  const mapped = sourceIPLabelList.value.find((it) => it.key === user) || null
+  editingName.value = (mapped?.label || user || '').toString()
 }
 
 const cancelEdit = () => {
@@ -149,25 +174,51 @@ const saveEdit = () => {
   const next = editingName.value.trim()
   if (!oldUser || !next) return
 
+  let changed = false
   for (const it of sourceIPLabelList.value) {
     const u = it.label || it.key
-    if (u === oldUser) it.label = next
+    if (u === oldUser || it.key === oldUser) {
+      it.label = next
+      changed = true
+    }
+  }
+
+  if (!changed && looksLikeIP(oldUser)) {
+    sourceIPLabelList.value.push({
+      key: oldUser,
+      label: next,
+      id: uuidv4(),
+    })
   }
 
   cancelEdit()
 }
 
 const removeUser = (user: string) => {
-  if (!canManage(user)) return
+  const u = (user || '').trim()
+  if (!u) return
   for (let i = sourceIPLabelList.value.length - 1; i >= 0; i--) {
     const it = sourceIPLabelList.value[i]
-    const u = it.label || it.key
-    if (u === user) sourceIPLabelList.value.splice(i, 1)
+    const name = it.label || it.key
+    if (name === u || it.key === u) sourceIPLabelList.value.splice(i, 1)
   }
 }
 
 const preset = ref<'1h' | '24h' | '7d' | '30d' | 'custom'>('24h')
 const topN = ref<number>(30)
+
+type SortKey = 'user' | 'keys' | 'dl' | 'ul' | 'total'
+const sortKey = ref<SortKey>('total')
+const sortDir = ref<'asc' | 'desc'>('desc')
+
+const setSort = (k: SortKey) => {
+  if (sortKey.value === k) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = k
+    sortDir.value = k === 'user' || k === 'keys' ? 'asc' : 'desc'
+  }
+}
 
 const customFrom = ref(dayjs().subtract(24, 'hour').format('YYYY-MM-DDTHH:mm'))
 const customTo = ref(dayjs().format('YYYY-MM-DDTHH:mm'))
@@ -212,7 +263,16 @@ const rows = computed<Row[]>(() => {
     return { user, keys, dl: t.dl, ul: t.ul }
   })
 
-  const sorted = list.sort((a, b) => (b.dl + b.ul) - (a.dl + a.ul))
+  const sorted = list.sort((a, b) => {
+    const dir = sortDir.value === 'asc' ? 1 : -1
+    if (sortKey.value === 'user') return dir * a.user.localeCompare(b.user)
+    if (sortKey.value === 'keys') return dir * a.keys.localeCompare(b.keys)
+    if (sortKey.value === 'dl') return dir * (a.dl - b.dl)
+    if (sortKey.value === 'ul') return dir * (a.ul - b.ul)
+    const at = a.dl + a.ul
+    const bt = b.dl + b.ul
+    return dir * (at - bt)
+  })
   if (topN.value > 0) return sorted.slice(0, topN.value)
   return sorted
 })

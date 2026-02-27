@@ -145,6 +145,20 @@ const load = async () => {
     const data: any = raw?.data
 
     if (typeof data === 'string' && data.trim().length > 0) {
+      const s = data.trim()
+      // Some builds return JSON here; convert it to YAML-like text for readability (mihomo-style).
+      if ((s.startsWith('{') || s.startsWith('[')) && (s.endsWith('}') || s.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(s)
+          payload.value =
+            `# Converted from /configs (JSON)\n# Comments/ordering may differ from the original mihomo YAML.\n\n${dumpYaml(parsed)}`
+          showNotification({ content: 'mihomoConfigLoadSuccess', type: 'alert-success' })
+          return
+        } catch {
+          // fall through: treat as raw text
+        }
+      }
+
       payload.value = data
       showNotification({ content: 'mihomoConfigLoadSuccess', type: 'alert-success' })
       return

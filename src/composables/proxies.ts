@@ -28,7 +28,6 @@ export const renderGroups = computed(() => {
     for (const g of proxyGroupList.value) {
       for (const n of proxyMap.value[g]?.all || []) usedProxyNames.add(n)
     }
-    for (const n of proxyMap.value[GLOBAL]?.all || []) usedProxyNames.add(n)
 
     const isUsed = (provider: any) => {
       if (usedProxyNames.has(provider.name)) return true
