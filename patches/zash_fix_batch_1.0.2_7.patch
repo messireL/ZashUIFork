@@ -1,0 +1,558 @@
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/package.json /mnt/data/zash_1_0_2_6/ZashUIFork-main/package.json
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/package.json	2026-02-27 12:43:51.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/package.json	2026-02-27 13:25:25.642912443 +0000
+@@ -1,6 +1,6 @@
+ {
+   "name": "zashboard",
+-  "version": "1.0.2_6",
++  "version": "1.0.2_7",
+   "description": "A Dashboard Using Clash API",
+   "license": "MIT",
+   "type": "module",
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/api/geoip.ts /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/api/geoip.ts
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/api/geoip.ts	2026-02-27 08:57:23.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/api/geoip.ts	2026-02-27 13:31:52.970262518 +0000
+@@ -209,8 +209,8 @@
+   }
+ }
+ 
+-export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
+-  switch (IPInfoAPI.value) {
++export const getIPInfoFrom = async (api: IP_INFO_API, ip = ''): Promise<IPInfo> => {
++  switch (api) {
+     case IP_INFO_API.IPAPI: {
+       const ipapi = await getIPFromIPapiisAPI(ip)
+       return {
+@@ -249,3 +249,7 @@
+     }
+   }
+ }
++
++export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
++  return getIPInfoFrom(IPInfoAPI.value, ip)
++}
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ChartsCard.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ChartsCard.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ChartsCard.vue	2026-02-27 08:57:23.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ChartsCard.vue	2026-02-27 13:36:34.778972660 +0000
+@@ -5,7 +5,7 @@
+       {{ $t('overview') }}
+     </div>
+     <div class="card-body gap-4">
+-      <StatisticsStats type="overview" />
++      <TotalsStats />
+       <div class="grid grid-cols-1 gap-2 lg:grid-cols-3">
+         <SpeedCharts class="xl:h-64" />
+         <MemoryCharts class="xl:h-64" />
+@@ -19,5 +19,5 @@
+ import ConnectionsCharts from '@/components/overview/ConnectionsCharts.vue'
+ import MemoryCharts from '@/components/overview/MemoryCharts.vue'
+ import SpeedCharts from '@/components/overview/SpeedCharts.vue'
+-import StatisticsStats from '@/components/overview/StatisticsStats.vue'
++import TotalsStats from '@/components/overview/TotalsStats.vue'
+ </script>
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ConnectionStatus.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ConnectionStatus.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ConnectionStatus.vue	2026-02-27 09:54:32.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ConnectionStatus.vue	2026-02-27 13:30:45.674334869 +0000
+@@ -1,5 +1,8 @@
+ <template>
+   <div class="bg-base-200/50 relative rounded-lg p-2 text-sm">
++    <button class="btn btn-circle btn-sm absolute right-2 top-2" @click="getLatency">
++      <BoltIcon class="h-4 w-4" />
++    </button>
+     <div class="flex flex-col gap-1">
+       <div class="flex items-center justify-between">
+         <div>
+@@ -33,24 +36,21 @@
+         <span :class="getColorForLatency(Number(twoipLatency))">{{ twoipLatency }}ms</span>
+       </div>
+ 
+-      <div class="mt-1 flex items-center gap-2">
++      <div class="mt-2 flex flex-wrap items-center gap-2 pr-14">
+         <input
+-          class="input input-sm flex-1"
++          class="input input-sm flex-1 min-w-[10rem]"
+           v-model="customPingTarget"
+           :placeholder="$t('pingTargetPlaceholder')"
++          @keydown.enter="pingCustom"
+         />
+-        <button class="btn btn-sm" @click="pingCustom">
++        <button class="btn btn-sm min-w-16 whitespace-nowrap" @click="pingCustom">
+           {{ $t('ping') }}
+         </button>
+-        <span class="font-mono" :class="getColorForLatency(Number(customPingLatency))">
+-          {{ customPingLatency ? customPingLatency + 'ms' : '' }}
++        <span class="font-mono min-w-14 text-right" :class="getColorForLatency(Number(customPingLatency))">
++          {{ customPingLatency ? customPingLatency + 'ms' : '—' }}
+         </span>
+       </div>
+     </div>
+-
+-    <button class="btn btn-circle btn-sm absolute right-2 bottom-2" @click="getLatency">
+-      <BoltIcon class="h-4 w-4" />
+-    </button>
+   </div>
+ </template>
+ 
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/IPCheck.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/IPCheck.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/IPCheck.vue	2026-02-27 09:55:09.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/IPCheck.vue	2026-02-27 13:33:19.180026667 +0000
+@@ -28,13 +28,25 @@
+         </span>
+       </div>
+ 
+-      <div class="text-left text-sm">{{ IPInfoAPI }}</div>
++      <div class="text-left text-sm">ip.sb</div>
+       <div class="text-right text-sm">:</div>
+       <div class="text-sm">
+-        {{ showPrivacy ? ipForGlobal.ipWithPrivacy[0] : ipForGlobal.ip[0] }}
+-        <span class="text-xs" v-if="ipForGlobal.ip[1]">
+-          ({{ showPrivacy ? ipForGlobal.ipWithPrivacy[1] : ipForGlobal.ip[1] }})
+-        </span>
++        {{ showPrivacy ? ipForIpsb.ipWithPrivacy[0] : ipForIpsb.ip[0] }}
++        <span class="text-xs" v-if="ipForIpsb.ip[1]"> ({{ showPrivacy ? ipForIpsb.ipWithPrivacy[1] : ipForIpsb.ip[1] }}) </span>
++      </div>
++
++      <div class="text-left text-sm">ipwho.is</div>
++      <div class="text-right text-sm">:</div>
++      <div class="text-sm">
++        {{ showPrivacy ? ipForIpwhois.ipWithPrivacy[0] : ipForIpwhois.ip[0] }}
++        <span class="text-xs" v-if="ipForIpwhois.ip[1]"> ({{ showPrivacy ? ipForIpwhois.ipWithPrivacy[1] : ipForIpwhois.ip[1] }}) </span>
++      </div>
++
++      <div class="text-left text-sm">ipapi.is</div>
++      <div class="text-right text-sm">:</div>
++      <div class="text-sm">
++        {{ showPrivacy ? ipForIpapi.ipWithPrivacy[0] : ipForIpapi.ip[0] }}
++        <span class="text-xs" v-if="ipForIpapi.ip[1]"> ({{ showPrivacy ? ipForIpapi.ipWithPrivacy[1] : ipForIpapi.ip[1] }}) </span>
+       </div>
+     </div>
+ 
+@@ -62,9 +74,11 @@
+   getIPFrom2ipMeProviderAPI,
+   getIPFromIpipnetAPI,
+   getIPInfo,
++  getIPInfoFrom,
+ } from '@/api/geoip'
+ import { ipForChina, ipForGlobal } from '@/composables/overview'
+ import { useTooltip } from '@/helper/tooltip'
++import { IP_INFO_API } from '@/constant'
+ import { autoIPCheck, IPInfoAPI, twoIpToken, twoIpTokens } from '@/store/settings'
+ import { BoltIcon, EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
+ import { onMounted, ref, watch } from 'vue'
+@@ -83,6 +97,10 @@
+ const ipFor2ipRu = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
+ const ipFor2ipIo = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
+ 
++const ipForIpsb = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
++const ipForIpwhois = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
++const ipForIpapi = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
++
+ const QUERYING_IP_INFO: IPBlock = {
+   ip: [t('getting'), ''],
+   ipWithPrivacy: [t('getting'), ''],
+@@ -164,17 +182,27 @@
+   ipForGlobal.value = { ...QUERYING_IP_INFO }
+   ipFor2ipRu.value = { ...QUERYING_IP_INFO }
+   ipFor2ipIo.value = { ...QUERYING_IP_INFO }
++  ipForIpsb.value = { ...QUERYING_IP_INFO }
++  ipForIpwhois.value = { ...QUERYING_IP_INFO }
++  ipForIpapi.value = { ...QUERYING_IP_INFO }
++
++  // global sources (ip.sb / ipwho.is / ipapi.is)
++  const setBlock = (dst: any, res: any) => {
++    const label = `${res.country} ${res.organization}`.trim()
++    dst.value = { ipWithPrivacy: [label, res.ip], ip: [label, maskIP(res.ip)] }
++  }
+ 
+-  // global provider (ip.sb / ipwho.is / ipapi.is)
+-  getIPInfo()
+-    .then((res) => {
+-      const label = `${res.country} ${res.organization}`.trim()
+-      ipForGlobal.value = {
+-        ipWithPrivacy: [label, res.ip],
+-        ip: [label, maskIP(res.ip)],
+-      }
+-    })
+-    .catch(() => (ipForGlobal.value = { ...FAILED_IP_INFO }))
++  getIPInfoFrom(IP_INFO_API.IPSB)
++    .then((res) => setBlock(ipForIpsb, res))
++    .catch(() => (ipForIpsb.value = { ...FAILED_IP_INFO }))
++
++  getIPInfoFrom(IP_INFO_API.IPWHOIS)
++    .then((res) => setBlock(ipForIpwhois, res))
++    .catch(() => (ipForIpwhois.value = { ...FAILED_IP_INFO }))
++
++  getIPInfoFrom(IP_INFO_API.IPAPI)
++    .then((res) => setBlock(ipForIpapi, res))
++    .catch(() => (ipForIpapi.value = { ...FAILED_IP_INFO }))
+ 
+   // china (ipip.net)
+   getIPFromIpipnetAPI()
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesClientCharts.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesClientCharts.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesClientCharts.vue	2026-02-27 11:44:56.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesClientCharts.vue	2026-02-27 13:29:38.778364851 +0000
+@@ -259,7 +259,7 @@
+     agg.colorVotes[key] = (agg.colorVotes[key] || 0) + v
+   }
+ 
+-  const add = (s: string, t: string, c: Connection) => {
++  const add = (s: string, t: string, c: Connection, flowKey = '') => {
+     const b = bytes(c)
+     const v = weight(c)
+     const key = `${s}\u0000${t}`
+@@ -271,6 +271,9 @@
+     const cm = proxiesRelationshipColorMode.value
+     if (cm === 'rule') {
+       voteColor(agg, normalize(c.rule), v)
++    } else if (cm === 'proxy') {
++      const k = normalize(flowKey || t)
++      voteColor(agg, k || 'unknown', v)
+     } else if (cm === 'provider') {
+       const pk = providerOf(t)
+       voteColor(agg, pk || 'unknown', v)
+@@ -297,8 +300,10 @@
+     const rawC1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
+     const chain1 = rawC1 ? (topChain1.has(rawC1) ? rawC1 : OTHER_C1) : ''
+ 
+-    add(client, chain0, c)
+-    if (chain1) add(chain0, chain1, c)
++    const flowKey = chain0
++
++    add(client, chain0, c, flowKey)
++    if (chain1) add(chain0, chain1, c, flowKey)
+   }
+ 
+   const nodesSet = new Set<string>()
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesRuleCharts.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesRuleCharts.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesRuleCharts.vue	2026-02-27 12:44:13.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesRuleCharts.vue	2026-02-27 13:29:07.161730202 +0000
+@@ -269,7 +269,7 @@
+     agg.colorVotes[key] = (agg.colorVotes[key] || 0) + v
+   }
+ 
+-  const add = (s: string, tname: string, c: Connection, targetIsProxy = false) => {
++  const add = (s: string, tname: string, c: Connection, targetIsProxy = false, flowKey = '') => {
+     const b = bytes(c)
+     const v = weight(c)
+     const key = `${s}\u0000${tname}`
+@@ -281,6 +281,10 @@
+     const cm = proxiesRelationshipColorMode.value
+     if (cm === 'rule') {
+       voteColor(agg, normalize((c as any).rule), v)
++    } else if (cm === 'proxy') {
++      // Color the whole flow by the first selected proxy/group (step 0), so the path stays consistent.
++      const k = normalize(flowKey || tname)
++      voteColor(agg, k || 'unknown', v)
+     } else if (cm === 'provider' && targetIsProxy) {
+       const pk = providerOf(tname)
+       voteColor(agg, pk || 'unknown', v)
+@@ -306,14 +310,15 @@
+ 
+     const steps0 = chainSteps(c)
+     const steps = steps0.map((s) => (topProxies.has(s) ? s : OTHER_PROXY))
++    const flowKey = steps.length ? steps[0] : 'DIRECT'
+ 
+-    add(client, rule, c, false)
++    add(client, rule, c, false, flowKey)
+     if (steps.length) {
+-      add(rule, steps[0], c, true)
++      add(rule, steps[0], c, true, flowKey)
+       for (let i = 0; i < steps.length - 1; i++) {
+         const a = steps[i]
+         const b = steps[i + 1]
+-        if (a && b && a !== b) add(a, b, c, true)
++        if (a && b && a !== b) add(a, b, c, true, flowKey)
+       }
+     }
+   }
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesSourcesCharts.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesSourcesCharts.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesSourcesCharts.vue	2026-02-27 11:44:43.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/ProxiesSourcesCharts.vue	2026-02-27 13:30:02.320730596 +0000
+@@ -298,6 +298,9 @@
+     const cm = proxiesRelationshipColorMode.value
+     if (cm === 'rule') {
+       voteColor(agg, normalize(c.rule), v)
++    } else if (cm === 'proxy') {
++      const first = normalize(c.chains?.[0] || 'DIRECT')
++      voteColor(agg, first || 'unknown', v)
+     } else if (cm === 'provider') {
+       // root -> source: color by rule, rest: by provider
+       const colorKey = source === rootName.value ? normalize(c.rule) : providerOf(target)
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/TotalsStats.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/TotalsStats.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/overview/TotalsStats.vue	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/overview/TotalsStats.vue	2026-02-27 13:36:10.476379717 +0000
+@@ -0,0 +1,20 @@
++<template>
++  <div class="grid grid-cols-3 gap-2 rounded-lg bg-base-200/50 px-4 py-2">
++    <div class="flex h-14 flex-col justify-center">
++      <div class="text-sm text-base-content/70">{{ $t(STATISTICS_TYPE.TOTAL_PROXIES) }}</div>
++      <div class="text-lg">{{ statisticsMap[STATISTICS_TYPE.TOTAL_PROXIES] }}</div>
++    </div>
++    <div class="flex h-14 flex-col justify-center">
++      <div class="text-sm text-base-content/70">{{ $t(STATISTICS_TYPE.TOTAL_PROVIDERS) }}</div>
++      <div class="text-lg">{{ statisticsMap[STATISTICS_TYPE.TOTAL_PROVIDERS] }}</div>
++    </div>
++    <div class="flex h-14 flex-col justify-center">
++      <div class="text-sm text-base-content/70">{{ $t(STATISTICS_TYPE.TOTAL_RULES) }}</div>
++      <div class="text-lg">{{ statisticsMap[STATISTICS_TYPE.TOTAL_RULES] }}</div>
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { STATISTICS_TYPE, statisticsMap } from '@/composables/statistics'
++</script>
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/proxies/ProxyProvider.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/proxies/ProxyProvider.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/proxies/ProxyProvider.vue	2026-02-27 08:57:23.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/proxies/ProxyProvider.vue	2026-02-27 13:33:40.511671160 +0000
+@@ -102,13 +102,13 @@
+     const { t } = useI18n()
+     const total = prettyBytesHelper(Total, { binary: true })
+     const used = prettyBytesHelper(Download + Upload, { binary: true })
+-    const percentage = toFinite((((Download + Upload) / Total) * 100).toFixed(2))
++    const percentageStr = Total > 0 ? `${toFinite((((Download + Upload) / Total) * 100).toFixed(2))}%` : '—'
+     const expireStr =
+       Expire === 0
+         ? `${t('expire')}: ${t('noExpire')}`
+         : `${t('expire')}: ${dayjs(Expire * 1000).format('YYYY-MM-DD')}`
+ 
+-    const usageStr = `${used} / ${total} ( ${percentage}% )`
++    const usageStr = `${used} / ${total} ( ${percentageStr} )`
+ 
+     return {
+       expireStr,
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/settings/MihomoConfigEditor.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/settings/MihomoConfigEditor.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/settings/MihomoConfigEditor.vue	2026-02-27 09:56:03.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/settings/MihomoConfigEditor.vue	2026-02-27 13:37:06.117800272 +0000
+@@ -16,11 +16,9 @@
+       <div class="text-xs opacity-70">
+         {{ $t('mihomoConfigEditorTip') }}
+       </div>
+-
+-      <label class="flex flex-col gap-1">
+-        <span class="text-xs opacity-70">{{ $t('configPath') }} ({{ $t('optional') }})</span>
+-        <input class="input input-sm" v-model="path" placeholder="/etc/mihomo/config.yaml" />
+-      </label>
++      <div class="text-xs opacity-70">
++        {{ $t('configPath') }}: <span class="font-mono">/opt/etc/mihomo/config.yaml</span>
++      </div>
+ 
+       <textarea
+         class="textarea textarea-sm font-mono h-64"
+@@ -44,7 +42,7 @@
+ import { useStorage } from '@vueuse/core'
+ import { ref } from 'vue'
+ 
+-const path = useStorage('config/mihomo-config-path', '')
++const CONFIG_PATH = '/opt/etc/mihomo/config.yaml'
+ const payload = useStorage('config/mihomo-config-payload', '')
+ 
+ const isReloading = ref(false)
+@@ -54,7 +52,7 @@
+   if (isReloading.value) return
+   isReloading.value = true
+   try {
+-    await reloadConfigsAPI({ path: path.value || '', payload: payload.value || '' })
++    await reloadConfigsAPI({ path: CONFIG_PATH, payload: payload.value || '' })
+     showNotification({ content: 'reloadConfigsSuccess', type: 'alert-success' })
+   } catch {
+     // handled by interceptor
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/settings/OverviewSettings.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/settings/OverviewSettings.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/settings/OverviewSettings.vue	2026-02-27 09:47:43.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/settings/OverviewSettings.vue	2026-02-27 13:27:25.335819570 +0000
+@@ -60,6 +60,7 @@
+         <div class="flex items-center gap-2">
+           {{ $t('proxiesRelationshipColor') }}
+           <select class="select select-sm min-w-28" v-model="proxiesRelationshipColorMode">
++            <option value="proxy">{{ $t('proxies') }}</option>
+             <option value="provider">{{ $t('provider') }}</option>
+             <option value="rule">{{ $t('rule') }}</option>
+             <option value="none">{{ $t('none') }}</option>
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/sidebar/SideBar.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/sidebar/SideBar.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/sidebar/SideBar.vue	2026-02-27 10:36:18.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/sidebar/SideBar.vue	2026-02-27 13:37:23.263295237 +0000
+@@ -48,16 +48,12 @@
+           <CommonSidebar />
+         </div>
+       </template>
+-      <div class="px-3 pb-1 text-[10px] opacity-60" :class="isSidebarCollapsed ? 'text-center' : ''">
+-        UI {{ zashboardVersion }}
+-      </div>
+     </div>
+   </div>
+ </template>
+ 
+ <script setup lang="ts">
+ import CommonSidebar from '@/components/sidebar/CommonCtrl.vue'
+-import { zashboardVersion } from '@/api'
+ import { ROUTE_ICON_MAP, ROUTE_NAME } from '@/constant'
+ import { renderRoutes } from '@/helper'
+ import { useTooltip } from '@/helper/tooltip'
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/users/UsersManager.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/users/UsersManager.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/components/users/UsersManager.vue	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/components/users/UsersManager.vue	2026-02-27 13:34:34.105754500 +0000
+@@ -0,0 +1,86 @@
++<template>
++  <div class="card">
++    <div class="card-title px-4 pt-4">{{ $t('users') }}</div>
++    <div class="card-body gap-3">
++      <div class="text-sm opacity-70">{{ $t('usersTip') }}</div>
++
++      <div class="flex flex-col gap-2">
++        <Draggable
++          class="flex flex-1 flex-col gap-2"
++          v-model="sourceIPLabelList"
++          group="list"
++          :animation="150"
++          :handle="'.drag-handle'"
++          :item-key="'id'"
++          @start="disableSwipe = true"
++          @end="disableSwipe = false"
++        >
++          <template #item="{ element: item }">
++            <SourceIPInput :model-value="item" @update:model-value="handlerLabelUpdate">
++              <template #prefix>
++                <ChevronUpDownIcon class="drag-handle h-4 w-4 shrink-0 cursor-grab" />
++              </template>
++              <template #default>
++                <button
++                  class="btn btn-circle btn-ghost btn-sm"
++                  :title="$t('delete')"
++                  @click="() => handlerLabelRemove(item.id)"
++                >
++                  <TrashIcon class="h-4 w-4" />
++                </button>
++              </template>
++            </SourceIPInput>
++          </template>
++        </Draggable>
++
++        <div class="divider my-1"></div>
++
++        <SourceIPInput v-model="newLabel" @keydown.enter="handlerLabelAdd">
++          <template #prefix>
++            <TagIcon class="h-4 w-4 shrink-0" />
++          </template>
++          <template #default>
++            <button class="btn btn-circle btn-sm" :title="$t('add')" @click="handlerLabelAdd">
++              <PlusIcon class="h-4 w-4" />
++            </button>
++          </template>
++        </SourceIPInput>
++      </div>
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { disableSwipe } from '@/composables/swipe'
++import SourceIPInput from '@/components/settings/SourceIPInput.vue'
++import { sourceIPLabelList } from '@/store/settings'
++import type { SourceIPLabel } from '@/types'
++import { ChevronUpDownIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/vue/24/outline'
++import { v4 as uuid } from 'uuid'
++import { ref } from 'vue'
++import Draggable from 'vuedraggable'
++
++const newLabel = ref<Omit<SourceIPLabel, 'id'>>({ key: '', label: '' })
++
++const handlerLabelAdd = () => {
++  if (!newLabel.value.key || !newLabel.value.label) return
++
++  sourceIPLabelList.value.push({ ...newLabel.value, id: uuid() })
++  newLabel.value = { key: '', label: '' }
++}
++
++const handlerLabelRemove = (id: string) => {
++  const idx = sourceIPLabelList.value.findIndex((x) => x.id === id)
++  if (idx < 0) return
++
++  if (!confirm('Удалить пользователя?')) return
++  sourceIPLabelList.value.splice(idx, 1)
++}
++
++const handlerLabelUpdate = (partial: Partial<SourceIPLabel>) => {
++  const idx = sourceIPLabelList.value.findIndex((x) => x.id === partial.id)
++  if (idx < 0) return
++
++  sourceIPLabelList.value[idx] = { ...sourceIPLabelList.value[idx], ...partial }
++}
++</script>
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/i18n/en.ts /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/i18n/en.ts
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/i18n/en.ts	2026-02-27 12:43:32.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/i18n/en.ts	2026-02-27 13:39:47.340000142 +0000
+@@ -287,6 +287,9 @@
+   totalProviders: 'Total Providers',
+   totalRules: 'Total Rules',
+ 
++  add: 'Add',
++  delete: 'Delete',
++
+ }
+ 
+ export type LANG_MESSAGE = typeof en
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/i18n/ru.ts /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/i18n/ru.ts
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/i18n/ru.ts	2026-02-27 12:43:18.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/i18n/ru.ts	2026-02-27 13:39:47.339729478 +0000
+@@ -288,6 +288,8 @@
+   totalProxies: 'Всего прокси',
+   totalProviders: 'Всего провайдеров',
+   totalRules: 'Всего правил',
++  add: 'Добавить',
++  delete: 'Удалить',
+ 
+ }
+ 
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/i18n/zh.ts /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/i18n/zh.ts
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/i18n/zh.ts	2026-02-27 12:43:39.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/i18n/zh.ts	2026-02-27 13:39:47.340252691 +0000
+@@ -285,6 +285,8 @@
+   totalProxies: '节点总数',
+   totalProviders: '提供商总数',
+   totalRules: '规则总数',
++  add: '添加',
++  delete: '删除',
+ 
+ }
+ 
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/store/settings.ts /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/store/settings.ts
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/store/settings.ts	2026-02-27 12:19:42.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/store/settings.ts	2026-02-27 13:25:35.048512368 +0000
+@@ -163,9 +163,9 @@
+ export const proxiesRelationshipTopN = useStorage<number>('config/proxies-relationship-topn', 40)
+ export const proxiesRelationshipTopNChain = useStorage<number>('config/proxies-relationship-topn-chain', 18)
+ 
+-export const proxiesRelationshipColorMode = useStorage<'none' | 'rule' | 'provider'>(
++export const proxiesRelationshipColorMode = useStorage<'none' | 'rule' | 'provider' | 'proxy'>(
+   'config/proxies-relationship-color-mode',
+-  'provider',
++  'proxy',
+ )
+ 
+ export const proxiesRelationshipSourceMode = useStorage<'auto' | 'rule' | 'rulePayload' | 'host' | 'destinationIP'>(
+diff -ruN /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/views/UsersPage.vue /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/views/UsersPage.vue
+--- /mnt/data/zash_orig_1_0_2_6/ZashUIFork-main/src/views/UsersPage.vue	2026-02-27 09:44:13.000000000 +0000
++++ /mnt/data/zash_1_0_2_6/ZashUIFork-main/src/views/UsersPage.vue	2026-02-27 13:34:43.233325221 +0000
+@@ -1,20 +1,11 @@
+ <template>
+   <div class="grid grid-cols-1 gap-2 overflow-x-hidden p-2">
+-    <div class="card">
+-      <div class="card-title px-4 pt-4">{{ $t('users') }}</div>
+-      <div class="card-body gap-3">
+-        <div class="text-sm opacity-70">
+-          {{ $t('usersTip') }}
+-        </div>
+-        <SourceIPLabels />
+-      </div>
+-    </div>
+-
++    <UsersManager />
+     <UserTrafficStats />
+   </div>
+ </template>
+ 
+ <script setup lang="ts">
++import UsersManager from '@/components/users/UsersManager.vue'
+ import UserTrafficStats from '@/components/users/UserTrafficStats.vue'
+-import SourceIPLabels from '@/components/settings/SourceIPLabels.vue'
+ </script>
