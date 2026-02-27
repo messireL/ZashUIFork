@@ -159,16 +159,31 @@ const rootName = computed(() => (isSingBox.value ? 'SingBox' : 'Mihomo'))
 const sankeyData = computed(() => {
   const conns = snapshot.value || []
   const MAX_SOURCES = isFullScreen.value ? 70 : 40
+  const MAX_CHAIN0 = isFullScreen.value ? 32 : 18
+  const MAX_CHAIN1 = isFullScreen.value ? 32 : 18
 
   const speed = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
   const hasSpeed = conns.some((c) => speed(c) > 0)
-  const weight = (c: Connection) => (hasSpeed ? speed(c) : 1)
+  // Compress big traffic gaps: keeps “traffic feel” but prevents giant blocks.
+  // If there is no speed info, fallback to count (=1).
+  const weight = (c: Connection) =>
+    hasSpeed ? Math.min(1 + Math.log1p(speed(c)), 60) : 1
 
-  // top sources
+  // totals
   const sourceTotals = new Map<string, number>()
+  const chain0Totals = new Map<string, number>()
+  const chain1Totals = new Map<string, number>()
+
   for (const c of conns) {
+    const v = weight(c)
     const src = normalize(c.rulePayload || c.metadata.host || c.metadata.destinationIP)
-    sourceTotals.set(src, (sourceTotals.get(src) || 0) + weight(c))
+    sourceTotals.set(src, (sourceTotals.get(src) || 0) + v)
+
+    const c0 = normalize(c.chains?.[0] || 'DIRECT')
+    chain0Totals.set(c0, (chain0Totals.get(c0) || 0) + v)
+
+    const c1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
+    if (c1) chain1Totals.set(c1, (chain1Totals.get(c1) || 0) + v)
   }
 
   const topSources = new Set(
@@ -178,6 +193,24 @@ const sankeyData = computed(() => {
       .map(([k]) => k),
   )
 
+  const topChain0 = new Set(
+    Array.from(chain0Totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, MAX_CHAIN0)
+      .map(([k]) => k),
+  )
+
+  const topChain1 = new Set(
+    Array.from(chain1Totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, MAX_CHAIN1)
+      .map(([k]) => k),
+  )
+
+  const OTHER_SRC = 'other'
+  const OTHER_C0 = 'other-out'
+  const OTHER_C1 = 'other-node'
+
   const linkAgg = new Map<string, number>()
   const addLink = (source: string, target: string, value: number) => {
     const key = `${source}\u0000${target}`
@@ -185,11 +218,16 @@ const sankeyData = computed(() => {
   }
 
   for (const c of conns) {
-    const rawSource = normalize(c.rulePayload || c.metadata.host || c.metadata.destinationIP)
-    const source = topSources.has(rawSource) ? rawSource : 'other'
-    const chain0 = normalize(c.chains?.[0] || 'DIRECT')
-    const chain1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
     const v = weight(c)
+
+    const rawSource = normalize(c.rulePayload || c.metadata.host || c.metadata.destinationIP)
+    const source = topSources.has(rawSource) ? rawSource : OTHER_SRC
+
+    const rawC0 = normalize(c.chains?.[0] || 'DIRECT')
+    const chain0 = topChain0.has(rawC0) ? rawC0 : OTHER_C0
+
+    const rawC1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
+    const chain1 = rawC1 ? (topChain1.has(rawC1) ? rawC1 : OTHER_C1) : ''
 
     addLink(rootName.value, source, v)
     addLink(source, chain0, v)
@@ -204,7 +242,6 @@ const sankeyData = computed(() => {
     return { source, target, value }
   })
 
-  // stable ordering (prevents “fly-in” feeling)
   const nodes = Array.from(nodesSet)
     .sort((a, b) => a.localeCompare(b))
     .map((name) => ({ name }))
@@ -249,9 +286,9 @@ const options = computed(() => {
         type: 'sankey',
         data: sankeyData.value.nodes,
         links: sankeyData.value.links,
-        nodeAlign: 'left',
-        nodeWidth: isFullScreen.value ? 16 : 14,
-        nodeGap: isFullScreen.value ? 10 : 8,
+        nodeAlign: 'justify',
+        nodeWidth: isFullScreen.value ? 14 : 12,
+        nodeGap: isFullScreen.value ? 6 : 4,
         emphasis: { focus: 'adjacency' },
         lineStyle: { curveness: 0.5, color: colorSet.baseContent30, opacity: 0.4 },
         label: {

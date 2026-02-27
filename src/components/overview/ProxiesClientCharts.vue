@@ -150,17 +150,29 @@ const shortLabel = (name: string) => {
 const sankeyData = computed(() => {
   const conns = snapshot.value || []
   const MAX_CLIENTS = isFullScreen.value ? 70 : 40
+  const MAX_CHAIN0 = isFullScreen.value ? 32 : 18
+  const MAX_CHAIN1 = isFullScreen.value ? 32 : 18
 
   const speed = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
   const hasSpeed = conns.some((c) => speed(c) > 0)
-  const weight = (c: Connection) => (hasSpeed ? speed(c) : 1)
+  const weight = (c: Connection) =>
+    hasSpeed ? Math.min(1 + Math.log1p(speed(c)), 60) : 1
 
   const totals = new Map<string, number>()
+  const chain0Totals = new Map<string, number>()
+  const chain1Totals = new Map<string, number>()
+
   for (const c of conns) {
     const ip = c.metadata?.sourceIP || ''
     if (!ip) continue
     const v = weight(c)
     totals.set(ip, (totals.get(ip) || 0) + v)
+
+    const c0 = (c.chains?.[0] || 'DIRECT').trim() || 'DIRECT'
+    chain0Totals.set(c0, (chain0Totals.get(c0) || 0) + v)
+
+    const c1 = c.chains?.[1]?.trim() || ''
+    if (c1) chain1Totals.set(c1, (chain1Totals.get(c1) || 0) + v)
   }
 
   const top = new Set(
@@ -170,6 +182,24 @@ const sankeyData = computed(() => {
       .map(([k]) => k),
   )
 
+  const topChain0 = new Set(
+    Array.from(chain0Totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, MAX_CHAIN0)
+      .map(([k]) => k),
+  )
+
+  const topChain1 = new Set(
+    Array.from(chain1Totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, MAX_CHAIN1)
+      .map(([k]) => k),
+  )
+
+  const OTHER_CLIENT = 'other'
+  const OTHER_C0 = 'other-out'
+  const OTHER_C1 = 'other-node'
+
   const linkAgg = new Map<string, number>()
   const add = (s: string, t: string, v: number) => {
     const key = `${s}\u0000${t}`
@@ -177,14 +207,17 @@ const sankeyData = computed(() => {
   }
 
   for (const c of conns) {
-    const ip0 = c.metadata?.sourceIP || 'unknown'
-    const ip = top.has(ip0) ? ip0 : 'other'
-    const label = ip === 'other' ? 'other' : labelForIp(ip) ? `${labelForIp(ip)} (${ip})` : ip
-
-    const chain0 = (c.chains?.[0] || 'DIRECT').trim() || 'DIRECT'
-    const chain1 = c.chains?.[1]?.trim() || ''
-
     const v = weight(c)
+    const ip0 = c.metadata?.sourceIP || 'unknown'
+    const ip = top.has(ip0) ? ip0 : OTHER_CLIENT
+    const label = ip === OTHER_CLIENT ? OTHER_CLIENT : labelForIp(ip) ? `${labelForIp(ip)} (${ip})` : ip
+
+    const rawC0 = (c.chains?.[0] || 'DIRECT').trim() || 'DIRECT'
+    const chain0 = topChain0.has(rawC0) ? rawC0 : OTHER_C0
+
+    const rawC1 = c.chains?.[1]?.trim() || ''
+    const chain1 = rawC1 ? (topChain1.has(rawC1) ? rawC1 : OTHER_C1) : ''
+
     add(label, chain0, v)
     if (chain1) add(chain0, chain1, v)
   }
@@ -230,9 +263,9 @@ const options = computed(() => ({
       type: 'sankey',
       data: sankeyData.value.nodes,
       links: sankeyData.value.links,
-      nodeAlign: 'left',
-      nodeWidth: isFullScreen.value ? 16 : 14,
-      nodeGap: isFullScreen.value ? 10 : 8,
+      nodeAlign: 'justify',
+      nodeWidth: isFullScreen.value ? 14 : 12,
+      nodeGap: isFullScreen.value ? 6 : 4,
       emphasis: { focus: 'adjacency' },
       lineStyle: { curveness: 0.5, color: colorSet.baseContent30, opacity: 0.4 },
       label: {
