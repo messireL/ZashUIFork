@@ -30,7 +30,7 @@
                 <template #default>
                   <button
                     class="btn btn-circle btn-ghost btn-sm"
-                    @click="() => handlerLabelRemove(sourceIP.id)"
+                    @click.stop="handlerLabelRemove(sourceIP.id)" @mousedown.stop @touchstart.stop
                     :title="$t('delete')"
                   >
                     <TrashIcon class="h-4 w-4" />
@@ -54,7 +54,7 @@
             <template #default>
               <button
                 class="btn btn-circle btn-sm"
-                @click="handlerLabelAdd"
+                @click.stop="handlerLabelAdd" @mousedown.stop @touchstart.stop
                 :title="$t('add')"
               >
                 <PlusIcon class="h-4 w-4" />

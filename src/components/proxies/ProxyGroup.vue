@@ -44,8 +44,9 @@
         <div class="flex flex-1 items-center gap-1 truncate text-sm">
           <ProxyGroupNow :name="name" />
         </div>
-        <div class="min-w-12 shrink-0 text-right text-xs">
-          {{ prettyBytesHelper(downloadTotal) }}/s
+        <div class="min-w-24 shrink-0 text-right text-xs font-mono">
+          <div>{{ prettyBytesHelper(trafficTotal) }}</div>
+          <div class="opacity-60">{{ prettyBytesHelper(speedTotal) }}/s</div>
         </div>
       </div>
     </template>
@@ -116,14 +117,20 @@ const handlerLatencyTest = async () => {
     isLatencyTesting.value = false
   }
 }
-const downloadTotal = computed(() => {
+const speedTotal = computed(() => {
   const speed = activeConnections.value
     .filter((conn) => conn.chains.includes(props.name))
-    .reduce((total, conn) => total + conn.downloadSpeed, 0)
+    .reduce((total, conn) => total + (conn.downloadSpeed || 0) + (conn.uploadSpeed || 0), 0)
 
   return speed
 })
 
+const trafficTotal = computed(() => {
+  const total = activeConnections.value
+    .filter((conn) => conn.chains.includes(props.name))
+    .reduce((sum, conn) => sum + (conn.download || 0) + (conn.upload || 0), 0)
+  return total
+})
 const hiddenGroup = computed({
   get: () => isHiddenGroup(props.name),
   set: (value: boolean) => {

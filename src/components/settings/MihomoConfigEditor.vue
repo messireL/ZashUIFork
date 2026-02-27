@@ -48,6 +48,7 @@
 
 <script setup lang="ts">
 import { getConfigsAPI, getConfigsRawAPI, reloadConfigsAPI, restartCoreAPI } from '@/api'
+import axios from 'axios'
 import { showNotification } from '@/helper/notification'
 import { useStorage } from '@vueuse/core'
 import { onMounted, ref } from 'vue'
@@ -136,23 +137,118 @@ const dumpYaml = (value: any): string => {
   return emit(value, 0).join('\n') + '\n'
 }
 
+const looksLikeFullConfig = (s: string) => {
+  const t = (s || '').trim()
+  if (!t) return false
+  // basic markers of a real mihomo YAML (not runtime /configs JSON)
+  return (
+    /(^|\n)\s*proxies\s*:/m.test(t) ||
+    /(^|\n)\s*proxy-groups\s*:/m.test(t) ||
+    /(^|\n)\s*proxy-providers\s*:/m.test(t) ||
+    /(^|\n)\s*rule-providers\s*:/m.test(t) ||
+    /(^|\n)\s*rules\s*:/m.test(t)
+  )
+}
+
+const looksLikeRuntimeConfigs = (obj: any) => {
+  if (!obj || typeof obj !== 'object') return false
+  const keys = Object.keys(obj)
+  const hasPorts = keys.some((k) => ['port', 'socks-port', 'redir-port', 'tproxy-port', 'mixed-port'].includes(k))
+  const hasGroups = keys.some((k) => ['proxy-groups', 'proxies', 'rules', 'proxy-providers', 'rule-providers'].includes(k))
+  return hasPorts && !hasGroups
+}
+
+const tryLoadFromFileLikeEndpoints = async (pathValue: string): Promise<string | null> => {
+  const candidates: Array<{ url: string; params?: Record<string, any> }> = [
+    { url: '/configs', params: { path: pathValue, raw: true } },
+    { url: '/configs', params: { path: pathValue, file: true } },
+    { url: '/configs', params: { path: pathValue, download: true } },
+    { url: '/configs', params: { path: pathValue, read: true } },
+    { url: '/configs/raw', params: { path: pathValue } },
+    { url: '/configs/file', params: { path: pathValue } },
+    { url: '/file', params: { path: pathValue } },
+    { url: '/files', params: { path: pathValue } },
+  ]
+
+  for (const c of candidates) {
+    try {
+      const r = await axios.get(c.url, {
+        params: c.params,
+        responseType: 'text',
+        headers: {
+          Accept: 'text/plain, application/x-yaml, application/yaml, */*',
+        } as any,
+      })
+
+      const data: any = (r as any)?.data
+      if (typeof data === 'string') {
+        const s = data.trim()
+        if (looksLikeFullConfig(s)) return data
+        // some backends respond with JSON envelope: {"payload":"..."}
+        if ((s.startsWith('{') || s.startsWith('[')) && (s.endsWith('}') || s.endsWith(']'))) {
+          try {
+            const parsed = JSON.parse(s)
+            const payload = (parsed && (parsed.payload || parsed.data?.payload || parsed.config || parsed.yaml)) as any
+            if (typeof payload === 'string' && looksLikeFullConfig(payload)) return payload
+          } catch {
+            // ignore
+          }
+        }
+      } else if (data && typeof data === 'object') {
+        const payload = (data.payload || data.data?.payload || data.config || data.yaml) as any
+        if (typeof payload === 'string' && looksLikeFullConfig(payload)) return payload
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  return null
+}
+
 const load = async () => {
   if (isLoading.value) return
   isLoading.value = true
   try {
-    // На некоторых сборках /configs может вернуть текст (YAML). Если вернёт JSON — покажем его.
+    // 1) Try to load full config file (if backend supports it)
+    const fileText = await tryLoadFromFileLikeEndpoints(path.value)
+    if (fileText) {
+      payload.value = fileText
+      showNotification({ content: 'mihomoConfigLoadSuccess', type: 'alert-success' })
+      return
+    }
+
+    // 2) Fallback: /configs raw (may return YAML or runtime JSON)
     const raw = await getConfigsRawAPI({ path: path.value })
     const data: any = raw?.data
 
     if (typeof data === 'string' && data.trim().length > 0) {
       const s = data.trim()
-      // Some builds return JSON here; convert it to YAML-like text for readability (mihomo-style).
-      if ((s.startsWith('{') || s.startsWith('[')) && (s.endsWith('}') || s.endsWith(']'))) {
+
+      // YAML (already good)
+      if (looksLikeFullConfig(s)) {
+        payload.value = data
+        showNotification({ content: 'mihomoConfigLoadSuccess', type: 'alert-success' })
+        return
+      }
+
+      // JSON string
+      if (s.startsWith('{') || s.startsWith('[')) {
         try {
           const parsed = JSON.parse(s)
+          if (looksLikeRuntimeConfigs(parsed)) {
+            payload.value =
+              `# Mihomo API /configs does not expose the full YAML file on this build.\n` +
+              `# Showing runtime config (ports/tun/etc). If your backend supports reading the file,\n` +
+              `# enable it to load: ${path.value}\n\n` +
+              dumpYaml(parsed)
+            showNotification({ content: 'mihomoConfigLoadPartial', type: 'alert-info' })
+            return
+          }
+
           payload.value =
             `# Converted from /configs (JSON)\n# Comments/ordering may differ from the original mihomo YAML.\n\n${dumpYaml(parsed)}`
-          showNotification({ content: 'mihomoConfigLoadSuccess', type: 'alert-success' })
+          showNotification({ content: 'mihomoConfigLoadPartial', type: 'alert-info' })
           return
         } catch {
           // fall through: treat as raw text
@@ -164,6 +260,7 @@ const load = async () => {
       return
     }
 
+    // 3) Fallback: JSON /configs
     const json = await getConfigsAPI()
     payload.value = `# Converted from /configs (JSON)\n# Comments/ordering may differ from the original mihomo YAML.\n\n${dumpYaml(json.data)}`
     showNotification({ content: 'mihomoConfigLoadPartial', type: 'alert-info' })

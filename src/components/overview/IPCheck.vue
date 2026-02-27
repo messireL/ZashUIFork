@@ -91,6 +91,7 @@ import {
   getIPInfoFromIPAPI,
   getIPInfoFromIPSB,
   getIPInfoFromIPWHOIS,
+  getIPInfoFromWHATISMYIP,
 } from '@/api/geoip'
 import { ipForChina } from '@/composables/overview'
 import { useTooltip } from '@/helper/tooltip'
@@ -114,6 +115,7 @@ const ipFor2ipIo = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
 const ipForIpsb = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
 const ipForIpwhois = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
 const ipForIpapi = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
+const ipForWhatismyip = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
 
 const QUERYING_IP_INFO: IPBlock = {
   ip: [t('getting'), ''],
@@ -332,7 +334,8 @@ onMounted(() => {
     ipFor2ipIo.value.ip.length !== 0 ||
     ipForIpsb.value.ip.length !== 0 ||
     ipForIpwhois.value.ip.length !== 0 ||
-    ipForIpapi.value.ip.length !== 0
+    ipForIpapi.value.ip.length !== 0 ||
+    ipForWhatismyip.value.ip.length !== 0
 
   if (autoIPCheck.value && !hasAny) getIPs(false)
 })
