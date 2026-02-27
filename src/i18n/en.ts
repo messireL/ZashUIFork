@@ -267,6 +267,7 @@ const en = {
   other: 'Other',
   proxiesRelationshipColor: 'Line colors',
   provider: 'Provider',
+  proxyGroup: 'Proxy Group',
   none: 'None',
   proxiesRelationshipSourceMode: 'Sources field',
   rulePayload: 'Rule payload',

@@ -266,6 +266,7 @@ const zh: LANG_MESSAGE = {
   other: '其他',
   proxiesRelationshipColor: '线条颜色',
   provider: '提供商',
+  proxyGroup: '代理组',
   none: '无',
   proxiesRelationshipSourceMode: '来源字段',
   rulePayload: '规则载荷',

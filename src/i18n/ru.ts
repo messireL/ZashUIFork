@@ -269,6 +269,7 @@ const ru: LANG_MESSAGE = {
   other: 'Прочее',
   proxiesRelationshipColor: 'Цвет линий',
   provider: 'Провайдер',
+  proxyGroup: 'Группа прокси',
   none: 'Нет',
   proxiesRelationshipSourceMode: 'Поле источника',
   rulePayload: 'Payload правила',
