@@ -84,6 +84,7 @@ const en = {
   upgradeToAlpha: 'Upgrade to Alpha',
   updateGeoDatabase: 'Update Geo',
   truncateProxyName: 'Truncate Proxy Name',
+  hideUnusedProxyProviders: 'Hide unused proxy providers',
   sourceIPLabels: 'Source IP Labels',
   proxyPreviewType: 'Proxy Preview Type',
   auto: 'Auto',

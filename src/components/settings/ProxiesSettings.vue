@@ -152,6 +152,14 @@
           />
         </div>
         <div class="flex items-center gap-2">
+          {{ $t('hideUnusedProxyProviders') }}
+          <input
+            class="toggle"
+            type="checkbox"
+            v-model="hideUnusedProxyProviders"
+          />
+        </div>
+        <div class="flex items-center gap-2">
           {{ $t('proxyGroupIconSize') }}
           <input
             type="number"
@@ -196,6 +204,7 @@ import {
   speedtestTimeout,
   speedtestUrl,
   truncateProxyName,
+  hideUnusedProxyProviders,
   twoColumnProxyGroup,
 } from '@/store/settings'
 import { QuestionMarkCircleIcon } from '@heroicons/vue/24/outline'

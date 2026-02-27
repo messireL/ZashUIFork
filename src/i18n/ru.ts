@@ -86,6 +86,7 @@ const ru: LANG_MESSAGE = {
   upgradeToAlpha: 'Обновить до Alpha',
   updateGeoDatabase: 'Обновить GEO',
   truncateProxyName: 'Усечение имени прокси',
+  hideUnusedProxyProviders: 'Скрывать неиспользуемых провайдеров',
   sourceIPLabels: 'Метки исходного IP',
   proxyPreviewType: 'Тип предварительного просмотра прокси',
   auto: 'Авто',

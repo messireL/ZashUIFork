@@ -41,14 +41,23 @@
         @click.stop="handlerLatencyTest"
       />
     </div>
+
+
+    <div
+      v-if="trafficText"
+      :class="twMerge('w-full text-xs tracking-tight', active ? 'text-primary-content/80' : 'text-base-content/60')"
+    >
+      {{ trafficText }}
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { PROXY_CARD_SIZE, PROXY_SORT_TYPE } from '@/constant'
 import { checkTruncation } from '@/helper/tooltip'
-import { scrollIntoCenter } from '@/helper/utils'
+import { prettyBytesHelper, scrollIntoCenter } from '@/helper/utils'
 import { i18n } from '@/i18n'
+import { activeConnections } from '@/store/connections'
 import { getIPv6ByName, getTestUrl, proxyLatencyTest, proxyMap } from '@/store/proxies'
 import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
 import { smartWeightsMap } from '@/store/smart'
@@ -83,6 +92,28 @@ const typeDescription = computed(() => {
   const isUDP = node.value.udp ? (node.value.xudp ? 'xudp' : 'udp') : ''
 
   return [type, isUDP, smartDesc, isV6].filter(Boolean).join(isSmallCard.value ? '/' : ' / ')
+})
+
+const trafficStat = computed(() => {
+  const name = props.name
+  let bytes = 0
+  let speed = 0
+  let count = 0
+  for (const c of activeConnections.value) {
+    const chains = (c as any).chains || []
+    if (!Array.isArray(chains) || !chains.includes(name)) continue
+    count += 1
+    bytes += (c.download || 0) + (c.upload || 0)
+    speed += (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
+  }
+  return { bytes, speed, count }
+})
+
+const trafficText = computed(() => {
+  if (!trafficStat.value.count) return ''
+  const b = prettyBytesHelper(trafficStat.value.bytes)
+  const s = prettyBytesHelper(trafficStat.value.speed)
+  return isSmallCard.value ? b : (b + ' · ' + s + '/s')
 })
 
 const latencyTipAnimationClass = ref<string[]>([])

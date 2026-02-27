@@ -1,5 +1,5 @@
 <template>
-  <div :class="twMerge('relative h-[32rem] w-full overflow-hidden')" @mousemove.stop @touchmove.stop>
+  <div :class="twMerge('relative w-full overflow-hidden h-[clamp(22rem,55vh,32rem)]')" @mousemove.stop @touchmove.stop>
     <div ref="chart" class="h-full w-full" />
     <span class="border-base-content/30 text-base-content/10 bg-base-100/70 hidden" ref="colorRef" />
 
@@ -365,7 +365,18 @@ const sankeyData = computed(() => {
       if (sa !== sb) return sa - sb
       return labelOf(a).localeCompare(labelOf(b))
     })
-    .map((name) => ({ name }))
+    .map((name) => {
+      const st = stageOf(name)
+      const isRight = st === 'S'
+      return {
+        name,
+        label: {
+          position: isRight ? 'left' : 'right',
+          align: isRight ? 'right' : 'left',
+          distance: isRight ? 6 : 8,
+        },
+      }
+    })
 
   return { nodes, links, nodeMeta }
 })
@@ -446,8 +457,8 @@ const options = computed(() => ({
     {
       id: 'sankey-client-rule-group-server',
       type: 'sankey',
-      left: 8,
-      right: 8,
+      left: 12,
+      right: 12,
       top: 28,
       bottom: 8,
       data: sankeyData.value.nodes,
@@ -461,6 +472,10 @@ const options = computed(() => ({
         color: colorSet.baseContent,
         fontFamily,
         fontSize: labelFontSize.value,
+        position: 'right',
+        align: 'left',
+        distance: 8,
+        ellipsis: '…',
         overflow: 'truncate',
         width: labelWidth.value,
         formatter: (pp: any) => shortLabel(pp?.name || ''),

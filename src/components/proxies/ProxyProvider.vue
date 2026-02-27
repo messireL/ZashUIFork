@@ -39,6 +39,12 @@
           <div v-if="subscriptionInfo">
             {{ subscriptionInfo.usageStr }}
           </div>
+          <progress
+            v-if="subscriptionInfo.percent !== null"
+            class="progress progress-info w-full max-w-72"
+            :value="subscriptionInfo.percent"
+            max="100"
+          ></progress>
         </div>
         <div>{{ $t('updated') }} {{ fromNow(proxyProvider.updatedAt) }}</div>
       </div>
@@ -109,9 +115,12 @@ const subscriptionInfo = computed(() => {
 
     const usageStr = percentage ? `${used} / ${total} ( ${percentage}% )` : `${used} / ${total}`
 
+    const percentNumber = Total > 0 ? ((Download + Upload) / Total) * 100 : null
+
     return {
       expireStr,
       usageStr,
+      percent: percentNumber,
     }
   }
 

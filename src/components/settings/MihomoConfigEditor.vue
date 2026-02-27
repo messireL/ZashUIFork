@@ -1,5 +1,5 @@
 <template>
-  <div class="card">
+  <div class="card w-full max-w-none">
     <div class="card-title px-4 pt-4 flex items-center justify-between gap-2">
       <span>{{ $t('mihomoConfigEditor') }}</span>
       <div class="flex items-center gap-2">
@@ -26,7 +26,8 @@
       </label>
 
       <textarea
-        class="textarea textarea-sm font-mono h-64"
+        class="textarea textarea-sm font-mono w-full h-[70vh] min-h-[28rem] resize-y leading-5 overflow-x-auto whitespace-pre [tab-size:2]"
+        wrap="off"
         v-model="payload"
         :placeholder="$t('pasteYamlHere')"
       ></textarea>
