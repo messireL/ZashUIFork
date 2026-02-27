@@ -1,0 +1,322 @@
+diff --git a/package.json b/package.json
+index d967e4c..bd383d5 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "zashboard",
+-  "version": "1.0.2_5",
++  "version": "1.0.2_6",
+   "description": "A Dashboard Using Clash API",
+   "license": "MIT",
+   "type": "module",
+diff --git a/src/components/overview/ProxiesRuleCharts.vue b/src/components/overview/ProxiesRuleCharts.vue
+index 6dc5600..2e01a98 100644
+--- a/src/components/overview/ProxiesRuleCharts.vue
++++ b/src/components/overview/ProxiesRuleCharts.vue
+@@ -1,5 +1,5 @@
+ <template>
+-  <div :class="twMerge('relative h-96 w-full overflow-hidden')" @mousemove.stop @touchmove.stop>
++  <div :class="twMerge('relative h-[32rem] w-full overflow-hidden')" @mousemove.stop @touchmove.stop>
+     <div ref="chart" class="h-full w-full" />
+     <span class="border-base-content/30 text-base-content/10 bg-base-100/70 hidden" ref="colorRef" />
+ 
+@@ -43,7 +43,6 @@ import { proxyProviederList } from '@/store/proxies'
+ import {
+   blurIntensity,
+   dashboardTransparent,
+-  displayFinalOutbound,
+   font,
+   proxiesRelationshipColorMode,
+   proxiesRelationshipPaused,
+@@ -95,7 +94,7 @@ const { width } = useElementSize(chart)
+ const labelFontSize = computed(() => {
+   const w = Number(width.value) || 0
+   // keep labels readable (user complaint about tiny font)
+-  return isFullScreen.value ? 15 : w >= 1100 ? 14 : w >= 800 ? 13 : 12
++  return isFullScreen.value ? 16 : w >= 1100 ? 15 : w >= 800 ? 14 : 13
+ })
+ 
+ const normalize = (s: string) => (s || '').trim() || '-'
+@@ -201,13 +200,13 @@ const sankeyData = computed(() => {
+     return rp ? `${rt}: ${normalize(rp)}` : rt
+   }
+ 
+-  // Prefer showing outer group and final node (if any)
+-  const chainA = (c: Connection) => normalize(c.chains?.[0] || 'DIRECT')
+-  const chainB = (c: Connection) => {
+-    if (!displayFinalOutbound.value) return ''
++  const MAX_CHAIN_DEPTH = 5
++  const chainSteps = (c: Connection) => {
+     const arr = (c.chains || []).map(normalize).filter((x) => x && x !== '-')
+-    if (arr.length <= 1) return ''
+-    return arr[arr.length - 1]
++    if (!arr.length) return ['DIRECT']
++    if (arr.length <= MAX_CHAIN_DEPTH) return arr
++    // keep head + tail, collapse the middle for readability
++    return [...arr.slice(0, MAX_CHAIN_DEPTH - 2), '…', arr[arr.length - 1]]
+   }
+ 
+   const totalsClients = new Map<string, number>()
+@@ -223,10 +222,9 @@ const sankeyData = computed(() => {
+     const r = fmtRule(c)
+     totalsRules.set(r, (totalsRules.get(r) || 0) + v)
+ 
+-    const a = chainA(c)
+-    totalsProxies.set(a, (totalsProxies.get(a) || 0) + v)
+-    const b = chainB(c)
+-    if (b) totalsProxies.set(b, (totalsProxies.get(b) || 0) + v)
++    for (const step of chainSteps(c)) {
++      totalsProxies.set(step, (totalsProxies.get(step) || 0) + v)
++    }
+   }
+ 
+   const topClients = new Set(
+@@ -306,14 +304,18 @@ const sankeyData = computed(() => {
+     const rawRule = fmtRule(c)
+     const rule = topRules.has(rawRule) ? rawRule : OTHER_RULE
+ 
+-    const rawA = chainA(c)
+-    const proxyAName = topProxies.has(rawA) ? rawA : OTHER_PROXY
+-    const rawB = chainB(c)
+-    const proxyBName = rawB ? (topProxies.has(rawB) ? rawB : OTHER_PROXY) : ''
++    const steps0 = chainSteps(c)
++    const steps = steps0.map((s) => (topProxies.has(s) ? s : OTHER_PROXY))
+ 
+     add(client, rule, c, false)
+-    add(rule, proxyAName, c, true)
+-    if (proxyBName && proxyBName !== proxyAName) add(proxyAName, proxyBName, c, true)
++    if (steps.length) {
++      add(rule, steps[0], c, true)
++      for (let i = 0; i < steps.length - 1; i++) {
++        const a = steps[i]
++        const b = steps[i + 1]
++        if (a && b && a !== b) add(a, b, c, true)
++      }
++    }
+   }
+ 
+   const nodesSet = new Set<string>()
+@@ -400,8 +402,8 @@ const options = computed(() => ({
+       data: sankeyData.value.nodes,
+       links: sankeyData.value.links,
+       nodeAlign: 'justify',
+-      nodeWidth: isFullScreen.value ? 14 : 12,
+-      nodeGap: isFullScreen.value ? 8 : 6,
++      nodeWidth: isFullScreen.value ? 16 : 14,
++      nodeGap: isFullScreen.value ? 10 : 8,
+       emphasis: { focus: 'adjacency' },
+       lineStyle: { curveness: 0.52, opacity: 0.5 },
+       label: {
+@@ -409,7 +411,7 @@ const options = computed(() => ({
+         fontFamily,
+         fontSize: labelFontSize.value,
+         overflow: 'truncate',
+-        width: isFullScreen.value ? 320 : 220,
++        width: isFullScreen.value ? 360 : 260,
+         formatter: (pp: any) => shortLabel(pp?.name || ''),
+       },
+     },
+diff --git a/src/i18n/en.ts b/src/i18n/en.ts
+index 92ee877..140641e 100644
+--- a/src/i18n/en.ts
++++ b/src/i18n/en.ts
+@@ -215,7 +215,7 @@ const en = {
+   autoDisconnectIdleUDPTip:
+     "When enabled, opening zashboard will close UDP connections that have been idle longer than the configured time. This may help with UDP connections that don't disconnect automatically as expected.",
+   customGlobalNode: 'Custom Global Node',
+-  proxiesRelationship: 'Proxy Relationships',
++  proxiesRelationship: 'Connection Topology',
+   displayProxiesRelationship: 'Show Proxy Relationships',
+   editBackend: 'Edit Backend',
+   editBackendTitle: 'Edit Backend Configuration',
+diff --git a/src/i18n/ru.ts b/src/i18n/ru.ts
+index 137bebc..ed4a903 100644
+--- a/src/i18n/ru.ts
++++ b/src/i18n/ru.ts
+@@ -217,7 +217,7 @@ const ru: LANG_MESSAGE = {
+   autoDisconnectIdleUDPTip:
+     'При включении открытие zashboard приведёт к закрытию UDP-соединений, продолжительность которых превышает заданное количество минут. Это может помочь в случае с некоторыми UDP-соединениями, которые не разрываются автоматически, как ожидается.',
+   customGlobalNode: 'Пользовательский глобальный узел',
+-  proxiesRelationship: 'Отношение прокси',
++  proxiesRelationship: 'Топология соединений',
+   displayProxiesRelationship: 'Показать отношение прокси',
+   editBackend: 'Редактировать бэкенд',
+   editBackendTitle: 'Редактировать конфигурацию бэкенда',
+diff --git a/src/i18n/zh.ts b/src/i18n/zh.ts
+index 731414a..63819c2 100644
+--- a/src/i18n/zh.ts
++++ b/src/i18n/zh.ts
+@@ -214,7 +214,7 @@ const zh: LANG_MESSAGE = {
+   autoDisconnectIdleUDPTip:
+     '启用后，打开zashboard时将关闭持续时间超过配置分钟数的UDP连接，这可能对某些无法正常自动断开的UDP连接带来帮助。(这是作者自己的私货，你大概率不需要打开它)',
+   customGlobalNode: '自定义全局节点',
+-  proxiesRelationship: '节点关系',
++  proxiesRelationship: '连接拓扑',
+   displayProxiesRelationship: '显示节点关系',
+   editBackend: '编辑后端',
+   editBackendTitle: '修改后端配置',
+diff --git a/src/views/OverviewPage.vue b/src/views/OverviewPage.vue
+index 629ac17..a8985fe 100644
+--- a/src/views/OverviewPage.vue
++++ b/src/views/OverviewPage.vue
+@@ -11,101 +11,34 @@
+           <div class="join">
+             <button
+               class="btn btn-xs join-item"
+-              :class="proxiesRelationshipView === 'tree' ? 'btn-active' : ''"
+-              @click="proxiesRelationshipView = 'tree'"
++              :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
++              @click="proxiesRelationshipWeightMode = 'traffic'"
+             >
+-              {{ $t('proxiesRelationshipTree') }}
++              {{ $t('traffic') }}
+             </button>
+-
+             <button
+               class="btn btn-xs join-item"
+-              :class="proxiesRelationshipView === 'rules' ? 'btn-active' : ''"
+-              @click="proxiesRelationshipView = 'rules'"
++              :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
++              @click="proxiesRelationshipWeightMode = 'count'"
+             >
+-              {{ $t('proxiesRelationshipRules') }}
+-            </button>
+-
+-            <button
+-              class="btn btn-xs join-item"
+-              :class="proxiesRelationshipView === 'sources' ? 'btn-active' : ''"
+-              @click="proxiesRelationshipView = 'sources'"
+-            >
+-              {{ $t('proxiesRelationshipSources') }}
+-            </button>
+-
+-            <button
+-              class="btn btn-xs join-item"
+-              :class="proxiesRelationshipView === 'clients' ? 'btn-active' : ''"
+-              @click="proxiesRelationshipView = 'clients'"
+-            >
+-              {{ $t('proxiesRelationshipClients') }}
++              {{ $t('count') }}
+             </button>
+           </div>
+ 
++          <select class="select select-xs" v-model.number="proxiesRelationshipTopN">
++            <option :value="10">top 10</option>
++            <option :value="20">top 20</option>
++            <option :value="40">top 40</option>
++            <option :value="70">top 70</option>
++            <option :value="100">top 100</option>
++          </select>
+ 
+-          <template v-if="proxiesRelationshipView !== 'tree'">
+-            <div class="join">
+-              <button
+-                class="btn btn-xs join-item"
+-                :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
+-                @click="proxiesRelationshipWeightMode = 'traffic'"
+-              >
+-                {{ $t('traffic') }}
+-              </button>
+-              <button
+-                class="btn btn-xs join-item"
+-                :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
+-                @click="proxiesRelationshipWeightMode = 'count'"
+-              >
+-                {{ $t('count') }}
+-              </button>
+-            </div>
+-
+-            <select class="select select-xs" v-model.number="proxiesRelationshipTopN">
+-              <option :value="10">top 10</option>
+-              <option :value="20">top 20</option>
+-              <option :value="40">top 40</option>
+-              <option :value="70">top 70</option>
+-              <option :value="100">top 100</option>
+-            </select>
+-
+-            <div class="join" v-if="proxiesRelationshipView === 'sources'">
+-              <button
+-                class="btn btn-xs join-item"
+-                :class="proxiesRelationshipSourceMode === 'auto' ? 'btn-active' : ''"
+-                @click="proxiesRelationshipSourceMode = 'auto'"
+-              >
+-                {{ $t('auto') }}
+-              </button>
+-              <button
+-                class="btn btn-xs join-item"
+-                :class="proxiesRelationshipSourceMode === 'rule' ? 'btn-active' : ''"
+-                @click="proxiesRelationshipSourceMode = 'rule'"
+-              >
+-                {{ $t('rule') }}
+-              </button>
+-              <button
+-                class="btn btn-xs join-item"
+-                :class="proxiesRelationshipSourceMode === 'rulePayload' ? 'btn-active' : ''"
+-                @click="proxiesRelationshipSourceMode = 'rulePayload'"
+-              >
+-                {{ $t('rulePayload') }}
+-              </button>
+-              <button
+-                class="btn btn-xs join-item"
+-                :class="proxiesRelationshipSourceMode === 'host' ? 'btn-active' : ''"
+-                @click="proxiesRelationshipSourceMode = 'host'"
+-              >
+-                {{ $t('host') }}
+-              </button>
+-              <button
+-                class="btn btn-xs join-item"
+-                :class="proxiesRelationshipSourceMode === 'destinationIP' ? 'btn-active' : ''"
+-                @click="proxiesRelationshipSourceMode = 'destinationIP'"
+-              >
+-                {{ $t('destination') }}
+-              </button>
+-            </div>
++          <select class="select select-xs" v-model.number="proxiesRelationshipTopNChain">
++            <option :value="10">chain 10</option>
++            <option :value="18">chain 18</option>
++            <option :value="30">chain 30</option>
++            <option :value="60">chain 60</option>
++          </select>
+             <button
+               class="btn btn-ghost btn-circle btn-xs"
+               :title="proxiesRelationshipPaused ? $t('resume') : $t('pause')"
+@@ -125,15 +58,11 @@
+             <span class="text-xs opacity-60">
+               {{ proxiesRelationshipPaused ? $t('paused') : `${proxiesRelationshipRefreshSec}s` }}
+             </span>
+-          </template>
+         </div>
+       </div>
+ 
+       <div class="px-4 pb-4">
+-        <ProxiesCharts v-if="proxiesRelationshipView === 'tree'" />
+-        <ProxiesRuleCharts v-else-if="proxiesRelationshipView === 'rules'" />
+-        <ProxiesSourcesCharts v-else-if="proxiesRelationshipView === 'sources'" />
+-        <ProxiesClientCharts v-else />
++        <ProxiesRuleCharts />
+       </div>
+     </div>
+ 
+@@ -152,10 +81,7 @@ import BackendVersion from '@/components/common/BackendVersion.vue'
+ import ChartsCard from '@/components/overview/ChartsCard.vue'
+ import ConnectionHistory from '@/components/overview/ConnectionHistory.vue'
+ import NetworkCard from '@/components/overview/NetworkCard.vue'
+-import ProxiesCharts from '@/components/overview/ProxiesCharts.vue'
+-import ProxiesClientCharts from '@/components/overview/ProxiesClientCharts.vue'
+ import ProxiesRuleCharts from '@/components/overview/ProxiesRuleCharts.vue'
+-import ProxiesSourcesCharts from '@/components/overview/ProxiesSourcesCharts.vue'
+ import { getLabelFromBackend } from '@/helper/utils'
+ import {
+   displayProxiesRelationship,
+@@ -163,9 +89,8 @@ import {
+   proxiesRelationshipRefreshNonce,
+   proxiesRelationshipRefreshSec,
+   proxiesRelationshipTopN,
+-  proxiesRelationshipSourceMode,
++  proxiesRelationshipTopNChain,
+   proxiesRelationshipWeightMode,
+-  proxiesRelationshipView,
+   showIPAndConnectionInfo,
+ } from '@/store/settings'
+ import { activeBackend } from '@/store/setup'
