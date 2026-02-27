@@ -87,10 +87,17 @@ const updateFontFamily = () => {
   fontFamily = getComputedStyle(colorRef.value).fontFamily
 }
 
-const { width } = useElementSize(chart)
+const { width, height } = useElementSize(chart)
 const labelFontSize = computed(() => {
   const w = Number(width.value) || 0
   return isFullScreen.value ? 16 : w >= 1100 ? 15 : w >= 800 ? 14 : 13
+})
+
+const labelWidth = computed(() => {
+  const w = (isFullScreen.value ? window.innerWidth : Number(width.value)) || 0
+  const col = w > 0 ? w / 4 : 260
+  // не даём label'ам разваливать лейаут, но и не делаем их слишком узкими
+  return Math.round(Math.max(160, Math.min(560, col - (isFullScreen.value ? 72 : 56))))
 })
 
 const normalize = (s: string) => (s || '').trim() || '-'
@@ -188,6 +195,15 @@ const sankeyData = computed(() => {
     return rp ? `${rt}: ${normalize(rp)}` : rt
   }
 
+  const colorKeyOf = (rawRule: string, group: string, server: string, c: Connection) => {
+    const cm = proxiesRelationshipColorMode.value
+    if (cm === 'none') return ''
+    if (cm === 'rule') return normalize((c as any).rule) || rawRule
+    if (cm === 'provider') return providerOf(server) || providerOf(group) || group || server
+    // default: by real final hop (proxy) / group
+    return server || group || rawRule
+  }
+
   const getGroupServer = (c: Connection) => {
     const arr = (c.chains || []).map(normalize).filter((x) => x && x !== '-')
     const group = arr[0] || 'DIRECT'
@@ -272,7 +288,7 @@ const sankeyData = computed(() => {
     agg.colorVotes[key] = (agg.colorVotes[key] || 0) + v
   }
 
-  const add = (s: string, tname: string, c: Connection) => {
+  const add = (s: string, tname: string, c: Connection, colorKey: string) => {
     const b = bytes(c)
     const v = weight(c)
     const key = `${s}\u0000${tname}`
@@ -282,14 +298,8 @@ const sankeyData = computed(() => {
     agg.bytes += b
     agg.count += 1
 
-    const cm = proxiesRelationshipColorMode.value
-    if (cm === 'rule') {
-      voteColor(agg, normalize((c as any).rule), v)
-    } else if (cm === 'provider') {
-      const targetServer = stageOf(tname) === 'S' ? labelOf(tname) : ''
-      const pk = targetServer ? providerOf(targetServer) : ''
-      if (pk) voteColor(agg, pk, v)
-    }
+    // Окраска потоков — единая по всему пути, по выбранному ключу (по умолчанию: реальный финальный хоп).
+    voteColor(agg, colorKey, v)
 
     linkAgg.set(key, agg)
     addNodeMeta(s, b, 1)
@@ -310,14 +320,16 @@ const sankeyData = computed(() => {
     const groupLabel = topGroups.has(rawGroup) ? rawGroup : OTHER_GROUP
     const serverLabel = topServers.has(rawServer) ? rawServer : OTHER_SERVER
 
+    const colorKey = colorKeyOf(rawRule, rawGroup, rawServer, c)
+
     const C = node('C', clientLabel)
     const R = node('R', ruleLabel)
     const G = node('G', groupLabel)
     const S = node('S', serverLabel)
 
-    add(C, R, c)
-    add(R, G, c)
-    add(G, S, c)
+    add(C, R, c, colorKey)
+    add(R, G, c, colorKey)
+    add(G, S, c, colorKey)
   }
 
   const nodesSet = new Set<string>()
@@ -345,8 +357,14 @@ const sankeyData = computed(() => {
     }
   })
 
+  const stageOrder: Record<string, number> = { C: 0, R: 1, G: 2, S: 3 }
   const nodes = Array.from(nodesSet)
-    .sort((a, b) => a.localeCompare(b))
+    .sort((a, b) => {
+      const sa = stageOrder[stageOf(a)] ?? 9
+      const sb = stageOrder[stageOf(b)] ?? 9
+      if (sa !== sb) return sa - sb
+      return labelOf(a).localeCompare(labelOf(b))
+    })
     .map((name) => ({ name }))
 
   return { nodes, links, nodeMeta }
@@ -397,15 +415,46 @@ const options = computed(() => ({
     padding: [6, 8],
     textStyle: { color: colorSet.baseContent, fontFamily, fontSize: Math.max(12, labelFontSize.value) },
   },
+  graphic: (() => {
+    // небольшие заголовки колонок, чтобы диаграмма читалась "клиент → правило → группа → сервер"
+    const w = (isFullScreen.value ? window.innerWidth : Number(width.value)) || 0
+    if (!w) return []
+    const top = 6
+    const left = 12
+    const col = w / 4
+    const fontSize = Math.max(12, Math.min(14, labelFontSize.value))
+    const mk = (i: number, text: string) => ({
+      type: 'text',
+      left: Math.round(left + col * i),
+      top,
+      style: {
+        text,
+        fill: colorSet.baseContent,
+        font: `600 ${fontSize}px ${fontFamily}`,
+        opacity: 0.65,
+      },
+      silent: true,
+    })
+    return [
+      mk(0, t('proxiesRelationshipClients')),
+      mk(1, t('rule')),
+      mk(2, t('proxyGroup')),
+      mk(3, t('proxies')),
+    ]
+  })(),
   series: [
     {
       id: 'sankey-client-rule-group-server',
       type: 'sankey',
+      left: 8,
+      right: 8,
+      top: 28,
+      bottom: 8,
       data: sankeyData.value.nodes,
       links: sankeyData.value.links,
       nodeAlign: 'justify',
-      nodeWidth: isFullScreen.value ? 16 : 14,
-      nodeGap: isFullScreen.value ? 10 : 8,
+      nodeWidth: isFullScreen.value ? 12 : 10,
+      nodeGap: isFullScreen.value ? 12 : 10,
       emphasis: { focus: 'adjacency' },
       lineStyle: { curveness: 0.52, opacity: 0.55 },
       label: {
@@ -413,7 +462,7 @@ const options = computed(() => ({
         fontFamily,
         fontSize: labelFontSize.value,
         overflow: 'truncate',
-        width: isFullScreen.value ? 380 : 280,
+        width: labelWidth.value,
         formatter: (pp: any) => shortLabel(pp?.name || ''),
       },
     },
@@ -448,6 +497,7 @@ onMounted(() => {
     if (v) {
       await nextTick()
       if (!fsChart) fsChart = echarts.init(fullScreenChart.value)
+      fsChart.resize()
       render(true)
     } else {
       fsChart?.dispose()
@@ -459,7 +509,7 @@ onMounted(() => {
     mainChart?.resize()
     fsChart?.resize()
   }, 100)
-  watch(width, resize)
+  watch([width, height], resize)
 })
 
 onBeforeUnmount(() => {

@@ -60,6 +60,7 @@
         <div class="flex items-center gap-2">
           {{ $t('proxiesRelationshipColor') }}
           <select class="select select-sm min-w-28" v-model="proxiesRelationshipColorMode">
+            <option value="proxy">{{ $t('proxies') }}</option>
             <option value="provider">{{ $t('provider') }}</option>
             <option value="rule">{{ $t('rule') }}</option>
             <option value="none">{{ $t('none') }}</option>

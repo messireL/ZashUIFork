@@ -313,6 +313,10 @@ const sankeyData = computed(() => {
     } else if (cm === 'provider') {
       const pk = providerOf(t)
       voteColor(agg, pk || 'unknown', v)
+    } else if (cm === 'proxy') {
+      const arr = (c.chains || []).map(normalize).filter((x) => x && x !== '-')
+      const server = arr[arr.length - 1] || arr[0] || 'DIRECT'
+      voteColor(agg, server, v)
     }
 
     linkAgg.set(key, agg)

@@ -337,6 +337,10 @@ const sankeyData = computed(() => {
       // root -> source: color by rule, rest: by provider
       const colorKey = source === rootName.value ? normalize(c.rule) : providerOf(target)
       voteColor(agg, colorKey || 'unknown', v)
+    } else if (cm === 'proxy') {
+      const arr = (c.chains || []).map(normalize).filter((x) => x && x !== '-')
+      const server = arr[arr.length - 1] || arr[0] || 'DIRECT'
+      voteColor(agg, server, v)
     }
 
     linkAgg.set(key, agg)

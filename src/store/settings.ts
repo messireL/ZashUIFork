@@ -163,10 +163,18 @@ export const proxiesRelationshipWeightMode = useStorage<'traffic' | 'count'>(
 export const proxiesRelationshipTopN = useStorage<number>('config/proxies-relationship-topn', 40)
 export const proxiesRelationshipTopNChain = useStorage<number>('config/proxies-relationship-topn-chain', 18)
 
-export const proxiesRelationshipColorMode = useStorage<'none' | 'rule' | 'provider'>(
+export const proxiesRelationshipColorMode = useStorage<'none' | 'rule' | 'provider' | 'proxy'>(
   'config/proxies-relationship-color-mode',
-  'provider',
+  'proxy',
 )
+
+// one-time migration: older builds defaulted to "provider".
+// For this fork the default UX is color-by-real-hop (proxy).
+const proxiesRelationshipColorModeMigrated = useStorage('config/proxies-relationship-color-mode-migrated', false)
+if (!proxiesRelationshipColorModeMigrated.value && proxiesRelationshipColorMode.value === 'provider') {
+  proxiesRelationshipColorMode.value = 'proxy'
+  proxiesRelationshipColorModeMigrated.value = true
+}
 
 export const proxiesRelationshipSourceMode = useStorage<'auto' | 'rule' | 'rulePayload' | 'host' | 'destinationIP'>(
   'config/proxies-relationship-source-mode',

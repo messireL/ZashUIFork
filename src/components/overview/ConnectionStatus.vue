@@ -1,6 +1,6 @@
 <template>
-  <div class="bg-base-200/50 relative rounded-lg p-2 pb-10 text-sm">
-    <div class="flex flex-col gap-1">
+  <div class="bg-base-200/50 relative rounded-lg p-2 text-sm">
+    <div class="flex flex-col gap-1 pr-12">
       <div class="flex items-center justify-between">
         <div>
           <span class="inline-block w-24">Baidu</span> :
@@ -48,7 +48,7 @@
       </div>
     </div>
 
-    <button class="btn btn-circle btn-sm absolute right-2 bottom-2" @click="getLatency">
+    <button class="btn btn-circle btn-sm absolute right-2 top-2" @click="getLatency">
       <BoltIcon class="h-4 w-4" />
     </button>
   </div>
