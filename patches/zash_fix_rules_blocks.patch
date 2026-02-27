@@ -1,0 +1,72 @@
+diff -ru /mnt/data/zash_base/ZashUIFork-main/package.json /mnt/data/zash_work/ZashUIFork-main/package.json
+--- /mnt/data/zash_base/ZashUIFork-main/package.json	2026-02-27 10:33:51.000000000 +0000
++++ /mnt/data/zash_work/ZashUIFork-main/package.json	2026-02-27 11:46:01.093619375 +0000
+@@ -1,6 +1,6 @@
+ {
+   "name": "zashboard",
+-  "version": "1.0.2_3",
++  "version": "1.0.2_4",
+   "description": "A Dashboard Using Clash API",
+   "license": "MIT",
+   "type": "module",
+diff -ru /mnt/data/zash_base/ZashUIFork-main/src/components/overview/ProxiesClientCharts.vue /mnt/data/zash_work/ZashUIFork-main/src/components/overview/ProxiesClientCharts.vue
+--- /mnt/data/zash_base/ZashUIFork-main/src/components/overview/ProxiesClientCharts.vue	2026-02-27 10:00:13.000000000 +0000
++++ /mnt/data/zash_work/ZashUIFork-main/src/components/overview/ProxiesClientCharts.vue	2026-02-27 11:44:56.814180864 +0000
+@@ -328,7 +328,11 @@
+ 
+   const nodes = Array.from(nodesSet)
+     .sort((a, b) => a.localeCompare(b))
+-    .map((name) => ({ name, value: nodeMeta.get(name)?.bytes || 0 }))
++    // NOTE: Do NOT set node.value here.
++    // ECharts will size nodes based on link values. Setting node.value to bytes
++    // makes the chart extremely disproportionate (giant blocks), especially when
++    // one client flow dominates.
++    .map((name) => ({ name }))
+ 
+   const linksSorted = links.sort((a: any, b: any) => {
+     const s = a.source.localeCompare(b.source)
+diff -ru /mnt/data/zash_base/ZashUIFork-main/src/components/overview/ProxiesSourcesCharts.vue /mnt/data/zash_work/ZashUIFork-main/src/components/overview/ProxiesSourcesCharts.vue
+--- /mnt/data/zash_base/ZashUIFork-main/src/components/overview/ProxiesSourcesCharts.vue	2026-02-27 10:35:12.000000000 +0000
++++ /mnt/data/zash_work/ZashUIFork-main/src/components/overview/ProxiesSourcesCharts.vue	2026-02-27 11:44:43.693017521 +0000
+@@ -352,7 +352,11 @@
+ 
+   const nodes = Array.from(nodesSet)
+     .sort((a, b) => a.localeCompare(b))
+-    .map((name) => ({ name, value: nodeMeta.get(name)?.bytes || 0 }))
++    // NOTE: Do NOT set node.value here.
++    // ECharts will size nodes based on link values. Setting node.value to bytes
++    // makes the chart extremely disproportionate (giant blocks), especially when
++    // one flow dominates.
++    .map((name) => ({ name }))
+ 
+   const linksSorted = links.sort((a: any, b: any) => {
+     const s = a.source.localeCompare(b.source)
+diff -ru /mnt/data/zash_base/ZashUIFork-main/src/i18n/ru.ts /mnt/data/zash_work/ZashUIFork-main/src/i18n/ru.ts
+--- /mnt/data/zash_base/ZashUIFork-main/src/i18n/ru.ts	2026-02-27 09:59:51.000000000 +0000
++++ /mnt/data/zash_work/ZashUIFork-main/src/i18n/ru.ts	2026-02-27 11:45:47.606377410 +0000
+@@ -269,7 +269,7 @@
+   provider: 'Провайдер',
+   none: 'Нет',
+   proxiesRelationshipSourceMode: 'Поле источника',
+-  rulePayload: 'Rule payload',
++  rulePayload: 'Payload правила',
+   proxiesRelationshipTopN: 'Top N (источники/клиенты)',
+   proxiesRelationshipTopNChain: 'Top N (цепочки)',
+   ping: 'Пинг',
+diff -ru /mnt/data/zash_base/ZashUIFork-main/src/views/OverviewPage.vue /mnt/data/zash_work/ZashUIFork-main/src/views/OverviewPage.vue
+--- /mnt/data/zash_base/ZashUIFork-main/src/views/OverviewPage.vue	2026-02-27 09:49:14.000000000 +0000
++++ /mnt/data/zash_work/ZashUIFork-main/src/views/OverviewPage.vue	2026-02-27 11:45:38.558305062 +0000
+@@ -71,6 +71,13 @@
+               </button>
+               <button
+                 class="btn btn-xs join-item"
++                :class="proxiesRelationshipSourceMode === 'rule' ? 'btn-active' : ''"
++                @click="proxiesRelationshipSourceMode = 'rule'"
++              >
++                {{ $t('rule') }}
++              </button>
++              <button
++                class="btn btn-xs join-item"
+                 :class="proxiesRelationshipSourceMode === 'rulePayload' ? 'btn-active' : ''"
+                 @click="proxiesRelationshipSourceMode = 'rulePayload'"
+               >
