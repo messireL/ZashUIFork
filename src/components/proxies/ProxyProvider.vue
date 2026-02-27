@@ -70,7 +70,6 @@ import { fetchProxies, proxyProviederList } from '@/store/proxies'
 import { twoColumnProxyGroup } from '@/store/settings'
 import { ArrowPathIcon, BoltIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
-import { toFinite } from 'lodash'
 import { twMerge } from 'tailwind-merge'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -100,15 +99,15 @@ const subscriptionInfo = computed(() => {
     }
 
     const { t } = useI18n()
-    const total = prettyBytesHelper(Total, { binary: true })
+    const total = Total > 0 ? prettyBytesHelper(Total, { binary: true }) : '—'
     const used = prettyBytesHelper(Download + Upload, { binary: true })
-    const percentage = toFinite((((Download + Upload) / Total) * 100).toFixed(2))
+    const percentage = Total > 0 ? (((Download + Upload) / Total) * 100).toFixed(2) : ''
     const expireStr =
       Expire === 0
         ? `${t('expire')}: ${t('noExpire')}`
         : `${t('expire')}: ${dayjs(Expire * 1000).format('YYYY-MM-DD')}`
 
-    const usageStr = `${used} / ${total} ( ${percentage}% )`
+    const usageStr = percentage ? `${used} / ${total} ( ${percentage}% )` : `${used} / ${total}`
 
     return {
       expireStr,

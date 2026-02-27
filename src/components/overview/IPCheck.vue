@@ -28,12 +28,30 @@
         </span>
       </div>
 
-      <div class="text-left text-sm">{{ IPInfoAPI }}</div>
+      <div class="text-left text-sm">ip.sb</div>
       <div class="text-right text-sm">:</div>
       <div class="text-sm">
-        {{ showPrivacy ? ipForGlobal.ipWithPrivacy[0] : ipForGlobal.ip[0] }}
-        <span class="text-xs" v-if="ipForGlobal.ip[1]">
-          ({{ showPrivacy ? ipForGlobal.ipWithPrivacy[1] : ipForGlobal.ip[1] }})
+        {{ showPrivacy ? ipForIpsb.ipWithPrivacy[0] : ipForIpsb.ip[0] }}
+        <span class="text-xs" v-if="ipForIpsb.ip[1]">
+          ({{ showPrivacy ? ipForIpsb.ipWithPrivacy[1] : ipForIpsb.ip[1] }})
+        </span>
+      </div>
+
+      <div class="text-left text-sm">ipwho.is</div>
+      <div class="text-right text-sm">:</div>
+      <div class="text-sm">
+        {{ showPrivacy ? ipForIpwhois.ipWithPrivacy[0] : ipForIpwhois.ip[0] }}
+        <span class="text-xs" v-if="ipForIpwhois.ip[1]">
+          ({{ showPrivacy ? ipForIpwhois.ipWithPrivacy[1] : ipForIpwhois.ip[1] }})
+        </span>
+      </div>
+
+      <div class="text-left text-sm">ipapi.is</div>
+      <div class="text-right text-sm">:</div>
+      <div class="text-sm">
+        {{ showPrivacy ? ipForIpapi.ipWithPrivacy[0] : ipForIpapi.ip[0] }}
+        <span class="text-xs" v-if="ipForIpapi.ip[1]">
+          ({{ showPrivacy ? ipForIpapi.ipWithPrivacy[1] : ipForIpapi.ip[1] }})
         </span>
       </div>
     </div>
@@ -61,13 +79,15 @@ import {
   getIPFrom2ipMeGeoAPI,
   getIPFrom2ipMeProviderAPI,
   getIPFromIpipnetAPI,
-  getIPInfo,
+  getIPInfoFromIPAPI,
+  getIPInfoFromIPSB,
+  getIPInfoFromIPWHOIS,
 } from '@/api/geoip'
-import { ipForChina, ipForGlobal } from '@/composables/overview'
+import { ipForChina } from '@/composables/overview'
 import { useTooltip } from '@/helper/tooltip'
-import { autoIPCheck, IPInfoAPI, twoIpToken, twoIpTokens } from '@/store/settings'
+import { autoIPCheck, twoIpToken, twoIpTokens } from '@/store/settings'
 import { BoltIcon, EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -82,6 +102,9 @@ type IPBlock = { ip: string[]; ipWithPrivacy: string[] }
 
 const ipFor2ipRu = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
 const ipFor2ipIo = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
+const ipForIpsb = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
+const ipForIpwhois = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
+const ipForIpapi = ref<IPBlock>({ ip: [], ipWithPrivacy: [] })
 
 const QUERYING_IP_INFO: IPBlock = {
   ip: [t('getting'), ''],
@@ -95,7 +118,7 @@ const FAILED_IP_INFO: IPBlock = {
 
 const maskIP = (ip: string) => (ip ? '***.***.***.***' : '')
 
-// 1h cache, чтобы не упираться в лимиты и не долбить 2ip каждый ререндер
+// 1h cache, чтобы не упираться в лимиты и не долбить источники каждый ререндер
 const CACHE_TTL = 60 * 60 * 1000
 const cacheRead = (key: string): IPBlock | null => {
   try {
@@ -119,6 +142,9 @@ const cacheWrite = (key: string, value: IPBlock) => {
 
 const CACHE_KEY_2IP_RU = 'cache/ipcheck-2ip-ru'
 const CACHE_KEY_2IP_IO = 'cache/ipcheck-2ip-io'
+const CACHE_KEY_IPSB = 'cache/ipcheck-ipsb'
+const CACHE_KEY_IPWHOIS = 'cache/ipcheck-ipwhois'
+const CACHE_KEY_IPAPI = 'cache/ipcheck-ipapi'
 
 const safeText = (s: any) => (typeof s === 'string' ? s.trim() : '')
 const pick = (obj: any, path: string[]) => {
@@ -159,22 +185,38 @@ const format2ipIo = (data: any): { text: string; ip: string } => {
   return { text: text || t('noContent'), ip }
 }
 
+const loadGlobal = async (
+  cacheKey: string,
+  apiFn: () => Promise<{ ip: string; country: string; organization: string }>,
+  target: { value: IPBlock },
+  force = false,
+) => {
+  const cached = !force ? cacheRead(cacheKey) : null
+  if (cached) {
+    target.value = cached
+    return
+  }
+  try {
+    const res = await apiFn()
+    const label = `${res.country} ${res.organization}`.trim() || t('noContent')
+    const value: IPBlock = {
+      ipWithPrivacy: [label, res.ip],
+      ip: [label, maskIP(res.ip)],
+    }
+    target.value = value
+    cacheWrite(cacheKey, value)
+  } catch {
+    target.value = { ...FAILED_IP_INFO }
+  }
+}
+
 const getIPs = (force = false) => {
   ipForChina.value = { ...QUERYING_IP_INFO }
-  ipForGlobal.value = { ...QUERYING_IP_INFO }
   ipFor2ipRu.value = { ...QUERYING_IP_INFO }
   ipFor2ipIo.value = { ...QUERYING_IP_INFO }
-
-  // global provider (ip.sb / ipwho.is / ipapi.is)
-  getIPInfo()
-    .then((res) => {
-      const label = `${res.country} ${res.organization}`.trim()
-      ipForGlobal.value = {
-        ipWithPrivacy: [label, res.ip],
-        ip: [label, maskIP(res.ip)],
-      }
-    })
-    .catch(() => (ipForGlobal.value = { ...FAILED_IP_INFO }))
+  ipForIpsb.value = { ...QUERYING_IP_INFO }
+  ipForIpwhois.value = { ...QUERYING_IP_INFO }
+  ipForIpapi.value = { ...QUERYING_IP_INFO }
 
   // china (ipip.net)
   getIPFromIpipnetAPI()
@@ -222,7 +264,6 @@ const getIPs = (force = false) => {
   } else {
     const cachedIo = !force ? cacheRead(CACHE_KEY_2IP_IO) : null
     if (cachedIo && tokens.length === 1) {
-      // keep cache only when a single token is used
       ipFor2ipIo.value = cachedIo
     } else {
       const cursorKey = 'cache/twoip-token-cursor'
@@ -257,18 +298,21 @@ const getIPs = (force = false) => {
       })()
     }
   }
-}
 
-watch(IPInfoAPI, () => {
-  const hasAny = [ipForChina, ipForGlobal].some((item) => item.value.ip.length !== 0)
-  if (hasAny) getIPs(true)
-})
+  // global sources
+  loadGlobal(CACHE_KEY_IPSB, () => getIPInfoFromIPSB(), ipForIpsb, force)
+  loadGlobal(CACHE_KEY_IPWHOIS, () => getIPInfoFromIPWHOIS(), ipForIpwhois, force)
+  loadGlobal(CACHE_KEY_IPAPI, () => getIPInfoFromIPAPI(), ipForIpapi, force)
+}
 
 onMounted(() => {
   const hasAny =
-    [ipForChina, ipForGlobal].some((item) => item.value.ip.length !== 0) ||
+    ipForChina.value.ip.length !== 0 ||
     ipFor2ipRu.value.ip.length !== 0 ||
-    ipFor2ipIo.value.ip.length !== 0
+    ipFor2ipIo.value.ip.length !== 0 ||
+    ipForIpsb.value.ip.length !== 0 ||
+    ipForIpwhois.value.ip.length !== 0 ||
+    ipForIpapi.value.ip.length !== 0
 
   if (autoIPCheck.value && !hasAny) getIPs(false)
 })

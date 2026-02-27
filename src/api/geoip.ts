@@ -209,43 +209,56 @@ const getIPFromIPapiisAPI = async (ip = '') => {
   }
 }
 
+
+export const getIPInfoFromIPSB = async (ip = ''): Promise<IPInfo> => {
+  const ipsb = await getIPFromIpsbAPI(ip)
+  return {
+    ip: ipsb.ip,
+    country: ipsb.country,
+    region: ipsb.region,
+    city: ipsb.city,
+    asn: ipsb.asn.toString(),
+    organization: ipsb.organization,
+  }
+}
+
+export const getIPInfoFromIPWHOIS = async (ip = ''): Promise<IPInfo> => {
+  const ipwhois = await getIPFromIPWhoisAPI(ip)
+  return {
+    ip: ipwhois.ip,
+    region: ipwhois.region,
+    country: ipwhois.country,
+    city: ipwhois.city,
+    asn: ipwhois.connection.asn.toString(),
+    organization: ipwhois.connection.org,
+  }
+}
+
+export const getIPInfoFromIPAPI = async (ip = ''): Promise<IPInfo> => {
+  const ipapi = await getIPFromIPapiisAPI(ip)
+  return {
+    ip: ipapi.ip,
+    country: ipapi.location.country,
+    region: ipapi.location.state,
+    city: ipapi.location.city,
+    asn: ipapi.asn.asn.toString(),
+    organization: ipapi.asn.org,
+  }
+}
+
 export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
   switch (IPInfoAPI.value) {
     case IP_INFO_API.IPAPI: {
-      const ipapi = await getIPFromIPapiisAPI(ip)
-      return {
-        ip: ipapi.ip,
-        country: ipapi.location.country,
-        region: ipapi.location.state,
-        city: ipapi.location.city,
-        asn: ipapi.asn.asn.toString(),
-        organization: ipapi.asn.org,
-      }
+      return await getIPInfoFromIPAPI(ip)
     }
 
     case IP_INFO_API.IPWHOIS: {
-      const ipwhois = await getIPFromIPWhoisAPI(ip)
-      return {
-        ip: ipwhois.ip,
-        region: ipwhois.region,
-        country: ipwhois.country,
-        city: ipwhois.city,
-        asn: ipwhois.connection.asn.toString(),
-        organization: ipwhois.connection.org,
-      }
+      return await getIPInfoFromIPWHOIS(ip)
     }
 
     case IP_INFO_API.IPSB:
     default: {
-      const ipsb = await getIPFromIpsbAPI(ip)
-      return {
-        ip: ipsb.ip,
-        country: ipsb.country,
-        region: ipsb.region,
-        city: ipsb.city,
-        asn: ipsb.asn.toString(),
-        organization: ipsb.organization,
-      }
+      return await getIPInfoFromIPSB(ip)
     }
   }
 }

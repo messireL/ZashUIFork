@@ -11,14 +11,12 @@
       </button>
       <div class="flex flex-col overflow-hidden">
         <BackendVersion />
-        <span class="text-xs opacity-60 truncate">UI {{ zashboardVersion }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { zashboardVersion } from '@/api'
 import { isSidebarCollapsed } from '@/store/settings'
 import { ArrowLeftCircleIcon } from '@heroicons/vue/24/outline'
 import BackendVersion from '../common/BackendVersion.vue'

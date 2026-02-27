@@ -121,10 +121,43 @@ const updateFontFamily = () => {
 
 // ----- snapshot & pause -----
 const snapshot = ref<Connection[]>([])
+const deltaBytesById = ref<Record<string, number>>({})
+const prevTotalsById = new Map<string, number>()
+let lastSnapshotAt = Date.now()
+
 let timer: number | undefined
 
 const refreshSnapshot = () => {
-  snapshot.value = activeConnections.value.slice()
+  const now = Date.now()
+  const dt = Math.max(1, (now - lastSnapshotAt) / 1000)
+  lastSnapshotAt = now
+
+  const conns = activeConnections.value.slice()
+  const deltas: Record<string, number> = {}
+
+  for (const c of conns) {
+    const id = (c as any).id || ''
+    if (!id) continue
+
+    const total = (Number((c as any).download) || 0) + (Number((c as any).upload) || 0)
+    const prev = prevTotalsById.get(id)
+    let delta = prev === undefined ? 0 : Math.max(0, total - prev)
+
+    if (delta === 0) {
+      const sp = (Number((c as any).downloadSpeed) || 0) + (Number((c as any).uploadSpeed) || 0)
+      if (sp > 0) delta = sp * dt
+    }
+
+    deltas[id] = delta
+    prevTotalsById.set(id, total)
+  }
+
+  for (const id of Array.from(prevTotalsById.keys())) {
+    if (!(id in deltas)) prevTotalsById.delete(id)
+  }
+
+  deltaBytesById.value = deltas
+  snapshot.value = conns
 }
 
 const stopTimer = () => {
@@ -215,14 +248,16 @@ const sankeyData = computed(() => {
   const topSourcesN = Math.max(10, Number(proxiesRelationshipTopN.value) || 40)
   const topChainN = Math.max(10, Number(proxiesRelationshipTopNChain.value) || 18)
 
-  const bytes = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
-  const hasSpeed = conns.some((c) => bytes(c) > 0)
+  const bytes = (c: Connection) => {
+    const id = (c as any).id || ''
+    return (id && deltaBytesById.value[id]) ? deltaBytesById.value[id] : 0
+  }
+  const hasTraffic = conns.some((c) => bytes(c) > 0)
 
   const weight = (c: Connection) => {
     if (proxiesRelationshipWeightMode.value === 'count') return 1
-    if (!hasSpeed) return 1
-    // keep “traffic feel” but avoid gigantic blocks
-    return Math.min(1 + Math.log1p(bytes(c)), 60)
+    if (!hasTraffic) return 1
+    return Math.min(1 + Math.log1p(bytes(c) / 1024), 60)
   }
 
   const sourceTotals = new Map<string, number>()

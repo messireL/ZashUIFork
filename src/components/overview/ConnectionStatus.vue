@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-base-200/50 relative rounded-lg p-2 text-sm">
+  <div class="bg-base-200/50 relative rounded-lg p-2 pb-10 text-sm">
     <div class="flex flex-col gap-1">
       <div class="flex items-center justify-between">
         <div>
@@ -39,10 +39,10 @@
           v-model="customPingTarget"
           :placeholder="$t('pingTargetPlaceholder')"
         />
-        <button class="btn btn-sm" @click="pingCustom">
+        <button class="btn btn-sm whitespace-nowrap min-w-16" @click="pingCustom">
           {{ $t('ping') }}
         </button>
-        <span class="font-mono" :class="getColorForLatency(Number(customPingLatency))">
+        <span class="font-mono min-w-[80px] text-right" :class="getColorForLatency(Number(customPingLatency))">
           {{ customPingLatency ? customPingLatency + 'ms' : '' }}
         </span>
       </div>

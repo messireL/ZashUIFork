@@ -157,6 +157,19 @@ export const getConfigsAPI = () => {
   return axios.get<Config>('/configs')
 }
 
+
+export const getConfigsRawAPI = (cfg?: { path?: string }) => {
+  return axios.get<string>('/configs', {
+    params: cfg?.path ? { path: cfg.path } : undefined,
+    // на некоторых сборках это может вернуть YAML/text
+    responseType: 'text',
+    headers: {
+      Accept: 'text/plain',
+    } as any,
+  })
+}
+
+
 export const patchConfigsAPI = (configs: Record<string, string | boolean | object | number>) => {
   return axios.patch('/configs', configs)
 }
