@@ -165,7 +165,8 @@ const refreshSnapshot = () => {
   const deltas: Record<string, number> = {}
 
   for (const c of conns) {
-    const id = (c as any).id || 
+    // Connection.id всегда присутствует в данных Mihomo
+    const id = (c as any).id as string
     if (!id) continue
 
     const total = (Number((c as any).download) || 0) + (Number((c as any).upload) || 0)
