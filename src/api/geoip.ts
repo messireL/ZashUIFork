@@ -10,6 +10,49 @@ export interface IPInfo {
   organization: string
 }
 
+// 2ip.me (public; may have daily limits)
+export const getIPFrom2ipMeGeoAPI = async (ip = '') => {
+  const response = await fetch(
+    'https://api.2ip.me/geo.json?ip=' + encodeURIComponent(ip) + '&t=' + Date.now(),
+  )
+
+  return (await response.json()) as {
+    ip: string
+    country: string
+    country_rus: string
+    region: string
+    region_rus: string
+    city: string
+    city_rus: string
+    latitude: string
+    longitude: string
+  }
+}
+
+export const getIPFrom2ipMeProviderAPI = async (ip = '') => {
+  const response = await fetch(
+    'https://api.2ip.me/provider.json?ip=' + encodeURIComponent(ip) + '&t=' + Date.now(),
+  )
+
+  return (await response.json()) as {
+    ip: string
+    name_ripe: string
+    name_rus: string
+    site: string
+    as: string
+    route: string
+    mask: string
+  }
+}
+
+// 2ip.io (token required)
+export const getIPFrom2ipIoAPI = async (token: string) => {
+  const response = await fetch(
+    'https://api.2ip.io?token=' + encodeURIComponent(token) + '&t=' + Date.now(),
+  )
+  return (await response.json()) as any
+}
+
 // china
 export const getIPFromIpipnetAPI = async () => {
   const response = await fetch('https://myip.ipip.net/json?t=' + Date.now())
@@ -168,9 +211,8 @@ const getIPFromIPapiisAPI = async (ip = '') => {
 
 export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
   switch (IPInfoAPI.value) {
-    case IP_INFO_API.IPAPI:
+    case IP_INFO_API.IPAPI: {
       const ipapi = await getIPFromIPapiisAPI(ip)
-
       return {
         ip: ipapi.ip,
         country: ipapi.location.country,
@@ -179,9 +221,10 @@ export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
         asn: ipapi.asn.asn.toString(),
         organization: ipapi.asn.org,
       }
-    case IP_INFO_API.IPWHOIS:
-      const ipwhois = await getIPFromIPWhoisAPI(ip)
+    }
 
+    case IP_INFO_API.IPWHOIS: {
+      const ipwhois = await getIPFromIPWhoisAPI(ip)
       return {
         ip: ipwhois.ip,
         region: ipwhois.region,
@@ -190,10 +233,11 @@ export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
         asn: ipwhois.connection.asn.toString(),
         organization: ipwhois.connection.org,
       }
-    case IP_INFO_API.IPSB:
-    default:
-      const ipsb = await getIPFromIpsbAPI(ip)
+    }
 
+    case IP_INFO_API.IPSB:
+    default: {
+      const ipsb = await getIPFromIpsbAPI(ip)
       return {
         ip: ipsb.ip,
         country: ipsb.country,
@@ -202,5 +246,6 @@ export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
         asn: ipsb.asn.toString(),
         organization: ipsb.organization,
       }
+    }
   }
 }

@@ -91,6 +91,7 @@ export const splitOverviewPage = useStorage('config/split-overview-page', false)
 export const showIPAndConnectionInfo = useStorage('config/show-ip-and-connection-info', true)
 export const autoIPCheck = useStorage('config/auto-ip-check', true)
 export const autoConnectionCheck = useStorage('config/auto-connection-check', true)
+export const twoIpToken = useStorage('config/twoip-token', '')
 export const showStatisticsWhenSidebarCollapsed = useStorage(
   'config/show-statistics-when-sidebar-collapsed',
   true,

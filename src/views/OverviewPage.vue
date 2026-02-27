@@ -2,17 +2,32 @@
   <div class="flex h-full flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
     <ChartsCard />
     <NetworkCard v-if="showIPAndConnectionInfo" />
-    <div
-      class="card"
-      v-if="displayProxiesRelationship"
-    >
-      <div class="card-title absolute px-4 pt-4">
+
+    <div class="card" v-if="displayProxiesRelationship">
+      <div class="card-title px-4 pt-4">
         {{ $t('proxiesRelationship') }}
       </div>
-      <ProxiesCharts />
+
+      <div class="px-4 pb-4 flex flex-col gap-3">
+        <div>
+          <div class="text-xs opacity-60 mb-1">
+            {{ $t('proxiesRelationshipTree') }}
+          </div>
+          <ProxiesCharts />
+        </div>
+
+        <div>
+          <div class="text-xs opacity-60 mb-1">
+            {{ $t('proxiesRelationshipSources') }}
+          </div>
+          <ProxiesSourcesCharts />
+        </div>
+      </div>
     </div>
+
     <ConnectionHistory />
     <div class="flex-1"></div>
+
     <div class="card items-center justify-center gap-2 p-2 sm:flex-row">
       {{ getLabelFromBackend(activeBackend!) }} :
       <BackendVersion />
@@ -26,6 +41,7 @@ import ChartsCard from '@/components/overview/ChartsCard.vue'
 import ConnectionHistory from '@/components/overview/ConnectionHistory.vue'
 import NetworkCard from '@/components/overview/NetworkCard.vue'
 import ProxiesCharts from '@/components/overview/ProxiesCharts.vue'
+import ProxiesSourcesCharts from '@/components/overview/ProxiesSourcesCharts.vue'
 import { getLabelFromBackend } from '@/helper/utils'
 import { displayProxiesRelationship, showIPAndConnectionInfo } from '@/store/settings'
 import { activeBackend } from '@/store/setup'

@@ -237,6 +237,11 @@ const ru: LANG_MESSAGE = {
   getting: 'Получение...',
   mmdbSizeTip: 'Если вы используете mmdb-формат файлов geo, то количество будет равно 0',
   displayFinalOutbound: 'Показать конечный исходящий узел',
+    twoIpToken: '2ip токен',
+  twoIpTokenTip: 'Используется для запросов к 2ip.io (опционально).',
+  twoIpTokenMissing: 'токен не задан',
+  proxiesRelationshipTree: 'Дерево',
+  proxiesRelationshipSources: 'Источники',
 }
 
 export default ru
