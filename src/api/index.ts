@@ -169,8 +169,11 @@ export const flushDNSCacheAPI = () => {
   return axios.post('/cache/dns/flush')
 }
 
-export const reloadConfigsAPI = () => {
-  return axios.put('/configs?reload=true', { path: '', payload: '' })
+export const reloadConfigsAPI = (cfg?: { path?: string; payload?: string }) => {
+  return axios.put('/configs?reload=true', {
+    path: cfg?.path ?? '',
+    payload: cfg?.payload ?? '',
+  })
 }
 
 export const upgradeUIAPI = () => {

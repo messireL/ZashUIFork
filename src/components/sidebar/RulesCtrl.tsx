@@ -1,7 +1,7 @@
 import { updateRuleProviderAPI } from '@/api'
 import { RULE_TAB_TYPE } from '@/constant'
 import { showNotification } from '@/helper/notification'
-import { fetchRules, ruleProviderList, rules, rulesFilter, rulesTabShow } from '@/store/rules'
+import { fetchRules, ruleMissCount, ruleProviderList, rules, rulesFilter, rulesTabShow } from '@/store/rules'
 import { displayLatencyInRule, displayNowNodeInRule } from '@/store/settings'
 import { ArrowPathIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/outline'
 import { computed, defineComponent, ref } from 'vue'
@@ -96,6 +96,16 @@ export default defineComponent({
         </button>
       )
 
+
+      const missBadge = (
+        <span
+          class="badge badge-ghost badge-sm"
+          title={t('ruleMissTip')}
+        >
+          {t('misses')}: {ruleMissCount.value}
+        </span>
+      )
+
       const searchInput = (
         <TextInput
           class={props.isLargeCtrlsBar ? 'w-80' : 'w-32 flex-1'}
@@ -147,6 +157,7 @@ export default defineComponent({
             )}
             <div class="flex w-full gap-2">
               {searchInput}
+              {missBadge}
               {settingsModal}
             </div>
           </div>
@@ -157,6 +168,7 @@ export default defineComponent({
           {hasProviders.value && tabs}
           {searchInput}
           <div class="flex-1"></div>
+          {missBadge}
           {upgradeAllIcon}
           {settingsModal}
         </div>

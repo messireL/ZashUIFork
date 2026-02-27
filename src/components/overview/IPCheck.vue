@@ -65,7 +65,7 @@ import {
 } from '@/api/geoip'
 import { ipForChina, ipForGlobal } from '@/composables/overview'
 import { useTooltip } from '@/helper/tooltip'
-import { autoIPCheck, IPInfoAPI, twoIpToken } from '@/store/settings'
+import { autoIPCheck, IPInfoAPI, twoIpToken, twoIpTokens } from '@/store/settings'
 import { BoltIcon, EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -209,31 +209,52 @@ const getIPs = (force = false) => {
       .catch(() => (ipFor2ipRu.value = { ...FAILED_IP_INFO }))
   }
 
-  // 2ip.io (token API)
-  const token = (twoIpToken.value || '').trim()
-  if (!token) {
+  // 2ip.io (token API) — supports multiple tokens (round-robin)
+  const tokens = (twoIpTokens.value || []).map((x) => (x || '').trim()).filter(Boolean)
+  const legacy = (twoIpToken.value || '').trim()
+  if (legacy && !tokens.includes(legacy)) tokens.unshift(legacy)
+
+  if (!tokens.length) {
     ipFor2ipIo.value = {
       ipWithPrivacy: [t('twoIpTokenMissing'), ''],
       ip: [t('twoIpTokenMissing'), ''],
     }
   } else {
     const cachedIo = !force ? cacheRead(CACHE_KEY_2IP_IO) : null
-    if (cachedIo) {
+    if (cachedIo && tokens.length === 1) {
+      // keep cache only when a single token is used
       ipFor2ipIo.value = cachedIo
     } else {
-      getIPFrom2ipIoAPI(token)
-        .then((data) => {
-          if (data && data.success === false) throw new Error('2ip.io failed')
-          const { text, ip } = format2ipIo(data)
+      const cursorKey = 'cache/twoip-token-cursor'
+      const start = (() => {
+        const v = Number(localStorage.getItem(cursorKey) || '0')
+        return Number.isFinite(v) ? v : 0
+      })()
 
-          const value: IPBlock = {
-            ipWithPrivacy: [text, ip],
-            ip: [text, maskIP(ip)],
+      ;(async () => {
+        for (let i = 0; i < tokens.length; i++) {
+          const idx = (start + i) % tokens.length
+          const token = tokens[idx]
+          try {
+            const data = await getIPFrom2ipIoAPI(token)
+            if (!data || data.success === false) throw new Error('2ip.io failed')
+            const { text, ip } = format2ipIo(data)
+            if (!ip) throw new Error('2ip.io no ip')
+
+            const value: IPBlock = {
+              ipWithPrivacy: [text, ip],
+              ip: [text, maskIP(ip)],
+            }
+            ipFor2ipIo.value = value
+            cacheWrite(CACHE_KEY_2IP_IO, value)
+            localStorage.setItem(cursorKey, String((idx + 1) % tokens.length))
+            return
+          } catch {
+            // try next token
           }
-          ipFor2ipIo.value = value
-          cacheWrite(CACHE_KEY_2IP_IO, value)
-        })
-        .catch(() => (ipFor2ipIo.value = { ...FAILED_IP_INFO }))
+        }
+        ipFor2ipIo.value = { ...FAILED_IP_INFO }
+      })()
     }
   }
 }

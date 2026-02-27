@@ -48,12 +48,16 @@
           <CommonSidebar />
         </div>
       </template>
+      <div class="px-3 pb-1 text-[10px] opacity-60" :class="isSidebarCollapsed ? 'text-center' : ''">
+        UI {{ zashboardVersion }}
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import CommonSidebar from '@/components/sidebar/CommonCtrl.vue'
+import { zashboardVersion } from '@/api'
 import { ROUTE_ICON_MAP, ROUTE_NAME } from '@/constant'
 import { renderRoutes } from '@/helper'
 import { useTooltip } from '@/helper/tooltip'

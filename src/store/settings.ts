@@ -82,7 +82,39 @@ export const displayAllFeatures = useStorage('config/display-all-features', fals
 export const blurIntensity = useStorage('config/blur-intensity', 10)
 export const scrollAnimationEffect = useStorage('config/scroll-animation-effect', true)
 export const IPInfoAPI = useStorage('config/geoip-info-api', IP_INFO_API.IPSB)
-export const twoIpToken = useStorage('config/twoip-token', '')
+const twoIpTokenLegacy = useStorage('config/twoip-token', '')
+export const twoIpTokens = useStorage<string[]>('config/twoip-tokens', [])
+export const twoIpToken = computed({
+  get: () => {
+    const first = twoIpTokens.value?.[0]?.trim()
+    return first || (twoIpTokenLegacy.value || '').trim()
+  },
+  set: (val) => {
+    const v = (val || '').trim()
+    twoIpTokenLegacy.value = v
+    if (!v) {
+      twoIpTokens.value = []
+      return
+    }
+    const rest = (twoIpTokens.value || []).slice(1).map((x) => (x || '').trim()).filter(Boolean)
+    twoIpTokens.value = [v, ...rest.filter((x) => x !== v)]
+  },
+})
+
+export const twoIpTokensText = computed({
+  get: () => {
+    const legacy = (twoIpTokenLegacy.value || '').trim()
+    const arr = (twoIpTokens.value || []).map((x) => (x || '').trim()).filter(Boolean)
+    const merged = legacy && !arr.includes(legacy) ? [legacy, ...arr] : arr
+    return merged.join('\n')
+  },
+  set: (val) => {
+    const raw = (val || '').split(/[\n,;]+/g).map((x) => x.trim()).filter(Boolean)
+    const uniq = Array.from(new Set(raw))
+    twoIpTokens.value = uniq
+    twoIpTokenLegacy.value = uniq[0] || ''
+  },
+})
 export const autoDisconnectIdleUDP = useStorage('config/auto-disconnect-idle-udp', false)
 export const autoDisconnectIdleUDPTime = useStorage('config/auto-disconnect-idle-udp-time', 300)
 
@@ -91,6 +123,7 @@ export const splitOverviewPage = useStorage('config/split-overview-page', false)
 export const showIPAndConnectionInfo = useStorage('config/show-ip-and-connection-info', true)
 export const autoIPCheck = useStorage('config/auto-ip-check', true)
 export const autoConnectionCheck = useStorage('config/auto-connection-check', true)
+export const customPingTarget = useStorage('config/custom-ping-target', '')
 export const showStatisticsWhenSidebarCollapsed = useStorage(
   'config/show-statistics-when-sidebar-collapsed',
   true,
@@ -121,6 +154,24 @@ export const proxiesRelationshipRefreshSec = useStorage<number>(
 )
 
 export const proxiesRelationshipRefreshNonce = ref(0)
+
+export const proxiesRelationshipWeightMode = useStorage<'traffic' | 'count'>(
+  'config/proxies-relationship-weight-mode',
+  'traffic',
+)
+
+export const proxiesRelationshipTopN = useStorage<number>('config/proxies-relationship-topn', 40)
+export const proxiesRelationshipTopNChain = useStorage<number>('config/proxies-relationship-topn-chain', 18)
+
+export const proxiesRelationshipColorMode = useStorage<'none' | 'rule' | 'provider'>(
+  'config/proxies-relationship-color-mode',
+  'provider',
+)
+
+export const proxiesRelationshipSourceMode = useStorage<'auto' | 'rule' | 'rulePayload' | 'host' | 'destinationIP'>(
+  'config/proxies-relationship-source-mode',
+  'auto',
+)
 
 
 // proxies

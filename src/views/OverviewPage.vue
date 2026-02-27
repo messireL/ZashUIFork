@@ -34,7 +34,63 @@
             </button>
           </div>
 
+
           <template v-if="proxiesRelationshipView !== 'tree'">
+            <div class="join">
+              <button
+                class="btn btn-xs join-item"
+                :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
+                @click="proxiesRelationshipWeightMode = 'traffic'"
+              >
+                {{ $t('traffic') }}
+              </button>
+              <button
+                class="btn btn-xs join-item"
+                :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
+                @click="proxiesRelationshipWeightMode = 'count'"
+              >
+                {{ $t('count') }}
+              </button>
+            </div>
+
+            <select class="select select-xs" v-model.number="proxiesRelationshipTopN">
+              <option :value="10">top 10</option>
+              <option :value="20">top 20</option>
+              <option :value="40">top 40</option>
+              <option :value="70">top 70</option>
+              <option :value="100">top 100</option>
+            </select>
+
+            <div class="join" v-if="proxiesRelationshipView === 'sources'">
+              <button
+                class="btn btn-xs join-item"
+                :class="proxiesRelationshipSourceMode === 'auto' ? 'btn-active' : ''"
+                @click="proxiesRelationshipSourceMode = 'auto'"
+              >
+                {{ $t('auto') }}
+              </button>
+              <button
+                class="btn btn-xs join-item"
+                :class="proxiesRelationshipSourceMode === 'rulePayload' ? 'btn-active' : ''"
+                @click="proxiesRelationshipSourceMode = 'rulePayload'"
+              >
+                {{ $t('rulePayload') }}
+              </button>
+              <button
+                class="btn btn-xs join-item"
+                :class="proxiesRelationshipSourceMode === 'host' ? 'btn-active' : ''"
+                @click="proxiesRelationshipSourceMode = 'host'"
+              >
+                {{ $t('host') }}
+              </button>
+              <button
+                class="btn btn-xs join-item"
+                :class="proxiesRelationshipSourceMode === 'destinationIP' ? 'btn-active' : ''"
+                @click="proxiesRelationshipSourceMode = 'destinationIP'"
+              >
+                {{ $t('destination') }}
+              </button>
+            </div>
             <button
               class="btn btn-ghost btn-circle btn-xs"
               :title="proxiesRelationshipPaused ? $t('resume') : $t('pause')"
@@ -89,6 +145,9 @@ import {
   proxiesRelationshipPaused,
   proxiesRelationshipRefreshNonce,
   proxiesRelationshipRefreshSec,
+  proxiesRelationshipTopN,
+  proxiesRelationshipSourceMode,
+  proxiesRelationshipWeightMode,
   proxiesRelationshipView,
   showIPAndConnectionInfo,
 } from '@/store/settings'

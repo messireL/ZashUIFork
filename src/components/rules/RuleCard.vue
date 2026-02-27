@@ -20,6 +20,9 @@
           @mouseenter="showMMDBSizeTip"
         />
       </span>
+      <span class="badge badge-xs ml-2" :title="$t('ruleHitsTip')">
+        {{ $t('hits') }}: {{ hits }}
+      </span>
       <button
         v-if="isUpdateableRuleSet"
         :class="
@@ -60,7 +63,7 @@ import { NOT_CONNECTED } from '@/constant'
 import { getColorForLatency } from '@/helper'
 import { useTooltip } from '@/helper/tooltip'
 import { getLatencyByName, getNowProxyNodeName, proxyMap } from '@/store/proxies'
-import { fetchRules, ruleProviderList } from '@/store/rules'
+import { fetchRules, getRuleHitCount, ruleProviderList } from '@/store/rules'
 import { displayLatencyInRule, displayNowNodeInRule } from '@/store/settings'
 import type { Rule } from '@/types'
 import {
@@ -83,6 +86,7 @@ const { showTip } = useTooltip()
 const proxyNode = computed(() => proxyMap.value[props.rule.proxy])
 const latency = computed(() => getLatencyByName(props.rule.proxy, props.rule.proxy))
 const latencyColor = computed(() => getColorForLatency(Number(latency.value)))
+const hits = computed(() => getRuleHitCount(props.rule.type, props.rule.payload))
 
 const size = computed(() => {
   if (props.rule.type === 'RuleSet') {

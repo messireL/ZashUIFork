@@ -21,7 +21,7 @@ const props = defineProps<{
 
 const classMap = {
   overview: {
-    list: 'grid grid-cols-2 gap-2 rounded-lg bg-base-200/50 px-4 py-2 lg:grid-cols-6',
+    list: 'grid grid-cols-3 gap-2 rounded-lg bg-base-200/50 px-4 py-2 lg:grid-cols-9',
     item: 'flex h-12 flex-col items-start justify-center lg:gap-2 lg:h-24 lg:items-center',
     label: 'text-sm lg:text-lg lg:font-bold max-lg:text-base-content/70',
     value: 'text-lg lg:text-xl',
@@ -42,6 +42,9 @@ const classMap = {
 
 const orderMap = {
   overview: [
+    STATISTICS_TYPE.TOTAL_PROXIES,
+    STATISTICS_TYPE.TOTAL_PROVIDERS,
+    STATISTICS_TYPE.TOTAL_RULES,
     STATISTICS_TYPE.CONNECTIONS,
     STATISTICS_TYPE.MEMORY_USAGE,
     STATISTICS_TYPE.DOWNLOAD,
@@ -50,6 +53,9 @@ const orderMap = {
     STATISTICS_TYPE.UL_SPEED,
   ],
   settings: [
+    STATISTICS_TYPE.TOTAL_PROXIES,
+    STATISTICS_TYPE.TOTAL_PROVIDERS,
+    STATISTICS_TYPE.TOTAL_RULES,
     STATISTICS_TYPE.CONNECTIONS,
     STATISTICS_TYPE.DOWNLOAD,
     STATISTICS_TYPE.DL_SPEED,
@@ -58,6 +64,9 @@ const orderMap = {
     STATISTICS_TYPE.UL_SPEED,
   ],
   ctrl: [
+    STATISTICS_TYPE.TOTAL_PROXIES,
+    STATISTICS_TYPE.TOTAL_PROVIDERS,
+    STATISTICS_TYPE.TOTAL_RULES,
     STATISTICS_TYPE.CONNECTIONS,
     STATISTICS_TYPE.MEMORY_USAGE,
     STATISTICS_TYPE.DOWNLOAD,

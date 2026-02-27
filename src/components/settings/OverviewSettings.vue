@@ -29,11 +29,11 @@
 
         <div class="flex flex-col gap-1">
           <div class="flex items-center gap-2">
-            {{ $t('twoIpToken') }}
+            {{ $t('twoIpTokens') }}
           </div>
-          <TextInput v-model="twoIpToken" :placeholder="$t('optional')" :clearable="true" />
+          <textarea class="textarea textarea-sm" v-model="twoIpTokensText" :placeholder="$t('optional')" rows="3"></textarea>
           <div class="text-xs opacity-60">
-            {{ $t('twoIpTokenTip') }}
+            {{ $t('twoIpTokensTip') }}
           </div>
         </div>
       </template>
@@ -46,6 +46,47 @@
       <div class="flex items-center gap-2" v-if="displayProxiesRelationship">
         {{ $t('proxiesRelationshipSources') }}
         <input class="toggle" type="checkbox" v-model="proxiesRelationshipUseSources" />
+      </div>
+
+      <div class="flex flex-col gap-1" v-if="displayProxiesRelationship">
+        <div class="flex items-center gap-2">
+          {{ $t('proxiesRelationshipWeight') }}
+          <select class="select select-sm min-w-28" v-model="proxiesRelationshipWeightMode">
+            <option value="traffic">{{ $t('traffic') }}</option>
+            <option value="count">{{ $t('count') }}</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2">
+          {{ $t('proxiesRelationshipColor') }}
+          <select class="select select-sm min-w-28" v-model="proxiesRelationshipColorMode">
+            <option value="provider">{{ $t('provider') }}</option>
+            <option value="rule">{{ $t('rule') }}</option>
+            <option value="none">{{ $t('none') }}</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2">
+          {{ $t('proxiesRelationshipSourceMode') }}
+          <select class="select select-sm min-w-28" v-model="proxiesRelationshipSourceMode">
+            <option value="auto">{{ $t('auto') }}</option>
+            <option value="rulePayload">{{ $t('rulePayload') }}</option>
+            <option value="host">{{ $t('host') }}</option>
+            <option value="destinationIP">{{ $t('destination') }}</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2">
+          {{ $t('proxiesRelationshipTopN') }}
+          <input class="range range-xs" type="range" min="10" max="100" step="5" v-model.number="proxiesRelationshipTopN" />
+          <span class="text-xs opacity-70 w-10 text-right">{{ proxiesRelationshipTopN }}</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          {{ $t('proxiesRelationshipTopNChain') }}
+          <input class="range range-xs" type="range" min="10" max="60" step="2" v-model.number="proxiesRelationshipTopNChain" />
+          <span class="text-xs opacity-70 w-10 text-right">{{ proxiesRelationshipTopNChain }}</span>
+        </div>
       </div>
 
       <div class="flex items-center gap-2 max-md:hidden">
@@ -66,7 +107,6 @@
 </template>
 
 <script setup lang="ts">
-import TextInput from '@/components/common/TextInput.vue'
 import {
   autoConnectionCheck,
   autoIPCheck,
@@ -75,7 +115,12 @@ import {
   showIPAndConnectionInfo,
   showStatisticsWhenSidebarCollapsed,
   splitOverviewPage,
-  twoIpToken,
+  twoIpTokensText,
+  proxiesRelationshipColorMode,
+  proxiesRelationshipSourceMode,
+  proxiesRelationshipTopN,
+  proxiesRelationshipTopNChain,
+  proxiesRelationshipWeightMode,
 } from '@/store/settings'
 import { proxiesRelationshipUseSources } from '@/store/settings'
 </script>

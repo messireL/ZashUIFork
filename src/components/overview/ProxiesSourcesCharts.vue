@@ -51,14 +51,21 @@
 <script setup lang="ts">
 import { isSingBox } from '@/api'
 import { backgroundImage } from '@/helper/indexeddb'
+import { prettyBytesHelper } from '@/helper/utils'
 import { activeConnections } from '@/store/connections'
+import { proxyProviederList } from '@/store/proxies'
 import {
   blurIntensity,
   dashboardTransparent,
   font,
+  proxiesRelationshipColorMode,
   proxiesRelationshipPaused,
   proxiesRelationshipRefreshNonce,
   proxiesRelationshipRefreshSec,
+  proxiesRelationshipSourceMode,
+  proxiesRelationshipTopN,
+  proxiesRelationshipTopNChain,
+  proxiesRelationshipWeightMode,
   theme,
 } from '@/store/settings'
 import { activeUuid } from '@/store/setup'
@@ -72,8 +79,11 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { debounce } from 'lodash'
 import { twMerge } from 'tailwind-merge'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
+
+const { t } = useI18n()
 
 const isFullScreen = ref(false)
 const colorRef = ref()
@@ -86,10 +96,8 @@ const fullChartStyle = computed(() => {
 
 const { width } = useElementSize(chart)
 const labelFontSize = computed(() => {
-  // адаптив: чуть крупнее на больших экранах + в full-screen
   const w = Number(width.value) || 0
-  const base = isFullScreen.value ? 14 : w >= 1100 ? 13 : w >= 800 ? 12 : 11
-  return base
+  return isFullScreen.value ? 14 : w >= 1100 ? 13 : w >= 800 ? 12 : 11
 })
 
 const colorSet = {
@@ -101,18 +109,17 @@ const colorSet = {
 let fontFamily = ''
 
 const updateColorSet = () => {
-  const colorStyle = getComputedStyle(colorRef.value)
-  colorSet.baseContent = colorStyle.getPropertyValue('--color-base-content').trim()
-  colorSet.baseContent30 = colorStyle.borderColor
-  colorSet.base70 = colorStyle.backgroundColor
+  const cs = getComputedStyle(colorRef.value)
+  colorSet.baseContent = cs.getPropertyValue('--color-base-content').trim()
+  colorSet.baseContent30 = cs.borderColor
+  colorSet.base70 = cs.backgroundColor
 }
 
 const updateFontFamily = () => {
-  const baseColorStyle = getComputedStyle(colorRef.value)
-  fontFamily = baseColorStyle.fontFamily
+  fontFamily = getComputedStyle(colorRef.value).fontFamily
 }
 
-// ----- snapshot & pause (no constant redraw) -----
+// ----- snapshot & pause -----
 const snapshot = ref<Connection[]>([])
 let timer: number | undefined
 
@@ -148,35 +155,83 @@ watch(proxiesRelationshipRefreshSec, () => {
 })
 
 watch(proxiesRelationshipRefreshNonce, () => {
-  // manual refresh
   refreshSnapshot()
 })
 
-// ----- sankey -----
+// ----- helpers -----
 const normalize = (s: string) => (s || '').trim() || '-'
 const rootName = computed(() => (isSingBox.value ? 'SingBox' : 'Mihomo'))
 
+const providerMap = computed(() => {
+  const m = new Map<string, string>()
+  for (const p of proxyProviederList.value) {
+    for (const proxy of p.proxies || []) {
+      m.set(proxy.name, p.name)
+    }
+  }
+  return m
+})
+
+const providerOf = (name: string) => providerMap.value.get(name) || ''
+
+const colorFromKey = (key: string) => {
+  const s = key || 'unknown'
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  const hue = h % 360
+  return `hsl(${hue} 70% 55%)`
+}
+
+const sourceFromConnection = (c: Connection) => {
+  const mode = proxiesRelationshipSourceMode.value
+  if (mode === 'rule') {
+    const rt = normalize((c as any).rule)
+    const rp = String((c as any).rulePayload || '').trim()
+    return rp ? `${rt}: ${normalize(rp)}` : rt
+  }
+  if (mode === 'rulePayload') return normalize(c.rulePayload)
+  if (mode === 'host') return normalize(c.metadata.host)
+  if (mode === 'destinationIP') return normalize(c.metadata.destinationIP)
+  return normalize(c.rulePayload || c.metadata.host || c.metadata.destinationIP)
+}
+
+const shortLabel = (name: string) => {
+  if (!name) return ''
+  const max = isFullScreen.value ? 46 : 32
+  return name.length > max ? `${name.slice(0, max - 1)}…` : name
+}
+
+type LinkAgg = {
+  value: number
+  bytes: number
+  count: number
+  colorVotes: Record<string, number>
+}
+
+type NodeMeta = { bytes: number; count: number; provider?: string }
+
 const sankeyData = computed(() => {
   const conns = snapshot.value || []
-  const MAX_SOURCES = isFullScreen.value ? 70 : 40
-  const MAX_CHAIN0 = isFullScreen.value ? 32 : 18
-  const MAX_CHAIN1 = isFullScreen.value ? 32 : 18
+  const topSourcesN = Math.max(10, Number(proxiesRelationshipTopN.value) || 40)
+  const topChainN = Math.max(10, Number(proxiesRelationshipTopNChain.value) || 18)
 
-  const speed = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
-  const hasSpeed = conns.some((c) => speed(c) > 0)
-  // Compress big traffic gaps: keeps “traffic feel” but prevents giant blocks.
-  // If there is no speed info, fallback to count (=1).
-  const weight = (c: Connection) =>
-    hasSpeed ? Math.min(1 + Math.log1p(speed(c)), 60) : 1
+  const bytes = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
+  const hasSpeed = conns.some((c) => bytes(c) > 0)
 
-  // totals
+  const weight = (c: Connection) => {
+    if (proxiesRelationshipWeightMode.value === 'count') return 1
+    if (!hasSpeed) return 1
+    // keep “traffic feel” but avoid gigantic blocks
+    return Math.min(1 + Math.log1p(bytes(c)), 60)
+  }
+
   const sourceTotals = new Map<string, number>()
   const chain0Totals = new Map<string, number>()
   const chain1Totals = new Map<string, number>()
 
   for (const c of conns) {
     const v = weight(c)
-    const src = normalize(c.rulePayload || c.metadata.host || c.metadata.destinationIP)
+    const src = sourceFromConnection(c)
     sourceTotals.set(src, (sourceTotals.get(src) || 0) + v)
 
     const c0 = normalize(c.chains?.[0] || 'DIRECT')
@@ -189,21 +244,21 @@ const sankeyData = computed(() => {
   const topSources = new Set(
     Array.from(sourceTotals.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_SOURCES)
+      .slice(0, topSourcesN)
       .map(([k]) => k),
   )
 
   const topChain0 = new Set(
     Array.from(chain0Totals.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_CHAIN0)
+      .slice(0, topChainN)
       .map(([k]) => k),
   )
 
   const topChain1 = new Set(
     Array.from(chain1Totals.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_CHAIN1)
+      .slice(0, topChainN)
       .map(([k]) => k),
   )
 
@@ -211,17 +266,53 @@ const sankeyData = computed(() => {
   const OTHER_C0 = 'other-out'
   const OTHER_C1 = 'other-node'
 
-  const linkAgg = new Map<string, number>()
-  const addLink = (source: string, target: string, value: number) => {
+  const linkAgg = new Map<string, LinkAgg>()
+  const nodeMeta = new Map<string, NodeMeta>()
+
+  const addNodeMeta = (name: string, b: number, cnt: number) => {
+    const cur = nodeMeta.get(name) || { bytes: 0, count: 0 }
+    cur.bytes += b
+    cur.count += cnt
+    if (!cur.provider) {
+      const p = providerOf(name)
+      if (p) cur.provider = p
+    }
+    nodeMeta.set(name, cur)
+  }
+
+  const voteColor = (agg: LinkAgg, key: string, v: number) => {
+    if (!key) return
+    agg.colorVotes[key] = (agg.colorVotes[key] || 0) + v
+  }
+
+  const addLink = (source: string, target: string, c: Connection) => {
+    const b = bytes(c)
+    const v = weight(c)
     const key = `${source}\u0000${target}`
-    linkAgg.set(key, (linkAgg.get(key) || 0) + value)
+
+    const agg = linkAgg.get(key) || { value: 0, bytes: 0, count: 0, colorVotes: {} }
+    agg.value += v
+    agg.bytes += b
+    agg.count += 1
+
+    const cm = proxiesRelationshipColorMode.value
+    if (cm === 'rule') {
+      voteColor(agg, normalize(c.rule), v)
+    } else if (cm === 'provider') {
+      // root -> source: color by rule, rest: by provider
+      const colorKey = source === rootName.value ? normalize(c.rule) : providerOf(target)
+      voteColor(agg, colorKey || 'unknown', v)
+    }
+
+    linkAgg.set(key, agg)
+
+    addNodeMeta(source, b, 1)
+    addNodeMeta(target, b, 1)
   }
 
   for (const c of conns) {
-    const v = weight(c)
-
-    const rawSource = normalize(c.rulePayload || c.metadata.host || c.metadata.destinationIP)
-    const source = topSources.has(rawSource) ? rawSource : OTHER_SRC
+    const rawSource = sourceFromConnection(c)
+    const src = topSources.has(rawSource) ? rawSource : OTHER_SRC
 
     const rawC0 = normalize(c.chains?.[0] || 'DIRECT')
     const chain0 = topChain0.has(rawC0) ? rawC0 : OTHER_C0
@@ -229,36 +320,76 @@ const sankeyData = computed(() => {
     const rawC1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
     const chain1 = rawC1 ? (topChain1.has(rawC1) ? rawC1 : OTHER_C1) : ''
 
-    addLink(rootName.value, source, v)
-    addLink(source, chain0, v)
-    if (chain1) addLink(chain0, chain1, v)
+    addLink(rootName.value, src, c)
+    addLink(src, chain0, c)
+    if (chain1) addLink(chain0, chain1, c)
   }
 
   const nodesSet = new Set<string>()
-  const links = Array.from(linkAgg.entries()).map(([key, value]) => {
-    const [source, target] = key.split('\u0000')
+  const links = Array.from(linkAgg.entries()).map(([k, a]) => {
+    const [source, target] = k.split('\u0000')
     nodesSet.add(source)
     nodesSet.add(target)
-    return { source, target, value }
+
+    let color = colorSet.baseContent30
+    if (proxiesRelationshipColorMode.value !== 'none') {
+      const entries = Object.entries(a.colorVotes)
+      if (entries.length) {
+        entries.sort((x, y) => y[1] - x[1])
+        color = colorFromKey(entries[0][0])
+      }
+    }
+
+    return {
+      source,
+      target,
+      value: a.value,
+      bytes: a.bytes,
+      count: a.count,
+      lineStyle: { color, opacity: 0.45 },
+    }
   })
 
   const nodes = Array.from(nodesSet)
     .sort((a, b) => a.localeCompare(b))
-    .map((name) => ({ name }))
+    .map((name) => ({ name, value: nodeMeta.get(name)?.bytes || 0 }))
 
-  const linksSorted = links.sort((a, b) => {
+  const linksSorted = links.sort((a: any, b: any) => {
     const s = a.source.localeCompare(b.source)
     if (s) return s
     return a.target.localeCompare(b.target)
   })
 
-  return { nodes, links: linksSorted }
+  return { nodes, links: linksSorted, nodeMeta }
 })
 
-const shortLabel = (name: string) => {
-  if (!name) return ''
-  const max = isFullScreen.value ? 46 : 32
-  return name.length > max ? `${name.slice(0, max - 1)}…` : name
+const tooltipFormatter = (p: any) => {
+  if (p?.dataType === 'edge') {
+    const d = p.data || {}
+    const cnt = Number(d.count) || 0
+    const b = Number(d.bytes) || 0
+    return `
+      <div style="max-width: 420px">
+        <div style="font-weight:600">${shortLabel(d.source)} → ${shortLabel(d.target)}</div>
+        <div>${t('count')}: <b>${cnt}</b></div>
+        <div>${t('traffic')}: <b>${prettyBytesHelper(b)}</b></div>
+      </div>
+    `
+  }
+
+  const name = p?.name || ''
+  const meta = sankeyData.value.nodeMeta.get(name)
+  const provider = meta?.provider ? ` (${t('provider')}: ${meta.provider})` : ''
+  const cnt = meta?.count || 0
+  const b = meta?.bytes || 0
+
+  return `
+    <div style="max-width: 420px">
+      <div style="font-weight:600">${shortLabel(name)}${provider}</div>
+      <div>${t('count')}: <b>${cnt}</b></div>
+      <div>${t('traffic')}: <b>${prettyBytesHelper(b)}</b></div>
+    </div>
+  `
 }
 
 const options = computed(() => {
@@ -270,6 +401,7 @@ const options = computed(() => {
     tooltip: {
       trigger: 'item',
       triggerOn: 'mousemove',
+      formatter: tooltipFormatter,
       backgroundColor: colorSet.base70,
       borderColor: colorSet.base70,
       confine: true,
@@ -290,14 +422,14 @@ const options = computed(() => {
         nodeWidth: isFullScreen.value ? 14 : 12,
         nodeGap: isFullScreen.value ? 6 : 4,
         emphasis: { focus: 'adjacency' },
-        lineStyle: { curveness: 0.5, color: colorSet.baseContent30, opacity: 0.4 },
+        lineStyle: { curveness: 0.5, opacity: 0.45 },
         label: {
           color: colorSet.baseContent,
           fontFamily,
           fontSize: labelFontSize.value,
           overflow: 'truncate',
           width: isFullScreen.value ? 260 : 180,
-          formatter: (p: any) => shortLabel(p?.name || ''),
+          formatter: (pp: any) => shortLabel(pp?.name || ''),
         },
       },
     ],
@@ -309,7 +441,6 @@ let fsChart: echarts.ECharts | null = null
 
 const render = (force = false) => {
   if (!myChart) return
-  // no clear() => smoother updates
   myChart.setOption(options.value as any, { notMerge: force, lazyUpdate: true })
   if (isFullScreen.value && fsChart) {
     fsChart.setOption(options.value as any, { notMerge: force, lazyUpdate: true })
