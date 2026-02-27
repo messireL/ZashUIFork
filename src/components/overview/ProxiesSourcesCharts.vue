@@ -123,7 +123,7 @@ const startTimer = () => {
   stopTimer()
   timer = window.setInterval(() => {
     if (!proxiesRelationshipPaused.value) refreshSnapshot()
-  }, Math.max(1, proxiesRelationshipRefreshSec.value) * 1000)
+  }, Math.max(1, Number(proxiesRelationshipRefreshSec.value) || 5) * 1000)
 }
 
 watch(proxiesRelationshipPaused, (p) => {
