@@ -1,9 +1,5 @@
 <template>
-  <div
-    :class="twMerge('relative h-96 w-full overflow-hidden')"
-    @mousemove.stop
-    @touchmove.stop
-  >
+  <div :class="twMerge('relative h-[32rem] w-full overflow-hidden')" @mousemove.stop @touchmove.stop>
     <div ref="chart" class="h-full w-full" />
     <span class="border-base-content/30 text-base-content/10 bg-base-100/70 hidden" ref="colorRef" />
 
@@ -97,8 +93,16 @@ const updateFontFamily = () => {
 const { width } = useElementSize(chart)
 const labelFontSize = computed(() => {
   const w = Number(width.value) || 0
-  return isFullScreen.value ? 14 : w >= 1100 ? 13 : w >= 800 ? 12 : 11
+  // keep labels readable (user complaint about tiny font)
+  return isFullScreen.value ? 16 : w >= 1100 ? 15 : w >= 800 ? 14 : 13
 })
+
+const normalize = (s: string) => (s || '').trim() || '-'
+const shortLabel = (name: string) => {
+  if (!name) return ''
+  const max = isFullScreen.value ? 52 : 36
+  return name.length > max ? `${name.slice(0, max - 1)}…` : name
+}
 
 const labelForIp = (ip: string) => {
   const backendId = activeBackend.value?.uuid
@@ -110,13 +114,6 @@ const labelForIp = (ip: string) => {
   return item?.label || ''
 }
 
-const normalize = (s: string) => (s || '').trim() || '-'
-const shortLabel = (name: string) => {
-  if (!name) return ''
-  const max = isFullScreen.value ? 46 : 32
-  return name.length > max ? `${name.slice(0, max - 1)}…` : name
-}
-
 const providerMap = computed(() => {
   const m = new Map<string, string>()
   for (const p of proxyProviederList.value) {
@@ -126,7 +123,6 @@ const providerMap = computed(() => {
   }
   return m
 })
-
 const providerOf = (name: string) => providerMap.value.get(name) || ''
 
 const colorFromKey = (key: string) => {
@@ -166,11 +162,9 @@ watch(proxiesRelationshipPaused, (p) => {
     startTimer()
   }
 })
-
 watch(proxiesRelationshipRefreshSec, () => {
   if (!proxiesRelationshipPaused.value) startTimer()
 })
-
 watch(proxiesRelationshipRefreshNonce, () => {
   refreshSnapshot()
 })
@@ -187,7 +181,8 @@ type NodeMeta = { bytes: number; count: number; provider?: string }
 const sankeyData = computed(() => {
   const conns = snapshot.value || []
   const topClientsN = Math.max(10, Number(proxiesRelationshipTopN.value) || 40)
-  const topChainN = Math.max(10, Number(proxiesRelationshipTopNChain.value) || 18)
+  const topRulesN = Math.max(10, Math.floor(topClientsN * 1.2))
+  const topProxiesN = Math.max(10, Number(proxiesRelationshipTopNChain.value) || 18)
 
   const bytes = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
   const hasSpeed = conns.some((c) => bytes(c) > 0)
@@ -195,50 +190,65 @@ const sankeyData = computed(() => {
   const weight = (c: Connection) => {
     if (proxiesRelationshipWeightMode.value === 'count') return 1
     if (!hasSpeed) return 1
-    return Math.min(1 + Math.log1p(bytes(c)), 60)
+    // compress traffic so chart stays readable (no giant blocks)
+    return Math.min(1 + Math.log1p(bytes(c)) / 3, 18)
   }
 
-  const totals = new Map<string, number>()
-  const chain0Totals = new Map<string, number>()
-  const chain1Totals = new Map<string, number>()
+  const fmtRule = (c: Connection) => {
+    const rt = normalize((c as any).rule)
+    const rp = String((c as any).rulePayload || '').trim()
+    return rp ? `${rt}: ${normalize(rp)}` : rt
+  }
+
+  const MAX_CHAIN_DEPTH = 5
+  const chainSteps = (c: Connection) => {
+    const arr = (c.chains || []).map(normalize).filter((x) => x && x !== '-')
+    if (!arr.length) return ['DIRECT']
+    if (arr.length <= MAX_CHAIN_DEPTH) return arr
+    // keep head + tail, collapse the middle for readability
+    return [...arr.slice(0, MAX_CHAIN_DEPTH - 2), '…', arr[arr.length - 1]]
+  }
+
+  const totalsClients = new Map<string, number>()
+  const totalsRules = new Map<string, number>()
+  const totalsProxies = new Map<string, number>()
 
   for (const c of conns) {
     const ip = c.metadata?.sourceIP || ''
     if (!ip) continue
     const v = weight(c)
-    totals.set(ip, (totals.get(ip) || 0) + v)
 
-    const c0 = normalize(c.chains?.[0] || 'DIRECT')
-    chain0Totals.set(c0, (chain0Totals.get(c0) || 0) + v)
+    totalsClients.set(ip, (totalsClients.get(ip) || 0) + v)
+    const r = fmtRule(c)
+    totalsRules.set(r, (totalsRules.get(r) || 0) + v)
 
-    const c1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
-    if (c1) chain1Totals.set(c1, (chain1Totals.get(c1) || 0) + v)
+    for (const step of chainSteps(c)) {
+      totalsProxies.set(step, (totalsProxies.get(step) || 0) + v)
+    }
   }
 
-  const top = new Set(
-    Array.from(totals.entries())
-      .sort((a, b) => b[1] - a[1])
+  const topClients = new Set(
+    Array.from(totalsClients.entries())
+      .sort((x, y) => y[1] - x[1])
       .slice(0, topClientsN)
       .map(([k]) => k),
   )
-
-  const topChain0 = new Set(
-    Array.from(chain0Totals.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, topChainN)
+  const topRules = new Set(
+    Array.from(totalsRules.entries())
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, topRulesN)
+      .map(([k]) => k),
+  )
+  const topProxies = new Set(
+    Array.from(totalsProxies.entries())
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, topProxiesN)
       .map(([k]) => k),
   )
 
-  const topChain1 = new Set(
-    Array.from(chain1Totals.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, topChainN)
-      .map(([k]) => k),
-  )
-
-  const OTHER_CLIENT = 'other'
-  const OTHER_C0 = 'other-out'
-  const OTHER_C1 = 'other-node'
+  const OTHER_CLIENT = t('other')
+  const OTHER_RULE = `${t('other')} (${t('rule')})`
+  const OTHER_PROXY = `${t('other')} (${t('proxies')})`
 
   const linkAgg = new Map<string, LinkAgg>()
   const nodeMeta = new Map<string, NodeMeta>()
@@ -259,10 +269,10 @@ const sankeyData = computed(() => {
     agg.colorVotes[key] = (agg.colorVotes[key] || 0) + v
   }
 
-  const add = (s: string, t: string, c: Connection) => {
+  const add = (s: string, tname: string, c: Connection, targetIsProxy = false) => {
     const b = bytes(c)
     const v = weight(c)
-    const key = `${s}\u0000${t}`
+    const key = `${s}\u0000${tname}`
     const agg = linkAgg.get(key) || { value: 0, bytes: 0, count: 0, colorVotes: {} }
     agg.value += v
     agg.bytes += b
@@ -270,15 +280,15 @@ const sankeyData = computed(() => {
 
     const cm = proxiesRelationshipColorMode.value
     if (cm === 'rule') {
-      voteColor(agg, normalize(c.rule), v)
-    } else if (cm === 'provider') {
-      const pk = providerOf(t)
+      voteColor(agg, normalize((c as any).rule), v)
+    } else if (cm === 'provider' && targetIsProxy) {
+      const pk = providerOf(tname)
       voteColor(agg, pk || 'unknown', v)
     }
 
     linkAgg.set(key, agg)
     addNodeMeta(s, b, 1)
-    addNodeMeta(t, b, 1)
+    addNodeMeta(tname, b, 1)
   }
 
   for (const c of conns) {
@@ -287,18 +297,25 @@ const sankeyData = computed(() => {
 
     const ip0 = c.metadata?.sourceIP || ''
     if (!ip0) continue
-    const ip = top.has(ip0) ? ip0 : OTHER_CLIENT
-    const lbl = ip === OTHER_CLIENT ? OTHER_CLIENT : labelForIp(ip)
+    const ip = topClients.has(ip0) ? ip0 : OTHER_CLIENT
+    const lbl = ip === OTHER_CLIENT ? '' : labelForIp(ip)
     const client = ip === OTHER_CLIENT ? OTHER_CLIENT : lbl ? `${lbl} (${ip})` : ip
 
-    const rawC0 = normalize(c.chains?.[0] || 'DIRECT')
-    const chain0 = topChain0.has(rawC0) ? rawC0 : OTHER_C0
+    const rawRule = fmtRule(c)
+    const rule = topRules.has(rawRule) ? rawRule : OTHER_RULE
 
-    const rawC1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
-    const chain1 = rawC1 ? (topChain1.has(rawC1) ? rawC1 : OTHER_C1) : ''
+    const steps0 = chainSteps(c)
+    const steps = steps0.map((s) => (topProxies.has(s) ? s : OTHER_PROXY))
 
-    add(client, chain0, c)
-    if (chain1) add(chain0, chain1, c)
+    add(client, rule, c, false)
+    if (steps.length) {
+      add(rule, steps[0], c, true)
+      for (let i = 0; i < steps.length - 1; i++) {
+        const a = steps[i]
+        const b = steps[i + 1]
+        if (a && b && a !== b) add(a, b, c, true)
+      }
+    }
   }
 
   const nodesSet = new Set<string>()
@@ -322,25 +339,16 @@ const sankeyData = computed(() => {
       value: a.value,
       bytes: a.bytes,
       count: a.count,
-      lineStyle: { color, opacity: 0.45 },
+      lineStyle: { color, opacity: 0.5 },
     }
   })
 
   const nodes = Array.from(nodesSet)
     .sort((a, b) => a.localeCompare(b))
-    // NOTE: Do NOT set node.value here.
-    // ECharts will size nodes based on link values. Setting node.value to bytes
-    // makes the chart extremely disproportionate (giant blocks), especially when
-    // one client flow dominates.
+    // do NOT set node.value (keeps layout proportional by link values, avoids giant blocks)
     .map((name) => ({ name }))
 
-  const linksSorted = links.sort((a: any, b: any) => {
-    const s = a.source.localeCompare(b.source)
-    if (s) return s
-    return a.target.localeCompare(b.target)
-  })
-
-  return { nodes, links: linksSorted, nodeMeta }
+  return { nodes, links, nodeMeta }
 })
 
 const tooltipFormatter = (p: any) => {
@@ -349,7 +357,7 @@ const tooltipFormatter = (p: any) => {
     const cnt = Number(d.count) || 0
     const b = Number(d.bytes) || 0
     return `
-      <div style="max-width: 420px">
+      <div style="max-width: 520px">
         <div style="font-weight:600">${shortLabel(d.source)} → ${shortLabel(d.target)}</div>
         <div>${t('count')}: <b>${cnt}</b></div>
         <div>${t('traffic')}: <b>${prettyBytesHelper(b)}</b></div>
@@ -364,7 +372,7 @@ const tooltipFormatter = (p: any) => {
   const b = meta?.bytes || 0
 
   return `
-    <div style="max-width: 420px">
+    <div style="max-width: 520px">
       <div style="font-weight:600">${shortLabel(name)}${provider}</div>
       <div>${t('count')}: <b>${cnt}</b></div>
       <div>${t('traffic')}: <b>${prettyBytesHelper(b)}</b></div>
@@ -385,25 +393,25 @@ const options = computed(() => ({
     borderColor: colorSet.base70,
     confine: true,
     padding: [6, 8],
-    textStyle: { color: colorSet.baseContent, fontFamily, fontSize: Math.max(11, labelFontSize.value) },
+    textStyle: { color: colorSet.baseContent, fontFamily, fontSize: Math.max(12, labelFontSize.value) },
   },
   series: [
     {
-      id: 'sankey-clients',
+      id: 'sankey-client-rule-proxy',
       type: 'sankey',
       data: sankeyData.value.nodes,
       links: sankeyData.value.links,
       nodeAlign: 'justify',
-      nodeWidth: isFullScreen.value ? 14 : 12,
-      nodeGap: isFullScreen.value ? 6 : 4,
+      nodeWidth: isFullScreen.value ? 16 : 14,
+      nodeGap: isFullScreen.value ? 10 : 8,
       emphasis: { focus: 'adjacency' },
-      lineStyle: { curveness: 0.5, opacity: 0.45 },
+      lineStyle: { curveness: 0.52, opacity: 0.5 },
       label: {
         color: colorSet.baseContent,
         fontFamily,
         fontSize: labelFontSize.value,
         overflow: 'truncate',
-        width: isFullScreen.value ? 260 : 180,
+        width: isFullScreen.value ? 360 : 260,
         formatter: (pp: any) => shortLabel(pp?.name || ''),
       },
     },

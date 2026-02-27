@@ -11,86 +11,34 @@
           <div class="join">
             <button
               class="btn btn-xs join-item"
-              :class="proxiesRelationshipView === 'tree' ? 'btn-active' : ''"
-              @click="proxiesRelationshipView = 'tree'"
+              :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
+              @click="proxiesRelationshipWeightMode = 'traffic'"
             >
-              {{ $t('proxiesRelationshipTree') }}
+              {{ $t('traffic') }}
             </button>
-
             <button
               class="btn btn-xs join-item"
-              :class="proxiesRelationshipView === 'sources' ? 'btn-active' : ''"
-              @click="proxiesRelationshipView = 'sources'"
+              :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
+              @click="proxiesRelationshipWeightMode = 'count'"
             >
-              {{ $t('proxiesRelationshipSources') }}
-            </button>
-
-            <button
-              class="btn btn-xs join-item"
-              :class="proxiesRelationshipView === 'clients' ? 'btn-active' : ''"
-              @click="proxiesRelationshipView = 'clients'"
-            >
-              {{ $t('proxiesRelationshipClients') }}
+              {{ $t('count') }}
             </button>
           </div>
 
+          <select class="select select-xs" v-model.number="proxiesRelationshipTopN">
+            <option :value="10">top 10</option>
+            <option :value="20">top 20</option>
+            <option :value="40">top 40</option>
+            <option :value="70">top 70</option>
+            <option :value="100">top 100</option>
+          </select>
 
-          <template v-if="proxiesRelationshipView !== 'tree'">
-            <div class="join">
-              <button
-                class="btn btn-xs join-item"
-                :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
-                @click="proxiesRelationshipWeightMode = 'traffic'"
-              >
-                {{ $t('traffic') }}
-              </button>
-              <button
-                class="btn btn-xs join-item"
-                :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
-                @click="proxiesRelationshipWeightMode = 'count'"
-              >
-                {{ $t('count') }}
-              </button>
-            </div>
-
-            <select class="select select-xs" v-model.number="proxiesRelationshipTopN">
-              <option :value="10">top 10</option>
-              <option :value="20">top 20</option>
-              <option :value="40">top 40</option>
-              <option :value="70">top 70</option>
-              <option :value="100">top 100</option>
-            </select>
-
-            <div class="join" v-if="proxiesRelationshipView === 'sources'">
-              <button
-                class="btn btn-xs join-item"
-                :class="proxiesRelationshipSourceMode === 'auto' ? 'btn-active' : ''"
-                @click="proxiesRelationshipSourceMode = 'auto'"
-              >
-                {{ $t('auto') }}
-              </button>
-              <button
-                class="btn btn-xs join-item"
-                :class="proxiesRelationshipSourceMode === 'rulePayload' ? 'btn-active' : ''"
-                @click="proxiesRelationshipSourceMode = 'rulePayload'"
-              >
-                {{ $t('rulePayload') }}
-              </button>
-              <button
-                class="btn btn-xs join-item"
-                :class="proxiesRelationshipSourceMode === 'host' ? 'btn-active' : ''"
-                @click="proxiesRelationshipSourceMode = 'host'"
-              >
-                {{ $t('host') }}
-              </button>
-              <button
-                class="btn btn-xs join-item"
-                :class="proxiesRelationshipSourceMode === 'destinationIP' ? 'btn-active' : ''"
-                @click="proxiesRelationshipSourceMode = 'destinationIP'"
-              >
-                {{ $t('destination') }}
-              </button>
-            </div>
+          <select class="select select-xs" v-model.number="proxiesRelationshipTopNChain">
+            <option :value="10">chain 10</option>
+            <option :value="18">chain 18</option>
+            <option :value="30">chain 30</option>
+            <option :value="60">chain 60</option>
+          </select>
             <button
               class="btn btn-ghost btn-circle btn-xs"
               :title="proxiesRelationshipPaused ? $t('resume') : $t('pause')"
@@ -110,14 +58,11 @@
             <span class="text-xs opacity-60">
               {{ proxiesRelationshipPaused ? $t('paused') : `${proxiesRelationshipRefreshSec}s` }}
             </span>
-          </template>
         </div>
       </div>
 
       <div class="px-4 pb-4">
-        <ProxiesCharts v-if="proxiesRelationshipView === 'tree'" />
-        <ProxiesSourcesCharts v-else-if="proxiesRelationshipView === 'sources'" />
-        <ProxiesClientCharts v-else />
+        <ProxiesRuleCharts />
       </div>
     </div>
 
@@ -136,9 +81,7 @@ import BackendVersion from '@/components/common/BackendVersion.vue'
 import ChartsCard from '@/components/overview/ChartsCard.vue'
 import ConnectionHistory from '@/components/overview/ConnectionHistory.vue'
 import NetworkCard from '@/components/overview/NetworkCard.vue'
-import ProxiesCharts from '@/components/overview/ProxiesCharts.vue'
-import ProxiesClientCharts from '@/components/overview/ProxiesClientCharts.vue'
-import ProxiesSourcesCharts from '@/components/overview/ProxiesSourcesCharts.vue'
+import ProxiesRuleCharts from '@/components/overview/ProxiesRuleCharts.vue'
 import { getLabelFromBackend } from '@/helper/utils'
 import {
   displayProxiesRelationship,
@@ -146,9 +89,8 @@ import {
   proxiesRelationshipRefreshNonce,
   proxiesRelationshipRefreshSec,
   proxiesRelationshipTopN,
-  proxiesRelationshipSourceMode,
+  proxiesRelationshipTopNChain,
   proxiesRelationshipWeightMode,
-  proxiesRelationshipView,
   showIPAndConnectionInfo,
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'

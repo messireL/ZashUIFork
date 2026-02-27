@@ -134,9 +134,9 @@ export const numberOfChartsInSidebar = useStorage<1 | 2 | 3>(
 )
 export const displayProxiesRelationship = useStorage('config/display-proxies-relationship', true)
 
-export const proxiesRelationshipView = useStorage<'tree' | 'sources' | 'clients'>(
+export const proxiesRelationshipView = useStorage<'tree' | 'rules' | 'sources' | 'clients'>(
   'config/proxies-relationship-view',
-  'tree',
+  'rules',
 )
 
 export const proxiesRelationshipUseSources = computed({

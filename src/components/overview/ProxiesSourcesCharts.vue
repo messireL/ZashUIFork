@@ -352,7 +352,11 @@ const sankeyData = computed(() => {
 
   const nodes = Array.from(nodesSet)
     .sort((a, b) => a.localeCompare(b))
-    .map((name) => ({ name, value: nodeMeta.get(name)?.bytes || 0 }))
+    // NOTE: Do NOT set node.value here.
+    // ECharts will size nodes based on link values. Setting node.value to bytes
+    // makes the chart extremely disproportionate (giant blocks), especially when
+    // one flow dominates.
+    .map((name) => ({ name }))
 
   const linksSorted = links.sort((a: any, b: any) => {
     const s = a.source.localeCompare(b.source)
