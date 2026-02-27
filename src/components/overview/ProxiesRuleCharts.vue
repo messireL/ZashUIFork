@@ -97,7 +97,7 @@ const labelWidth = computed(() => {
   const w = (isFullScreen.value ? window.innerWidth : Number(width.value)) || 0
   const col = w > 0 ? w / 4 : 260
   // не даём label'ам разваливать лейаут, но и не делаем их слишком узкими
-  return Math.round(Math.max(160, Math.min(560, col - (isFullScreen.value ? 72 : 56))))
+  return Math.round(Math.max(140, Math.min(440, col - (isFullScreen.value ? 88 : 72))))
 })
 
 const normalize = (s: string) => (s || '').trim() || '-'
@@ -148,12 +148,47 @@ const colorFromKey = (key: string) => {
   return `hsl(${h % 360} 70% 55%)`
 }
 
-// ----- snapshot (обновляемся каждые 5 секунд, без кнопок паузы/рефреша) -----
+// ----- snapshot (обновляемся каждые 5 секунд) -----
 const snapshot = ref<Connection[]>([])
+const deltaBytesById = ref<Record<string, number>>({})
+const prevTotalsById = new Map<string, number>()
+let lastSnapshotAt = Date.now()
+
 let timer: number | undefined
 
 const refreshSnapshot = () => {
-  snapshot.value = activeConnections.value.slice()
+  const now = Date.now()
+  const dt = Math.max(1, (now - lastSnapshotAt) / 1000)
+  lastSnapshotAt = now
+
+  const conns = activeConnections.value.slice()
+  const deltas: Record<string, number> = {}
+
+  for (const c of conns) {
+    const id = (c as any).id || 
+    if (!id) continue
+
+    const total = (Number((c as any).download) || 0) + (Number((c as any).upload) || 0)
+    const prev = prevTotalsById.get(id)
+    let delta = prev === undefined ? 0 : Math.max(0, total - prev)
+
+    // если дельта 0 (например, первое обновление) — оценим по скорости за интервал
+    if (delta === 0) {
+      const sp = (Number((c as any).downloadSpeed) || 0) + (Number((c as any).uploadSpeed) || 0)
+      if (sp > 0) delta = sp * dt
+    }
+
+    deltas[id] = delta
+    prevTotalsById.set(id, total)
+  }
+
+  // чистим старые id
+  for (const id of Array.from(prevTotalsById.keys())) {
+    if (!(id in deltas)) prevTotalsById.delete(id)
+  }
+
+  deltaBytesById.value = deltas
+  snapshot.value = conns
 }
 
 const stopTimer = () => {
@@ -180,13 +215,23 @@ const sankeyData = computed(() => {
   const topGroupsN = Math.max(10, Math.floor(topClientsN * 1.2))
   const topServersN = topGroupsN
 
-  const bytes = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
-  const hasSpeed = conns.some((c) => bytes(c) > 0)
+  const bytes = (c: Connection) => {
+    const id = (c as any).id || ''
+    if (id && deltaBytesById.value[id] !== undefined) return Number(deltaBytesById.value[id]) || 0
+    return (Number((c as any).downloadSpeed) || 0) + (Number((c as any).uploadSpeed) || 0)
+  }
+
+  const metricForTop = (c: Connection) => {
+    if (proxiesRelationshipWeightMode.value === 'count') return 1
+    return bytes(c)
+  }
 
   const weight = (c: Connection) => {
     if (proxiesRelationshipWeightMode.value === 'count') return 1
-    if (!hasSpeed) return 1
-    return Math.min(1 + Math.log1p(bytes(c)) / 3, 18)
+    const b = bytes(c)
+    if (b <= 0) return 0
+    // log compression to avoid "giant bars"
+    return Math.min(1 + Math.log1p(b) / 6, 18)
   }
 
   const fmtRule = (c: Connection) => {
@@ -219,16 +264,17 @@ const sankeyData = computed(() => {
   for (const c of conns) {
     const ip = c.metadata?.sourceIP || ''
     if (!ip) continue
-    const v = weight(c)
+    const m = metricForTop(c)
+    if (m <= 0) continue
 
-    totalsClients.set(ip, (totalsClients.get(ip) || 0) + v)
+    totalsClients.set(ip, (totalsClients.get(ip) || 0) + m)
 
     const r = fmtRule(c)
-    totalsRules.set(r, (totalsRules.get(r) || 0) + v)
+    totalsRules.set(r, (totalsRules.get(r) || 0) + m)
 
     const { group, server } = getGroupServer(c)
-    totalsGroups.set(group, (totalsGroups.get(group) || 0) + v)
-    totalsServers.set(server, (totalsServers.get(server) || 0) + v)
+    totalsGroups.set(group, (totalsGroups.get(group) || 0) + m)
+    totalsServers.set(server, (totalsServers.get(server) || 0) + m)
   }
 
   const topClients = new Set(
@@ -291,6 +337,7 @@ const sankeyData = computed(() => {
   const add = (s: string, tname: string, c: Connection, colorKey: string) => {
     const b = bytes(c)
     const v = weight(c)
+    if (v <= 0 && b <= 0) return
     const key = `${s}\u0000${tname}`
     const agg = linkAgg.get(key) || { value: 0, bytes: 0, count: 0, colorVotes: {} }
 
@@ -431,12 +478,13 @@ const options = computed(() => ({
     const w = (isFullScreen.value ? window.innerWidth : Number(width.value)) || 0
     if (!w) return []
     const top = 6
-    const left = 12
-    const col = w / 4
+    const leftPad = 18
+    const rightPad = 22
+    const col = Math.max(1, (w - leftPad - rightPad) / 4)
     const fontSize = Math.max(12, Math.min(14, labelFontSize.value))
     const mk = (i: number, text: string) => ({
       type: 'text',
-      left: Math.round(left + col * i),
+      left: Math.round(leftPad + col * i),
       top,
       style: {
         text,
@@ -457,28 +505,43 @@ const options = computed(() => ({
     {
       id: 'sankey-client-rule-group-server',
       type: 'sankey',
-      left: 12,
-      right: 12,
+      left: 18,
+      right: 22,
       top: 28,
       bottom: 8,
       data: sankeyData.value.nodes,
       links: sankeyData.value.links,
       nodeAlign: 'justify',
-      nodeWidth: isFullScreen.value ? 12 : 10,
-      nodeGap: isFullScreen.value ? 12 : 10,
+      nodeWidth: isFullScreen.value ? 10 : 8,
+      nodeGap: isFullScreen.value ? 11 : 9,
       emphasis: { focus: 'adjacency' },
-      lineStyle: { curveness: 0.52, opacity: 0.55 },
+      lineStyle: { curveness: 0.5, opacity: 0.55 },
       label: {
         color: colorSet.baseContent,
         fontFamily,
         fontSize: labelFontSize.value,
         position: 'right',
         align: 'left',
-        distance: 8,
+        distance: 6,
         ellipsis: '…',
         overflow: 'truncate',
         width: labelWidth.value,
-        formatter: (pp: any) => shortLabel(pp?.name || ''),
+        rich: {
+          n: { fontWeight: 600, fontSize: labelFontSize.value, lineHeight: Math.round(labelFontSize.value * 1.2) },
+          v: { fontSize: Math.max(11, labelFontSize.value - 3), opacity: 0.65, lineHeight: Math.round((labelFontSize.value - 2) * 1.15) },
+        },
+        formatter: (pp: any) => {
+          const name = pp?.name || ''
+          const st = stageOf(name)
+          const base = shortLabel(name)
+          if (st === 'R') {
+            const meta = sankeyData.value.nodeMeta.get(name)
+            const b = meta?.bytes || 0
+            if (b > 0) return `{n|${base}}
+{v|${prettyBytesHelper(b)}}`
+          }
+          return base
+        },
       },
     },
   ],

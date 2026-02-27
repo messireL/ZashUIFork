@@ -41,12 +41,22 @@
               <th class="text-right">{{ $t('download') }}</th>
               <th class="text-right">{{ $t('upload') }}</th>
               <th class="text-right">{{ $t('total') }}</th>
+              <th class="text-right">{{ $t('actions') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.user">
               <td class="font-medium">
-                <span class="truncate inline-block max-w-[240px]" :title="row.user">{{ row.user }}</span>
+                <template v-if="editingUser === row.user">
+                  <input
+                    class="input input-xs w-full max-w-[260px]"
+                    v-model="editingName"
+                    :placeholder="$t('user')"
+                  />
+                </template>
+                <template v-else>
+                  <span class="truncate inline-block max-w-[240px]" :title="row.user">{{ row.user }}</span>
+                </template>
               </td>
               <td class="max-md:hidden">
                 <span class="truncate inline-block max-w-[420px] opacity-70" :title="row.keys">{{ row.keys }}</span>
@@ -54,10 +64,47 @@
               <td class="text-right font-mono">{{ format(row.dl) }}</td>
               <td class="text-right font-mono">{{ format(row.ul) }}</td>
               <td class="text-right font-mono">{{ format(row.dl + row.ul) }}</td>
+              <td class="text-right">
+                <template v-if="editingUser === row.user">
+                  <button
+                    class="btn btn-ghost btn-circle btn-xs"
+                    :disabled="!editingName.trim()"
+                    @click="saveEdit"
+                    :title="$t('save')"
+                  >
+                    <CheckIcon class="h-4 w-4" />
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-circle btn-xs"
+                    @click="cancelEdit"
+                    :title="$t('cancel')"
+                  >
+                    <XMarkIcon class="h-4 w-4" />
+                  </button>
+                </template>
+                <template v-else>
+                  <button
+                    class="btn btn-ghost btn-circle btn-xs"
+                    :disabled="!canManage(row.user)"
+                    @click="startEdit(row.user)"
+                    :title="$t('edit')"
+                  >
+                    <PencilSquareIcon class="h-4 w-4" />
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-circle btn-xs"
+                    :disabled="!canManage(row.user)"
+                    @click="removeUser(row.user)"
+                    :title="$t('delete')"
+                  >
+                    <TrashIcon class="h-4 w-4" />
+                  </button>
+                </template>
+              </td>
             </tr>
 
             <tr v-if="!rows.length">
-              <td colspan="5" class="text-center opacity-60">{{ $t('noContent') }}</td>
+              <td colspan="6" class="text-center opacity-60">{{ $t('noContent') }}</td>
             </tr>
           </tbody>
         </table>
@@ -75,8 +122,49 @@ import { clearUserTrafficHistory, formatTraffic, getTrafficRange, userTrafficSto
 import { sourceIPLabelList } from '@/store/settings'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
+import { CheckIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 
 type Row = { user: string; keys: string; dl: number; ul: number }
+
+const editingUser = ref<string | null>(null)
+const editingName = ref('')
+
+const canManage = (user: string) => {
+  return sourceIPLabelList.value.some((it) => (it.label || it.key) === user)
+}
+
+const startEdit = (user: string) => {
+  if (!canManage(user)) return
+  editingUser.value = user
+  editingName.value = user
+}
+
+const cancelEdit = () => {
+  editingUser.value = null
+  editingName.value = ''
+}
+
+const saveEdit = () => {
+  const oldUser = editingUser.value
+  const next = editingName.value.trim()
+  if (!oldUser || !next) return
+
+  for (const it of sourceIPLabelList.value) {
+    const u = it.label || it.key
+    if (u === oldUser) it.label = next
+  }
+
+  cancelEdit()
+}
+
+const removeUser = (user: string) => {
+  if (!canManage(user)) return
+  for (let i = sourceIPLabelList.value.length - 1; i >= 0; i--) {
+    const it = sourceIPLabelList.value[i]
+    const u = it.label || it.key
+    if (u === user) sourceIPLabelList.value.splice(i, 1)
+  }
+}
 
 const preset = ref<'1h' | '24h' | '7d' | '30d' | 'custom'>('24h')
 const topN = ref<number>(30)

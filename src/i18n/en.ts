@@ -13,6 +13,8 @@ const en = {
   cancel: 'Cancel',
   add: 'Add',
   delete: 'Delete',
+  edit: 'Edit',
+  actions: 'Actions',
   load: 'Load',
   download: 'Download',
   upload: 'Upload',

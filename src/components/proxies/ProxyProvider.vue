@@ -98,7 +98,17 @@ const subscriptionInfo = computed(() => {
   const info = proxyProvider.value.subscriptionInfo
 
   if (info) {
-    const { Download = 0, Upload = 0, Total = 0, Expire = 0 } = info
+    const getNum = (obj: any, ...keys: string[]) => {
+      for (const k of keys) {
+        if (obj?.[k] !== undefined && obj?.[k] !== null) return Number(obj[k]) || 0
+      }
+      return 0
+    }
+
+    const Download = getNum(info, 'Download', 'download')
+    const Upload = getNum(info, 'Upload', 'upload')
+    const Total = getNum(info, 'Total', 'total')
+    const Expire = getNum(info, 'Expire', 'expire')
 
     if (Download === 0 && Upload === 0 && Total === 0 && Expire === 0) {
       return null
@@ -108,10 +118,11 @@ const subscriptionInfo = computed(() => {
     const total = Total > 0 ? prettyBytesHelper(Total, { binary: true }) : '—'
     const used = prettyBytesHelper(Download + Upload, { binary: true })
     const percentage = Total > 0 ? (((Download + Upload) / Total) * 100).toFixed(2) : ''
+    const expireSec = Expire > 1e12 ? Math.floor(Expire / 1000) : Expire
     const expireStr =
-      Expire === 0
+      expireSec === 0
         ? `${t('expire')}: ${t('noExpire')}`
-        : `${t('expire')}: ${dayjs(Expire * 1000).format('YYYY-MM-DD')}`
+        : `${t('expire')}: ${dayjs(expireSec * 1000).format('YYYY-MM-DD')}`
 
     const usageStr = percentage ? `${used} / ${total} ( ${percentage}% )` : `${used} / ${total}`
 

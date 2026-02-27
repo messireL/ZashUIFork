@@ -15,6 +15,8 @@ const ru: LANG_MESSAGE = {
   cancel: 'Отмена',
   add: 'Добавить',
   delete: 'Удалить',
+  edit: 'Редактировать',
+  actions: 'Действия',
   load: 'Загрузить',
   download: 'Загружено',
   upload: 'Отправлено',

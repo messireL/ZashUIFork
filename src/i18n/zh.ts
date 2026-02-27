@@ -15,6 +15,8 @@ const zh: LANG_MESSAGE = {
   cancel: '取消',
   add: '添加',
   delete: '删除',
+  edit: '编辑',
+  actions: '操作',
   load: '加载',
   download: '下载',
   upload: '上传',

@@ -198,6 +198,12 @@ export const truncateProxyName = useStorage('config/truncate-proxy-name', true)
 export const proxyPreviewType = useStorage('config/proxy-preview-type', PROXY_PREVIEW_TYPE.AUTO)
 export const hideUnavailableProxies = useStorage('config/hide-unavailable-proxies', false)
 export const hideUnusedProxyProviders = useStorage('config/hide-unused-proxy-providers', true)
+
+// normalize legacy string values from storage
+if (typeof hideUnusedProxyProviders.value === 'string') {
+  hideUnusedProxyProviders.value = hideUnusedProxyProviders.value === 'true'
+}
+
 export const lowLatency = useStorage('config/low-latency', 400)
 export const mediumLatency = useStorage('config/medium-latency', 800)
 export const IPv6test = useStorage('config/ipv6-test', false)
