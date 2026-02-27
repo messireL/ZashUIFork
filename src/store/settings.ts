@@ -20,8 +20,7 @@ import {
 import { getMinCardWidth, isMiddleScreen, isPreferredDark } from '@/helper/utils'
 import type { SourceIPLabel } from '@/types'
 import { useStorage } from '@vueuse/core'
-import { computed } from 'vue'
-
+import { computed, ref } from 'vue'
 // global
 export const defaultTheme = useStorage<string>('config/default-theme', 'light')
 export const darkTheme = useStorage<string>('config/dark-theme', 'dark')
@@ -91,7 +90,6 @@ export const splitOverviewPage = useStorage('config/split-overview-page', false)
 export const showIPAndConnectionInfo = useStorage('config/show-ip-and-connection-info', true)
 export const autoIPCheck = useStorage('config/auto-ip-check', true)
 export const autoConnectionCheck = useStorage('config/auto-connection-check', true)
-export const twoIpToken = useStorage('config/twoip-token', '')
 export const showStatisticsWhenSidebarCollapsed = useStorage(
   'config/show-statistics-when-sidebar-collapsed',
   true,
@@ -101,7 +99,21 @@ export const numberOfChartsInSidebar = useStorage<1 | 2 | 3>(
   2,
 )
 export const displayProxiesRelationship = useStorage('config/display-proxies-relationship', true)
-export const proxiesRelationshipUseSources = useStorage('config/proxies-relationship-use-sources', false)
+
+export const proxiesRelationshipView = useStorage<'tree' | 'sources' | 'clients'>(
+  'config/proxies-relationship-view',
+  'tree',
+)
+
+export const proxiesRelationshipPaused = useStorage('config/proxies-relationship-paused', false)
+
+export const proxiesRelationshipRefreshSec = useStorage<number>(
+  'config/proxies-relationship-refresh-sec',
+  5,
+)
+
+export const proxiesRelationshipRefreshNonce = ref(0)
+
 
 // proxies
 export const collapseGroupMap = useStorage<Record<string, boolean>>('config/collapse-group-map', {})

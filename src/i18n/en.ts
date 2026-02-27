@@ -235,13 +235,13 @@ const en = {
   getting: 'Getting...',
   mmdbSizeTip: 'If you are using mmdb format geo files, the number will be 0',
   displayFinalOutbound: 'Show Final Outbound Node',
-  twoIpToken: '2ip token',
-  twoIpTokenTip: 'Used for 2ip.io API requests (optional).',
-  twoIpTokenMissing: 'token is not set',
-  proxiesRelationshipTree: 'Proxy tree',
-  proxiesRelationshipSources: 'Sources',
-  proxiesRelationshipTree: 'Tree',
-  proxiesRelationshipSources: 'Sources',
+  proxiesRelationshipTree: "Tree",
+  proxiesRelationshipSources: "Sources",
+  proxiesRelationshipClients: "Clients",
+  pause: "Pause",
+  resume: "Resume",
+  paused: "Paused",
+
 }
 
 export type LANG_MESSAGE = typeof en

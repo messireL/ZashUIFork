@@ -234,13 +234,13 @@ const zh: LANG_MESSAGE = {
   getting: '获取中...',
   mmdbSizeTip: 'mmdb等格式的geo文件无法统计数量，因此数量为0',
   displayFinalOutbound: '显示最终出口节点',
-    twoIpToken: '2ip token',
-  twoIpTokenTip: '用于 2ip.io API 请求（可选）',
-  twoIpTokenMissing: '未设置 token',
-  proxiesRelationshipTree: '代理树',
-  proxiesRelationshipSources: '来源',
-  proxiesRelationshipTree: '代理树',
-  proxiesRelationshipSources: '来源',
+  proxiesRelationshipTree: "代理树",
+  proxiesRelationshipSources: "来源",
+  proxiesRelationshipClients: "客户端",
+  pause: "暂停",
+  resume: "继续",
+  paused: "已暂停",
+
 }
 
 export default zh

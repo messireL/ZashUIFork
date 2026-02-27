@@ -49,7 +49,6 @@
 </template>
 
 <script setup lang="ts">
-import { isSingBox } from '@/api'
 import { backgroundImage } from '@/helper/indexeddb'
 import { activeConnections } from '@/store/connections'
 import {
@@ -59,9 +58,10 @@ import {
   proxiesRelationshipPaused,
   proxiesRelationshipRefreshNonce,
   proxiesRelationshipRefreshSec,
+  sourceIPLabelList,
   theme,
 } from '@/store/settings'
-import { activeUuid } from '@/store/setup'
+import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
 import { ArrowsPointingInIcon, ArrowsPointingOutIcon } from '@heroicons/vue/24/outline'
 import { useElementSize } from '@vueuse/core'
@@ -104,6 +104,16 @@ const updateFontFamily = () => {
   fontFamily = baseColorStyle.fontFamily
 }
 
+const labelForIp = (ip: string) => {
+  const backendId = activeBackend.value?.uuid
+  const item = sourceIPLabelList.value.find((x) => {
+    if (x.key !== ip) return false
+    if (!x.scope?.length) return true
+    return backendId ? x.scope.includes(backendId) : false
+  })
+  return item?.label || ''
+}
+
 // ----- snapshot & pause -----
 const snapshot = ref<Connection[]>([])
 let timer: number | undefined
@@ -144,27 +154,26 @@ watch(proxiesRelationshipRefreshNonce, () => {
 
 // ----- sankey -----
 const normalize = (s: string) => (s || '').trim() || '-'
-const rootName = computed(() => (isSingBox.value ? 'SingBox' : 'Mihomo'))
 
 const sankeyData = computed(() => {
   const conns = snapshot.value || []
-  const MAX_SOURCES = isFullScreen.value ? 60 : 30
+  const MAX_CLIENTS = isFullScreen.value ? 60 : 30
 
   const speed = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
   const hasSpeed = conns.some((c) => speed(c) > 0)
   const weight = (c: Connection) => (hasSpeed ? speed(c) : 1)
 
-  // top sources
-  const sourceTotals = new Map<string, number>()
+  const totals = new Map<string, number>()
   for (const c of conns) {
-    const src = normalize(c.rulePayload || c.metadata.host || c.metadata.destinationIP)
-    sourceTotals.set(src, (sourceTotals.get(src) || 0) + weight(c))
+    const ip = c.metadata?.sourceIP || ''
+    if (!ip) continue
+    totals.set(ip, (totals.get(ip) || 0) + weight(c))
   }
 
-  const topSources = new Set(
-    Array.from(sourceTotals.entries())
+  const top = new Set(
+    Array.from(totals.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_SOURCES)
+      .slice(0, MAX_CLIENTS)
       .map(([k]) => k),
   )
 
@@ -175,14 +184,15 @@ const sankeyData = computed(() => {
   }
 
   for (const c of conns) {
-    const rawSource = normalize(c.rulePayload || c.metadata.host || c.metadata.destinationIP)
-    const source = topSources.has(rawSource) ? rawSource : 'other'
+    const ip0 = c.metadata?.sourceIP || 'unknown'
+    const ip = top.has(ip0) ? ip0 : 'other'
+    const label = ip === 'other' ? 'other' : (labelForIp(ip) ? `${labelForIp(ip)} (${ip})` : ip)
+
     const chain0 = normalize(c.chains?.[0] || 'DIRECT')
     const chain1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
     const v = weight(c)
 
-    addLink(rootName.value, source, v)
-    addLink(source, chain0, v)
+    addLink(label, chain0, v)
     if (chain1) addLink(chain0, chain1, v)
   }
 
@@ -244,7 +254,7 @@ onMounted(() => {
 
   myChart.setOption(options.value)
 
-  watch([activeUuid, options, isFullScreen], () => {
+  watch([options, isFullScreen], () => {
     myChart?.clear()
     myChart?.setOption(options.value)
 
