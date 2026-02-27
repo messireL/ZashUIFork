@@ -1,0 +1,485 @@
+diff -ruN /mnt/data/base/ZashUIFork-main/package.json /mnt/data/build/ZashUIFork-main/package.json
+--- /mnt/data/base/ZashUIFork-main/package.json	2026-02-27 12:43:51.000000000 +0000
++++ /mnt/data/build/ZashUIFork-main/package.json	2026-02-27 15:15:19.937695085 +0000
+@@ -1,6 +1,6 @@
+ {
+   "name": "zashboard",
+-  "version": "1.0.2_6",
++  "version": "1.0.2_8",
+   "description": "A Dashboard Using Clash API",
+   "license": "MIT",
+   "type": "module",
+diff -ruN /mnt/data/base/ZashUIFork-main/src/components/overview/ProxiesRuleCharts.vue /mnt/data/build/ZashUIFork-main/src/components/overview/ProxiesRuleCharts.vue
+--- /mnt/data/base/ZashUIFork-main/src/components/overview/ProxiesRuleCharts.vue	2026-02-27 12:44:13.000000000 +0000
++++ /mnt/data/build/ZashUIFork-main/src/components/overview/ProxiesRuleCharts.vue	2026-02-27 15:19:23.131565902 +0000
+@@ -37,7 +37,6 @@
+ <script setup lang="ts">
+ import { backgroundImage } from '@/helper/indexeddb'
+ import { prettyBytesHelper } from '@/helper/utils'
+-import type { Connection } from '@/types'
+ import { activeConnections } from '@/store/connections'
+ import { proxyProviederList } from '@/store/proxies'
+ import {
+@@ -45,16 +44,13 @@
+   dashboardTransparent,
+   font,
+   proxiesRelationshipColorMode,
+-  proxiesRelationshipPaused,
+-  proxiesRelationshipRefreshNonce,
+-  proxiesRelationshipRefreshSec,
+   proxiesRelationshipTopN,
+-  proxiesRelationshipTopNChain,
+   proxiesRelationshipWeightMode,
+   sourceIPLabelList,
+   theme,
+ } from '@/store/settings'
+ import { activeBackend } from '@/store/setup'
++import type { Connection } from '@/types'
+ import { ArrowsPointingInIcon, ArrowsPointingOutIcon } from '@heroicons/vue/24/outline'
+ import { useElementSize } from '@vueuse/core'
+ import { SankeyChart } from 'echarts/charts'
+@@ -86,6 +82,7 @@
+   colorSet.baseContent30 = cs.borderColor
+   colorSet.base70 = cs.backgroundColor
+ }
++
+ const updateFontFamily = () => {
+   fontFamily = getComputedStyle(colorRef.value).fontFamily
+ }
+@@ -93,15 +90,26 @@
+ const { width } = useElementSize(chart)
+ const labelFontSize = computed(() => {
+   const w = Number(width.value) || 0
+-  // keep labels readable (user complaint about tiny font)
+   return isFullScreen.value ? 16 : w >= 1100 ? 15 : w >= 800 ? 14 : 13
+ })
+ 
+ const normalize = (s: string) => (s || '').trim() || '-'
++
++const stageOf = (name: string) => {
++  const i = name.indexOf(':')
++  return i >= 0 ? name.slice(0, i) : ''
++}
++
++const labelOf = (name: string) => {
++  const i = name.indexOf(':')
++  return i >= 0 ? name.slice(i + 1) : name
++}
++
+ const shortLabel = (name: string) => {
+-  if (!name) return ''
+-  const max = isFullScreen.value ? 52 : 36
+-  return name.length > max ? `${name.slice(0, max - 1)}…` : name
++  const v = labelOf(name)
++  if (!v) return ''
++  const max = isFullScreen.value ? 56 : 40
++  return v.length > max ? `${v.slice(0, max - 1)}…` : v
+ }
+ 
+ const labelForIp = (ip: string) => {
+@@ -123,6 +131,7 @@
+   }
+   return m
+ })
++
+ const providerOf = (name: string) => providerMap.value.get(name) || ''
+ 
+ const colorFromKey = (key: string) => {
+@@ -132,7 +141,7 @@
+   return `hsl(${h % 360} 70% 55%)`
+ }
+ 
+-// ----- snapshot & pause -----
++// ----- snapshot (обновляемся каждые 5 секунд, без кнопок паузы/рефреша) -----
+ const snapshot = ref<Connection[]>([])
+ let timer: number | undefined
+ 
+@@ -149,40 +158,20 @@
+ 
+ const startTimer = () => {
+   stopTimer()
+-  const sec = Math.max(1, Number(proxiesRelationshipRefreshSec.value) || 5)
+-  timer = window.setInterval(() => {
+-    if (!proxiesRelationshipPaused.value) refreshSnapshot()
+-  }, sec * 1000)
++  timer = window.setInterval(refreshSnapshot, 5000)
+ }
+ 
+-watch(proxiesRelationshipPaused, (p) => {
+-  if (p) stopTimer()
+-  else {
+-    refreshSnapshot()
+-    startTimer()
+-  }
+-})
+-watch(proxiesRelationshipRefreshSec, () => {
+-  if (!proxiesRelationshipPaused.value) startTimer()
+-})
+-watch(proxiesRelationshipRefreshNonce, () => {
+-  refreshSnapshot()
+-})
+-
+-type LinkAgg = {
+-  value: number
+-  bytes: number
+-  count: number
+-  colorVotes: Record<string, number>
+-}
++type LinkAgg = { value: number; bytes: number; count: number; colorVotes: Record<string, number> }
+ 
+ type NodeMeta = { bytes: number; count: number; provider?: string }
+ 
+ const sankeyData = computed(() => {
+   const conns = snapshot.value || []
++
+   const topClientsN = Math.max(10, Number(proxiesRelationshipTopN.value) || 40)
+-  const topRulesN = Math.max(10, Math.floor(topClientsN * 1.2))
+-  const topProxiesN = Math.max(10, Number(proxiesRelationshipTopNChain.value) || 18)
++  const topRulesN = Math.max(10, Math.floor(topClientsN * 1.5))
++  const topGroupsN = Math.max(10, Math.floor(topClientsN * 1.2))
++  const topServersN = topGroupsN
+ 
+   const bytes = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
+   const hasSpeed = conns.some((c) => bytes(c) > 0)
+@@ -190,7 +179,6 @@
+   const weight = (c: Connection) => {
+     if (proxiesRelationshipWeightMode.value === 'count') return 1
+     if (!hasSpeed) return 1
+-    // compress traffic so chart stays readable (no giant blocks)
+     return Math.min(1 + Math.log1p(bytes(c)) / 3, 18)
+   }
+ 
+@@ -200,18 +188,17 @@
+     return rp ? `${rt}: ${normalize(rp)}` : rt
+   }
+ 
+-  const MAX_CHAIN_DEPTH = 5
+-  const chainSteps = (c: Connection) => {
++  const getGroupServer = (c: Connection) => {
+     const arr = (c.chains || []).map(normalize).filter((x) => x && x !== '-')
+-    if (!arr.length) return ['DIRECT']
+-    if (arr.length <= MAX_CHAIN_DEPTH) return arr
+-    // keep head + tail, collapse the middle for readability
+-    return [...arr.slice(0, MAX_CHAIN_DEPTH - 2), '…', arr[arr.length - 1]]
++    const group = arr[0] || 'DIRECT'
++    const server = arr[arr.length - 1] || group
++    return { group, server }
+   }
+ 
+   const totalsClients = new Map<string, number>()
+   const totalsRules = new Map<string, number>()
+-  const totalsProxies = new Map<string, number>()
++  const totalsGroups = new Map<string, number>()
++  const totalsServers = new Map<string, number>()
+ 
+   for (const c of conns) {
+     const ip = c.metadata?.sourceIP || ''
+@@ -219,36 +206,50 @@
+     const v = weight(c)
+ 
+     totalsClients.set(ip, (totalsClients.get(ip) || 0) + v)
++
+     const r = fmtRule(c)
+     totalsRules.set(r, (totalsRules.get(r) || 0) + v)
+ 
+-    for (const step of chainSteps(c)) {
+-      totalsProxies.set(step, (totalsProxies.get(step) || 0) + v)
+-    }
++    const { group, server } = getGroupServer(c)
++    totalsGroups.set(group, (totalsGroups.get(group) || 0) + v)
++    totalsServers.set(server, (totalsServers.get(server) || 0) + v)
+   }
+ 
+   const topClients = new Set(
+     Array.from(totalsClients.entries())
+-      .sort((x, y) => y[1] - x[1])
++      .sort((a, b) => b[1] - a[1])
+       .slice(0, topClientsN)
+       .map(([k]) => k),
+   )
++
+   const topRules = new Set(
+     Array.from(totalsRules.entries())
+-      .sort((x, y) => y[1] - x[1])
++      .sort((a, b) => b[1] - a[1])
+       .slice(0, topRulesN)
+       .map(([k]) => k),
+   )
+-  const topProxies = new Set(
+-    Array.from(totalsProxies.entries())
+-      .sort((x, y) => y[1] - x[1])
+-      .slice(0, topProxiesN)
++
++  const topGroups = new Set(
++    Array.from(totalsGroups.entries())
++      .sort((a, b) => b[1] - a[1])
++      .slice(0, topGroupsN)
+       .map(([k]) => k),
+   )
+ 
+-  const OTHER_CLIENT = t('other')
+-  const OTHER_RULE = `${t('other')} (${t('rule')})`
+-  const OTHER_PROXY = `${t('other')} (${t('proxies')})`
++  const topServers = new Set(
++    Array.from(totalsServers.entries())
++      .sort((a, b) => b[1] - a[1])
++      .slice(0, topServersN)
++      .map(([k]) => k),
++  )
++
++  const OTHER = t('other')
++  const OTHER_CLIENT = `${OTHER}`
++  const OTHER_RULE = `${OTHER} (${t('rule')})`
++  const OTHER_GROUP = `${OTHER} (${t('proxyGroup')})`
++  const OTHER_SERVER = `${OTHER} (${t('proxies')})`
++
++  const node = (stage: 'C' | 'R' | 'G' | 'S', label: string) => `${stage}:${label}`
+ 
+   const linkAgg = new Map<string, LinkAgg>()
+   const nodeMeta = new Map<string, NodeMeta>()
+@@ -257,10 +258,12 @@
+     const cur = nodeMeta.get(name) || { bytes: 0, count: 0 }
+     cur.bytes += b
+     cur.count += cnt
+-    if (!cur.provider) {
+-      const p = providerOf(name)
++
++    if (!cur.provider && stageOf(name) === 'S') {
++      const p = providerOf(labelOf(name))
+       if (p) cur.provider = p
+     }
++
+     nodeMeta.set(name, cur)
+   }
+ 
+@@ -269,11 +272,12 @@
+     agg.colorVotes[key] = (agg.colorVotes[key] || 0) + v
+   }
+ 
+-  const add = (s: string, tname: string, c: Connection, targetIsProxy = false) => {
++  const add = (s: string, tname: string, c: Connection) => {
+     const b = bytes(c)
+     const v = weight(c)
+     const key = `${s}\u0000${tname}`
+     const agg = linkAgg.get(key) || { value: 0, bytes: 0, count: 0, colorVotes: {} }
++
+     agg.value += v
+     agg.bytes += b
+     agg.count += 1
+@@ -281,9 +285,10 @@
+     const cm = proxiesRelationshipColorMode.value
+     if (cm === 'rule') {
+       voteColor(agg, normalize((c as any).rule), v)
+-    } else if (cm === 'provider' && targetIsProxy) {
+-      const pk = providerOf(tname)
+-      voteColor(agg, pk || 'unknown', v)
++    } else if (cm === 'provider') {
++      const targetServer = stageOf(tname) === 'S' ? labelOf(tname) : ''
++      const pk = targetServer ? providerOf(targetServer) : ''
++      if (pk) voteColor(agg, pk, v)
+     }
+ 
+     linkAgg.set(key, agg)
+@@ -292,30 +297,27 @@
+   }
+ 
+   for (const c of conns) {
+-    const v = weight(c)
+-    if (v <= 0) continue
+-
+     const ip0 = c.metadata?.sourceIP || ''
+     if (!ip0) continue
+-    const ip = topClients.has(ip0) ? ip0 : OTHER_CLIENT
+-    const lbl = ip === OTHER_CLIENT ? '' : labelForIp(ip)
+-    const client = ip === OTHER_CLIENT ? OTHER_CLIENT : lbl ? `${lbl} (${ip})` : ip
+ 
+-    const rawRule = fmtRule(c)
+-    const rule = topRules.has(rawRule) ? rawRule : OTHER_RULE
++    const lbl = labelForIp(ip0)
++    const clientLabel = topClients.has(ip0) ? (lbl ? `${lbl} (${ip0})` : ip0) : OTHER_CLIENT
+ 
+-    const steps0 = chainSteps(c)
+-    const steps = steps0.map((s) => (topProxies.has(s) ? s : OTHER_PROXY))
++    const rawRule = fmtRule(c)
++    const ruleLabel = topRules.has(rawRule) ? rawRule : OTHER_RULE
+ 
+-    add(client, rule, c, false)
+-    if (steps.length) {
+-      add(rule, steps[0], c, true)
+-      for (let i = 0; i < steps.length - 1; i++) {
+-        const a = steps[i]
+-        const b = steps[i + 1]
+-        if (a && b && a !== b) add(a, b, c, true)
+-      }
+-    }
++    const { group: rawGroup, server: rawServer } = getGroupServer(c)
++    const groupLabel = topGroups.has(rawGroup) ? rawGroup : OTHER_GROUP
++    const serverLabel = topServers.has(rawServer) ? rawServer : OTHER_SERVER
++
++    const C = node('C', clientLabel)
++    const R = node('R', ruleLabel)
++    const G = node('G', groupLabel)
++    const S = node('S', serverLabel)
++
++    add(C, R, c)
++    add(R, G, c)
++    add(G, S, c)
+   }
+ 
+   const nodesSet = new Set<string>()
+@@ -339,13 +341,12 @@
+       value: a.value,
+       bytes: a.bytes,
+       count: a.count,
+-      lineStyle: { color, opacity: 0.5 },
++      lineStyle: { color, opacity: 0.55 },
+     }
+   })
+ 
+   const nodes = Array.from(nodesSet)
+     .sort((a, b) => a.localeCompare(b))
+-    // do NOT set node.value (keeps layout proportional by link values, avoids giant blocks)
+     .map((name) => ({ name }))
+ 
+   return { nodes, links, nodeMeta }
+@@ -356,8 +357,9 @@
+     const d = p.data || {}
+     const cnt = Number(d.count) || 0
+     const b = Number(d.bytes) || 0
++
+     return `
+-      <div style="max-width: 520px">
++      <div style="max-width: 560px">
+         <div style="font-weight:600">${shortLabel(d.source)} → ${shortLabel(d.target)}</div>
+         <div>${t('count')}: <b>${cnt}</b></div>
+         <div>${t('traffic')}: <b>${prettyBytesHelper(b)}</b></div>
+@@ -372,7 +374,7 @@
+   const b = meta?.bytes || 0
+ 
+   return `
+-    <div style="max-width: 520px">
++    <div style="max-width: 560px">
+       <div style="font-weight:600">${shortLabel(name)}${provider}</div>
+       <div>${t('count')}: <b>${cnt}</b></div>
+       <div>${t('traffic')}: <b>${prettyBytesHelper(b)}</b></div>
+@@ -397,7 +399,7 @@
+   },
+   series: [
+     {
+-      id: 'sankey-client-rule-proxy',
++      id: 'sankey-client-rule-group-server',
+       type: 'sankey',
+       data: sankeyData.value.nodes,
+       links: sankeyData.value.links,
+@@ -405,13 +407,13 @@
+       nodeWidth: isFullScreen.value ? 16 : 14,
+       nodeGap: isFullScreen.value ? 10 : 8,
+       emphasis: { focus: 'adjacency' },
+-      lineStyle: { curveness: 0.52, opacity: 0.5 },
++      lineStyle: { curveness: 0.52, opacity: 0.55 },
+       label: {
+         color: colorSet.baseContent,
+         fontFamily,
+         fontSize: labelFontSize.value,
+         overflow: 'truncate',
+-        width: isFullScreen.value ? 360 : 260,
++        width: isFullScreen.value ? 380 : 280,
+         formatter: (pp: any) => shortLabel(pp?.name || ''),
+       },
+     },
+@@ -432,7 +434,7 @@
+   updateFontFamily()
+ 
+   refreshSnapshot()
+-  if (!proxiesRelationshipPaused.value) startTimer()
++  startTimer()
+ 
+   watch(theme, updateColorSet)
+   watch(font, updateFontFamily)
+diff -ruN /mnt/data/base/ZashUIFork-main/src/i18n/en.ts /mnt/data/build/ZashUIFork-main/src/i18n/en.ts
+--- /mnt/data/base/ZashUIFork-main/src/i18n/en.ts	2026-02-27 12:43:32.000000000 +0000
++++ /mnt/data/build/ZashUIFork-main/src/i18n/en.ts	2026-02-27 15:20:15.415710943 +0000
+@@ -267,6 +267,7 @@
+   other: 'Other',
+   proxiesRelationshipColor: 'Line colors',
+   provider: 'Provider',
++  proxyGroup: 'Proxy Group',
+   none: 'None',
+   proxiesRelationshipSourceMode: 'Sources field',
+   rulePayload: 'Rule payload',
+diff -ruN /mnt/data/base/ZashUIFork-main/src/i18n/ru.ts /mnt/data/build/ZashUIFork-main/src/i18n/ru.ts
+--- /mnt/data/base/ZashUIFork-main/src/i18n/ru.ts	2026-02-27 12:43:18.000000000 +0000
++++ /mnt/data/build/ZashUIFork-main/src/i18n/ru.ts	2026-02-27 15:20:35.182843037 +0000
+@@ -269,6 +269,7 @@
+   other: 'Прочее',
+   proxiesRelationshipColor: 'Цвет линий',
+   provider: 'Провайдер',
++  proxyGroup: 'Группа прокси',
+   none: 'Нет',
+   proxiesRelationshipSourceMode: 'Поле источника',
+   rulePayload: 'Payload правила',
+diff -ruN /mnt/data/base/ZashUIFork-main/src/i18n/zh.ts /mnt/data/build/ZashUIFork-main/src/i18n/zh.ts
+--- /mnt/data/base/ZashUIFork-main/src/i18n/zh.ts	2026-02-27 12:43:39.000000000 +0000
++++ /mnt/data/build/ZashUIFork-main/src/i18n/zh.ts	2026-02-27 15:20:59.918849407 +0000
+@@ -266,6 +266,7 @@
+   other: '其他',
+   proxiesRelationshipColor: '线条颜色',
+   provider: '提供商',
++  proxyGroup: '代理组',
+   none: '无',
+   proxiesRelationshipSourceMode: '来源字段',
+   rulePayload: '规则载荷',
+diff -ruN /mnt/data/base/ZashUIFork-main/src/views/OverviewPage.vue /mnt/data/build/ZashUIFork-main/src/views/OverviewPage.vue
+--- /mnt/data/base/ZashUIFork-main/src/views/OverviewPage.vue	2026-02-27 12:41:52.000000000 +0000
++++ /mnt/data/build/ZashUIFork-main/src/views/OverviewPage.vue	2026-02-27 15:15:52.187932776 +0000
+@@ -32,32 +32,6 @@
+             <option :value="70">top 70</option>
+             <option :value="100">top 100</option>
+           </select>
+-
+-          <select class="select select-xs" v-model.number="proxiesRelationshipTopNChain">
+-            <option :value="10">chain 10</option>
+-            <option :value="18">chain 18</option>
+-            <option :value="30">chain 30</option>
+-            <option :value="60">chain 60</option>
+-          </select>
+-            <button
+-              class="btn btn-ghost btn-circle btn-xs"
+-              :title="proxiesRelationshipPaused ? $t('resume') : $t('pause')"
+-              @click="proxiesRelationshipPaused = !proxiesRelationshipPaused"
+-            >
+-              <component :is="proxiesRelationshipPaused ? PlayIcon : PauseIcon" class="h-4 w-4" />
+-            </button>
+-
+-            <button
+-              class="btn btn-ghost btn-circle btn-xs"
+-              :title="$t('refresh')"
+-              @click="proxiesRelationshipRefreshNonce++"
+-            >
+-              <ArrowPathIcon class="h-4 w-4" />
+-            </button>
+-
+-            <span class="text-xs opacity-60">
+-              {{ proxiesRelationshipPaused ? $t('paused') : `${proxiesRelationshipRefreshSec}s` }}
+-            </span>
+         </div>
+       </div>
+ 
+@@ -83,16 +57,6 @@
+ import NetworkCard from '@/components/overview/NetworkCard.vue'
+ import ProxiesRuleCharts from '@/components/overview/ProxiesRuleCharts.vue'
+ import { getLabelFromBackend } from '@/helper/utils'
+-import {
+-  displayProxiesRelationship,
+-  proxiesRelationshipPaused,
+-  proxiesRelationshipRefreshNonce,
+-  proxiesRelationshipRefreshSec,
+-  proxiesRelationshipTopN,
+-  proxiesRelationshipTopNChain,
+-  proxiesRelationshipWeightMode,
+-  showIPAndConnectionInfo,
+-} from '@/store/settings'
++import { displayProxiesRelationship, proxiesRelationshipTopN, proxiesRelationshipWeightMode, showIPAndConnectionInfo } from '@/store/settings'
+ import { activeBackend } from '@/store/setup'
+-import { ArrowPathIcon, PauseIcon, PlayIcon } from '@heroicons/vue/24/outline'
+ </script>
