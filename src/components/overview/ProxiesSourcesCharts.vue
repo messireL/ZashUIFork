@@ -84,6 +84,14 @@ const fullChartStyle = computed(() => {
   return `backdrop-filter: blur(${blurIntensity.value}px);`
 })
 
+const { width } = useElementSize(chart)
+const labelFontSize = computed(() => {
+  // адаптив: чуть крупнее на больших экранах + в full-screen
+  const w = Number(width.value) || 0
+  const base = isFullScreen.value ? 14 : w >= 1100 ? 13 : w >= 800 ? 12 : 11
+  return base
+})
+
 const colorSet = {
   baseContent30: '',
   baseContent: '',
@@ -104,7 +112,7 @@ const updateFontFamily = () => {
   fontFamily = baseColorStyle.fontFamily
 }
 
-// ----- snapshot & pause -----
+// ----- snapshot & pause (no constant redraw) -----
 const snapshot = ref<Connection[]>([])
 let timer: number | undefined
 
@@ -121,9 +129,10 @@ const stopTimer = () => {
 
 const startTimer = () => {
   stopTimer()
+  const sec = Math.max(1, Number(proxiesRelationshipRefreshSec.value) || 5)
   timer = window.setInterval(() => {
     if (!proxiesRelationshipPaused.value) refreshSnapshot()
-  }, Math.max(1, Number(proxiesRelationshipRefreshSec.value) || 5) * 1000)
+  }, sec * 1000)
 }
 
 watch(proxiesRelationshipPaused, (p) => {
@@ -139,6 +148,7 @@ watch(proxiesRelationshipRefreshSec, () => {
 })
 
 watch(proxiesRelationshipRefreshNonce, () => {
+  // manual refresh
   refreshSnapshot()
 })
 
@@ -148,7 +158,7 @@ const rootName = computed(() => (isSingBox.value ? 'SingBox' : 'Mihomo'))
 
 const sankeyData = computed(() => {
   const conns = snapshot.value || []
-  const MAX_SOURCES = isFullScreen.value ? 60 : 30
+  const MAX_SOURCES = isFullScreen.value ? 70 : 40
 
   const speed = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
   const hasSpeed = conns.some((c) => speed(c) > 0)
@@ -194,40 +204,80 @@ const sankeyData = computed(() => {
     return { source, target, value }
   })
 
-  const nodes = Array.from(nodesSet).map((name) => ({ name }))
-  return { nodes, links }
+  // stable ordering (prevents “fly-in” feeling)
+  const nodes = Array.from(nodesSet)
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ name }))
+
+  const linksSorted = links.sort((a, b) => {
+    const s = a.source.localeCompare(b.source)
+    if (s) return s
+    return a.target.localeCompare(b.target)
+  })
+
+  return { nodes, links: linksSorted }
 })
+
+const shortLabel = (name: string) => {
+  if (!name) return ''
+  const max = isFullScreen.value ? 46 : 32
+  return name.length > max ? `${name.slice(0, max - 1)}…` : name
+}
 
 const options = computed(() => {
   return {
+    animation: true,
+    animationDuration: 250,
+    animationDurationUpdate: 550,
+    animationEasingUpdate: 'cubicOut',
     tooltip: {
       trigger: 'item',
       triggerOn: 'mousemove',
       backgroundColor: colorSet.base70,
       borderColor: colorSet.base70,
       confine: true,
-      padding: [0, 6],
+      padding: [6, 8],
       textStyle: {
         color: colorSet.baseContent,
         fontFamily,
+        fontSize: Math.max(11, labelFontSize.value),
       },
     },
     series: [
       {
+        id: 'sankey-sources',
         type: 'sankey',
         data: sankeyData.value.nodes,
         links: sankeyData.value.links,
+        nodeAlign: 'left',
+        nodeWidth: isFullScreen.value ? 16 : 14,
+        nodeGap: isFullScreen.value ? 10 : 8,
         emphasis: { focus: 'adjacency' },
-        lineStyle: { curveness: 0.5, color: colorSet.baseContent30, opacity: 0.35 },
+        lineStyle: { curveness: 0.5, color: colorSet.baseContent30, opacity: 0.4 },
         label: {
           color: colorSet.baseContent,
           fontFamily,
-          fontSize: 9,
+          fontSize: labelFontSize.value,
+          overflow: 'truncate',
+          width: isFullScreen.value ? 260 : 180,
+          formatter: (p: any) => shortLabel(p?.name || ''),
         },
       },
     ],
   }
 })
+
+let myChart: echarts.ECharts | null = null
+let fsChart: echarts.ECharts | null = null
+
+const render = (force = false) => {
+  if (!myChart) return
+  // no clear() => smoother updates
+  myChart.setOption(options.value as any, { notMerge: force, lazyUpdate: true })
+  if (isFullScreen.value && fsChart) {
+    fsChart.setOption(options.value as any, { notMerge: force, lazyUpdate: true })
+  }
+}
 
 onMounted(() => {
   updateColorSet()
@@ -239,33 +289,26 @@ onMounted(() => {
   watch(theme, updateColorSet)
   watch(font, updateFontFamily)
 
-  const myChart = echarts.init(chart.value)
-  const fullScreenMyChart = ref<echarts.ECharts>()
+  myChart = echarts.init(chart.value)
+  myChart.setOption(options.value as any)
 
-  myChart.setOption(options.value)
+  watch([activeUuid], () => render(true))
+  watch([options], () => render(false))
 
-  watch([activeUuid, options, isFullScreen], () => {
-    myChart?.clear()
-    myChart?.setOption(options.value)
-
-    if (isFullScreen.value) {
-      nextTick(() => {
-        if (!fullScreenMyChart.value) {
-          fullScreenMyChart.value = echarts.init(fullScreenChart.value)
-        }
-        fullScreenMyChart.value?.clear()
-        fullScreenMyChart.value?.setOption(options.value)
-      })
+  watch(isFullScreen, async (v) => {
+    if (v) {
+      await nextTick()
+      if (!fsChart) fsChart = echarts.init(fullScreenChart.value)
+      render(true)
     } else {
-      fullScreenMyChart.value?.dispose()
-      fullScreenMyChart.value = undefined
+      fsChart?.dispose()
+      fsChart = null
     }
   })
 
-  const { width } = useElementSize(chart)
   const resize = debounce(() => {
-    myChart.resize()
-    fullScreenMyChart.value?.resize()
+    myChart?.resize()
+    fsChart?.resize()
   }, 100)
 
   watch(width, resize)
@@ -273,5 +316,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopTimer()
+  myChart?.dispose()
+  fsChart?.dispose()
+  myChart = null
+  fsChart = null
 })
 </script>

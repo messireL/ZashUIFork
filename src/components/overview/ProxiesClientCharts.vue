@@ -5,10 +5,7 @@
     @touchmove.stop
   >
     <div ref="chart" class="h-full w-full" />
-    <span
-      class="border-base-content/30 text-base-content/10 bg-base-100/70 hidden"
-      ref="colorRef"
-    />
+    <span class="border-base-content/30 text-base-content/10 bg-base-100/70 hidden" ref="colorRef" />
 
     <button
       :class="
@@ -19,10 +16,7 @@
       "
       @click="isFullScreen = !isFullScreen"
     >
-      <component
-        :is="isFullScreen ? ArrowsPointingInIcon : ArrowsPointingOutIcon"
-        class="h-4 w-4"
-      />
+      <component :is="isFullScreen ? ArrowsPointingInIcon : ArrowsPointingOutIcon" class="h-4 w-4" />
     </button>
   </div>
 
@@ -33,11 +27,7 @@
       :class="`blur-intensity-${blurIntensity} custom-background-${dashboardTransparent}`"
       :style="backgroundImage"
     >
-      <div
-        ref="fullScreenChart"
-        class="bg-base-100 h-full w-full"
-        :style="fullChartStyle"
-      />
+      <div ref="fullScreenChart" class="bg-base-100 h-full w-full" :style="fullChartStyle" />
       <button
         class="btn btn-ghost btn-circle btn-sm fixed right-4 bottom-4 mb-[env(safe-area-inset-bottom)]"
         @click="isFullScreen = false"
@@ -50,19 +40,19 @@
 
 <script setup lang="ts">
 import { backgroundImage } from '@/helper/indexeddb'
+import type { Connection } from '@/types'
 import { activeConnections } from '@/store/connections'
 import {
   blurIntensity,
   dashboardTransparent,
   font,
+  theme,
+  sourceIPLabelList,
   proxiesRelationshipPaused,
   proxiesRelationshipRefreshNonce,
   proxiesRelationshipRefreshSec,
-  sourceIPLabelList,
-  theme,
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
-import type { Connection } from '@/types'
 import { ArrowsPointingInIcon, ArrowsPointingOutIcon } from '@heroicons/vue/24/outline'
 import { useElementSize } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
@@ -76,33 +66,31 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
 
 const isFullScreen = ref(false)
-const colorRef = ref()
 const chart = ref()
 const fullScreenChart = ref()
+const colorRef = ref()
 
-const fullChartStyle = computed(() => {
-  return `backdrop-filter: blur(${blurIntensity.value}px);`
-})
+const fullChartStyle = computed(() => `backdrop-filter: blur(${blurIntensity.value}px);`)
 
-const colorSet = {
-  baseContent30: '',
-  baseContent: '',
-  base70: '',
-}
-
+const colorSet = { baseContent30: '', baseContent: '', base70: '' }
 let fontFamily = ''
 
 const updateColorSet = () => {
-  const colorStyle = getComputedStyle(colorRef.value)
-  colorSet.baseContent = colorStyle.getPropertyValue('--color-base-content').trim()
-  colorSet.baseContent30 = colorStyle.borderColor
-  colorSet.base70 = colorStyle.backgroundColor
+  const cs = getComputedStyle(colorRef.value)
+  colorSet.baseContent = cs.getPropertyValue('--color-base-content').trim()
+  colorSet.baseContent30 = cs.borderColor
+  colorSet.base70 = cs.backgroundColor
+}
+const updateFontFamily = () => {
+  fontFamily = getComputedStyle(colorRef.value).fontFamily
 }
 
-const updateFontFamily = () => {
-  const baseColorStyle = getComputedStyle(colorRef.value)
-  fontFamily = baseColorStyle.fontFamily
-}
+const { width } = useElementSize(chart)
+const labelFontSize = computed(() => {
+  const w = Number(width.value) || 0
+  const base = isFullScreen.value ? 14 : w >= 1100 ? 13 : w >= 800 ? 12 : 11
+  return base
+})
 
 const labelForIp = (ip: string) => {
   const backendId = activeBackend.value?.uuid
@@ -131,9 +119,10 @@ const stopTimer = () => {
 
 const startTimer = () => {
   stopTimer()
+  const sec = Math.max(1, Number(proxiesRelationshipRefreshSec.value) || 5)
   timer = window.setInterval(() => {
     if (!proxiesRelationshipPaused.value) refreshSnapshot()
-  }, Math.max(1, Number(proxiesRelationshipRefreshSec.value) || 5) * 1000)
+  }, sec * 1000)
 }
 
 watch(proxiesRelationshipPaused, (p) => {
@@ -152,12 +141,15 @@ watch(proxiesRelationshipRefreshNonce, () => {
   refreshSnapshot()
 })
 
-// ----- sankey -----
-const normalize = (s: string) => (s || '').trim() || '-'
+const shortLabel = (name: string) => {
+  if (!name) return ''
+  const max = isFullScreen.value ? 46 : 32
+  return name.length > max ? `${name.slice(0, max - 1)}…` : name
+}
 
 const sankeyData = computed(() => {
   const conns = snapshot.value || []
-  const MAX_CLIENTS = isFullScreen.value ? 60 : 30
+  const MAX_CLIENTS = isFullScreen.value ? 70 : 40
 
   const speed = (c: Connection) => (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
   const hasSpeed = conns.some((c) => speed(c) > 0)
@@ -167,7 +159,8 @@ const sankeyData = computed(() => {
   for (const c of conns) {
     const ip = c.metadata?.sourceIP || ''
     if (!ip) continue
-    totals.set(ip, (totals.get(ip) || 0) + weight(c))
+    const v = weight(c)
+    totals.set(ip, (totals.get(ip) || 0) + v)
   }
 
   const top = new Set(
@@ -178,66 +171,90 @@ const sankeyData = computed(() => {
   )
 
   const linkAgg = new Map<string, number>()
-  const addLink = (source: string, target: string, value: number) => {
-    const key = `${source}\u0000${target}`
-    linkAgg.set(key, (linkAgg.get(key) || 0) + value)
+  const add = (s: string, t: string, v: number) => {
+    const key = `${s}\u0000${t}`
+    linkAgg.set(key, (linkAgg.get(key) || 0) + v)
   }
 
   for (const c of conns) {
     const ip0 = c.metadata?.sourceIP || 'unknown'
     const ip = top.has(ip0) ? ip0 : 'other'
-    const label = ip === 'other' ? 'other' : (labelForIp(ip) ? `${labelForIp(ip)} (${ip})` : ip)
+    const label = ip === 'other' ? 'other' : labelForIp(ip) ? `${labelForIp(ip)} (${ip})` : ip
 
-    const chain0 = normalize(c.chains?.[0] || 'DIRECT')
-    const chain1 = c.chains?.[1] ? normalize(c.chains[1]) : ''
+    const chain0 = (c.chains?.[0] || 'DIRECT').trim() || 'DIRECT'
+    const chain1 = c.chains?.[1]?.trim() || ''
+
     const v = weight(c)
-
-    addLink(label, chain0, v)
-    if (chain1) addLink(chain0, chain1, v)
+    add(label, chain0, v)
+    if (chain1) add(chain0, chain1, v)
   }
 
   const nodesSet = new Set<string>()
-  const links = Array.from(linkAgg.entries()).map(([key, value]) => {
-    const [source, target] = key.split('\u0000')
+  const links = Array.from(linkAgg.entries()).map(([k, value]) => {
+    const [source, target] = k.split('\u0000')
     nodesSet.add(source)
     nodesSet.add(target)
     return { source, target, value }
   })
 
-  const nodes = Array.from(nodesSet).map((name) => ({ name }))
-  return { nodes, links }
+  const nodes = Array.from(nodesSet)
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ name }))
+
+  const linksSorted = links.sort((a, b) => {
+    const s = a.source.localeCompare(b.source)
+    if (s) return s
+    return a.target.localeCompare(b.target)
+  })
+
+  return { nodes, links: linksSorted }
 })
 
-const options = computed(() => {
-  return {
-    tooltip: {
-      trigger: 'item',
-      triggerOn: 'mousemove',
-      backgroundColor: colorSet.base70,
-      borderColor: colorSet.base70,
-      confine: true,
-      padding: [0, 6],
-      textStyle: {
+const options = computed(() => ({
+  animation: true,
+  animationDuration: 250,
+  animationDurationUpdate: 550,
+  animationEasingUpdate: 'cubicOut',
+  tooltip: {
+    trigger: 'item',
+    triggerOn: 'mousemove',
+    backgroundColor: colorSet.base70,
+    borderColor: colorSet.base70,
+    confine: true,
+    padding: [6, 8],
+    textStyle: { color: colorSet.baseContent, fontFamily, fontSize: Math.max(11, labelFontSize.value) },
+  },
+  series: [
+    {
+      id: 'sankey-clients',
+      type: 'sankey',
+      data: sankeyData.value.nodes,
+      links: sankeyData.value.links,
+      nodeAlign: 'left',
+      nodeWidth: isFullScreen.value ? 16 : 14,
+      nodeGap: isFullScreen.value ? 10 : 8,
+      emphasis: { focus: 'adjacency' },
+      lineStyle: { curveness: 0.5, color: colorSet.baseContent30, opacity: 0.4 },
+      label: {
         color: colorSet.baseContent,
         fontFamily,
+        fontSize: labelFontSize.value,
+        overflow: 'truncate',
+        width: isFullScreen.value ? 260 : 180,
+        formatter: (p: any) => shortLabel(p?.name || ''),
       },
     },
-    series: [
-      {
-        type: 'sankey',
-        data: sankeyData.value.nodes,
-        links: sankeyData.value.links,
-        emphasis: { focus: 'adjacency' },
-        lineStyle: { curveness: 0.5, color: colorSet.baseContent30, opacity: 0.35 },
-        label: {
-          color: colorSet.baseContent,
-          fontFamily,
-          fontSize: 9,
-        },
-      },
-    ],
-  }
-})
+  ],
+}))
+
+let mainChart: echarts.ECharts | null = null
+let fsChart: echarts.ECharts | null = null
+
+const render = (force = false) => {
+  if (!mainChart) return
+  mainChart.setOption(options.value as any, { notMerge: force, lazyUpdate: true })
+  if (isFullScreen.value && fsChart) fsChart.setOption(options.value as any, { notMerge: force, lazyUpdate: true })
+}
 
 onMounted(() => {
   updateColorSet()
@@ -249,39 +266,34 @@ onMounted(() => {
   watch(theme, updateColorSet)
   watch(font, updateFontFamily)
 
-  const myChart = echarts.init(chart.value)
-  const fullScreenMyChart = ref<echarts.ECharts>()
+  mainChart = echarts.init(chart.value)
+  mainChart.setOption(options.value as any)
 
-  myChart.setOption(options.value)
+  watch(options, () => render(false))
 
-  watch([options, isFullScreen], () => {
-    myChart?.clear()
-    myChart?.setOption(options.value)
-
-    if (isFullScreen.value) {
-      nextTick(() => {
-        if (!fullScreenMyChart.value) {
-          fullScreenMyChart.value = echarts.init(fullScreenChart.value)
-        }
-        fullScreenMyChart.value?.clear()
-        fullScreenMyChart.value?.setOption(options.value)
-      })
+  watch(isFullScreen, async (v) => {
+    if (v) {
+      await nextTick()
+      if (!fsChart) fsChart = echarts.init(fullScreenChart.value)
+      render(true)
     } else {
-      fullScreenMyChart.value?.dispose()
-      fullScreenMyChart.value = undefined
+      fsChart?.dispose()
+      fsChart = null
     }
   })
 
-  const { width } = useElementSize(chart)
   const resize = debounce(() => {
-    myChart.resize()
-    fullScreenMyChart.value?.resize()
+    mainChart?.resize()
+    fsChart?.resize()
   }, 100)
-
   watch(width, resize)
 })
 
 onBeforeUnmount(() => {
   stopTimer()
+  mainChart?.dispose()
+  fsChart?.dispose()
+  mainChart = null
+  fsChart = null
 })
 </script>
