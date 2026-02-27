@@ -106,6 +106,13 @@ export const proxiesRelationshipView = useStorage<'tree' | 'sources' | 'clients'
   'tree',
 )
 
+export const proxiesRelationshipUseSources = computed({
+  get: () => proxiesRelationshipView.value === 'sources',
+  set: (v: boolean) => {
+    proxiesRelationshipView.value = v ? 'sources' : 'tree'
+  },
+})
+
 export const proxiesRelationshipPaused = useStorage('config/proxies-relationship-paused', false)
 
 export const proxiesRelationshipRefreshSec = useStorage<number>(
