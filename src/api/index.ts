@@ -164,7 +164,7 @@ export const getConfigsRawAPI = (cfg?: { path?: string }) => {
     // на некоторых сборках это может вернуть YAML/text
     responseType: 'text',
     headers: {
-      Accept: 'text/plain',
+      Accept: 'text/plain, application/x-yaml, application/yaml, */*',
     } as any,
   })
 }

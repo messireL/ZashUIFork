@@ -160,6 +160,9 @@ const looksLikeRuntimeConfigs = (obj: any) => {
 
 const tryLoadFromFileLikeEndpoints = async (pathValue: string): Promise<string | null> => {
   const candidates: Array<{ url: string; params?: Record<string, any> }> = [
+    { url: '/configs', params: { path: pathValue, reload: true } },
+    { url: '/configs', params: { path: pathValue, reload: 'true' } },
+    { url: '/configs', params: { path: pathValue, format: 'raw' } },
     { url: '/configs', params: { path: pathValue, raw: true } },
     { url: '/configs', params: { path: pathValue, file: true } },
     { url: '/configs', params: { path: pathValue, download: true } },

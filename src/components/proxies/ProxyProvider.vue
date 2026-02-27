@@ -125,70 +125,162 @@ const providerStats = computed(() => {
 })
 
 const subscriptionInfo = computed(() => {
-  const info = proxyProvider.value.subscriptionInfo
+  const info: any = (proxyProvider.value as any).subscriptionInfo
+  if (!info) return null
 
-  if (info) {
-    const parseBytes = (v: any): number => {
-      if (v === null || v === undefined) return 0
-      if (typeof v === 'number') return Number.isFinite(v) ? v : 0
-      if (typeof v === 'string') {
-        const s = v.trim()
-        if (!s) return 0
-        // plain number string
-        if (/^[0-9]+(\.[0-9]+)?$/.test(s)) return Number(s) || 0
-        const m = s.match(/^\s*([0-9]+(?:\.[0-9]+)?)\s*([kmgtpe]?i?b?)\s*$/i)
-        if (!m) return Number(s) || 0
-        const num = Number(m[1])
-        const unit = (m[2] || '').toUpperCase()
-        const pow10 = { K: 1, M: 2, G: 3, T: 4, P: 5, E: 6 }
+  const parseBytes = (v: any): number => {
+    if (v === null || v === undefined) return 0
+    if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+
+    if (typeof v === 'string') {
+      const s0 = v.trim()
+      if (!s0) return 0
+
+      // Some backends may pass userinfo fragments like: "total=123; download=..."
+      const kv = s0.match(/\b(?:total|download|upload)\s*=\s*([0-9]+(?:\.[0-9]+)?)(?:\s*([kmgtpe]?i?b?)\b)?/i)
+      if (kv) {
+        const num = Number(kv[1])
+        const unit = (kv[2] || '').toUpperCase()
+        const pow10: Record<string, number> = { K: 1, M: 2, G: 3, T: 4, P: 5, E: 6 }
         const base = unit.includes('I') ? 1024 : 1000
         const letter = unit.replace('IB', '').replace('B', '')
-        const p = (pow10 as any)[letter] || 0
+        const p = pow10[letter] || 0
         return num * Math.pow(base, p)
       }
-      return 0
+
+      // plain number string
+      if (/^[0-9]+(\.[0-9]+)?$/.test(s0)) return Number(s0) || 0
+
+      // "<num><unit>" or "<num> <unit>"
+      const m = s0.match(/^\s*([0-9]+(?:\.[0-9]+)?)\s*([kmgtpe]?i?b?)\s*$/i)
+      if (m) {
+        const num = Number(m[1])
+        const unit = (m[2] || '').toUpperCase()
+        const pow10: Record<string, number> = { K: 1, M: 2, G: 3, T: 4, P: 5, E: 6 }
+        const base = unit.includes('I') ? 1024 : 1000
+        const letter = unit.replace('IB', '').replace('B', '')
+        const p = pow10[letter] || 0
+        return num * Math.pow(base, p)
+      }
+
+      // Extract first "number+unit" anywhere
+      const m2 = s0.match(/([0-9]+(?:\.[0-9]+)?)\s*([kmgtpe]?i?b?)\b/i)
+      if (m2) {
+        const num = Number(m2[1])
+        const unit = (m2[2] || '').toUpperCase()
+        const pow10: Record<string, number> = { K: 1, M: 2, G: 3, T: 4, P: 5, E: 6 }
+        const base = unit.includes('I') ? 1024 : 1000
+        const letter = unit.replace('IB', '').replace('B', '')
+        const p = pow10[letter] || 0
+        return num * Math.pow(base, p)
+      }
+
+      return Number(s0) || 0
     }
 
-    const getValCI = (obj: any, key: string) => {
-      if (!obj) return undefined
-      const direct = obj[key]
-      if (direct !== undefined && direct !== null) return direct
-      const k = Object.keys(obj).find((x) => x.toLowerCase() === key.toLowerCase())
-      return k ? obj[k] : undefined
+    return 0
+  }
+
+  const parseNumber = (v: any): number => {
+    if (v === null || v === undefined) return 0
+    if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+    if (typeof v === 'string') {
+      const s = v.trim()
+      const m = s.match(/-?[0-9]+/)
+      return m ? Number(m[0]) || 0 : 0
+    }
+    return 0
+  }
+
+  const getAny = (obj: any, candidates: string[]): any => {
+    if (!obj || typeof obj !== 'object') return undefined
+    const keys = Object.keys(obj)
+
+    // exact match (case-insensitive)
+    for (const c of candidates) {
+      const k = keys.find((x) => x.toLowerCase() === c.toLowerCase())
+      if (k) {
+        const v = (obj as any)[k]
+        if (v !== undefined && v !== null && `${v}`.trim() !== '') return v
+      }
     }
 
-    const Download = parseBytes(getValCI(info, 'Download'))
-    const Upload = parseBytes(getValCI(info, 'Upload'))
-    const Total = parseBytes(getValCI(info, 'Total'))
-    const Expire = Number(getValCI(info, 'Expire')) || 0
-
-    if (Download === 0 && Upload === 0 && Total === 0 && Expire === 0) {
-      return null
+    // contains match (case-insensitive)
+    for (const c of candidates) {
+      const lc = c.toLowerCase()
+      const k = keys.find((x) => x.toLowerCase().includes(lc))
+      if (k) {
+        const v = (obj as any)[k]
+        if (v !== undefined && v !== null && `${v}`.trim() !== '') return v
+      }
     }
 
-    const { t } = useI18n()
-    const total = Total > 0 ? prettyBytesHelper(Total, { binary: true }) : '—'
-    const used = prettyBytesHelper(Download + Upload, { binary: true })
-    const percentage = Total > 0 ? (((Download + Upload) / Total) * 100).toFixed(2) : ''
-    const expireSec = Expire > 1e12 ? Math.floor(Expire / 1000) : Expire
-    const expireStr =
-      expireSec === 0
-        ? `${t('expire')}: ${t('noExpire')}`
-        : `${t('expire')}: ${dayjs(expireSec * 1000).format('YYYY-MM-DD')}`
+    return undefined
+  }
 
-    const usageStr = percentage ? `${used} / ${total} ( ${percentage}% )` : `${used} / ${total}`
+  const parseUserinfoString = (s: string) => {
+    const read = (k: string) => {
+      const m = s.match(new RegExp(`\\b${k}\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)`, 'i'))
+      return m ? Number(m[1]) || 0 : 0
+    }
+    const download = read('download')
+    const upload = read('upload')
+    const total = read('total')
+    const expire = read('expire')
+    return { download, upload, total, expire }
+  }
 
-    const percentNumber = Total > 0 ? ((Download + Upload) / Total) * 100 : null
+  const rawDownload = getAny(info, ['Download', 'download'])
+  const rawUpload = getAny(info, ['Upload', 'upload'])
+  const rawTotal = getAny(info, ['Total', 'total', 'quota', 'limit'])
+  const rawExpire = getAny(info, ['Expire', 'expire', 'expiry', 'expiration'])
 
-    return {
-      expireStr,
-      usageStr,
-      percent: percentNumber,
+  let Download = parseBytes(rawDownload)
+  let Upload = parseBytes(rawUpload)
+  let Total = parseBytes(rawTotal)
+  let Expire = parseNumber(rawExpire)
+
+  // Fallback: scan any string field for "total=..."
+  if (Total <= 0) {
+    for (const v of Object.values(info)) {
+      if (typeof v !== 'string') continue
+      if (!/\btotal\s*=\s*/i.test(v)) continue
+      const p = parseUserinfoString(v)
+      if (p.total > 0) Total = p.total
+      if (Download <= 0 && p.download > 0) Download = p.download
+      if (Upload <= 0 && p.upload > 0) Upload = p.upload
+      if (Expire <= 0 && p.expire > 0) Expire = p.expire
     }
   }
 
-  return null
+  if (Download === 0 && Upload === 0 && Total === 0 && Expire === 0) return null
+
+  const { t } = useI18n()
+  const usedBytes = Download + Upload
+  const used = prettyBytesHelper(usedBytes, { binary: true })
+
+  const isUnlimited =
+    (rawTotal === 0 || rawTotal === '0' || rawTotal === '0B' || rawTotal === '0b') && usedBytes > 0
+
+  const totalLabel = Total > 0 ? prettyBytesHelper(Total, { binary: true }) : isUnlimited ? '∞' : '—'
+  const percentage = Total > 0 ? ((usedBytes / Total) * 100).toFixed(2) : ''
+  const usageStr = percentage ? `${used} / ${totalLabel} ( ${percentage}% )` : `${used} / ${totalLabel}`
+
+  const expireSec = Expire > 1e12 ? Math.floor(Expire / 1000) : Expire
+  const expireStr =
+    expireSec === 0
+      ? `${t('expire')}: ${t('noExpire')}`
+      : `${t('expire')}: ${dayjs(expireSec * 1000).format('YYYY-MM-DD')}`
+
+  const percentNumber = Total > 0 ? (usedBytes / Total) * 100 : null
+
+  return {
+    expireStr,
+    usageStr,
+    percent: percentNumber,
+  }
 })
+
 
 const isUpdating = ref(false)
 const isHealthChecking = ref(false)
