@@ -240,6 +240,8 @@ const en = {
   twoIpTokenMissing: 'token is not set',
   proxiesRelationshipTree: 'Proxy tree',
   proxiesRelationshipSources: 'Sources',
+  proxiesRelationshipTree: 'Tree',
+  proxiesRelationshipSources: 'Sources',
 }
 
 export type LANG_MESSAGE = typeof en

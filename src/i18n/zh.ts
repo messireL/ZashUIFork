@@ -239,6 +239,8 @@ const zh: LANG_MESSAGE = {
   twoIpTokenMissing: '未设置 token',
   proxiesRelationshipTree: '代理树',
   proxiesRelationshipSources: '来源',
+  proxiesRelationshipTree: '代理树',
+  proxiesRelationshipSources: '来源',
 }
 
 export default zh

@@ -43,6 +43,11 @@
         <input class="toggle" type="checkbox" v-model="displayProxiesRelationship" />
       </div>
 
+      <div class="flex items-center gap-2" v-if="displayProxiesRelationship">
+        {{ $t('proxiesRelationshipSources') }}
+        <input class="toggle" type="checkbox" v-model="proxiesRelationshipUseSources" />
+      </div>
+
       <div class="flex items-center gap-2 max-md:hidden">
         {{ $t('showStatisticsWhenSidebarCollapsed') }}
         <input class="toggle" type="checkbox" v-model="showStatisticsWhenSidebarCollapsed" />
@@ -72,4 +77,5 @@ import {
   splitOverviewPage,
   twoIpToken,
 } from '@/store/settings'
+import { proxiesRelationshipUseSources } from '@/store/settings'
 </script>

@@ -242,6 +242,8 @@ const ru: LANG_MESSAGE = {
   twoIpTokenMissing: 'токен не задан',
   proxiesRelationshipTree: 'Дерево',
   proxiesRelationshipSources: 'Источники',
+  proxiesRelationshipTree: 'Дерево',
+  proxiesRelationshipSources: 'Источники',
 }
 
 export default ru

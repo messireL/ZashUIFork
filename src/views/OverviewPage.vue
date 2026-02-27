@@ -4,24 +4,19 @@
     <NetworkCard v-if="showIPAndConnectionInfo" />
 
     <div class="card" v-if="displayProxiesRelationship">
-      <div class="card-title px-4 pt-4">
-        {{ $t('proxiesRelationship') }}
+      <div class="card-title px-4 pt-4 flex items-center justify-between gap-2">
+        <span>{{ $t('proxiesRelationship') }}</span>
+
+        <div class="flex items-center gap-2 text-sm">
+          <span class="opacity-70">{{ $t('proxiesRelationshipTree') }}</span>
+          <input class="toggle toggle-sm" type="checkbox" v-model="proxiesRelationshipUseSources" />
+          <span class="opacity-70">{{ $t('proxiesRelationshipSources') }}</span>
+        </div>
       </div>
 
-      <div class="px-4 pb-4 flex flex-col gap-3">
-        <div>
-          <div class="text-xs opacity-60 mb-1">
-            {{ $t('proxiesRelationshipTree') }}
-          </div>
-          <ProxiesCharts />
-        </div>
-
-        <div>
-          <div class="text-xs opacity-60 mb-1">
-            {{ $t('proxiesRelationshipSources') }}
-          </div>
-          <ProxiesSourcesCharts />
-        </div>
+      <div class="px-4 pb-4">
+        <ProxiesCharts v-if="!proxiesRelationshipUseSources" />
+        <ProxiesSourcesCharts v-else />
       </div>
     </div>
 
@@ -43,6 +38,6 @@ import NetworkCard from '@/components/overview/NetworkCard.vue'
 import ProxiesCharts from '@/components/overview/ProxiesCharts.vue'
 import ProxiesSourcesCharts from '@/components/overview/ProxiesSourcesCharts.vue'
 import { getLabelFromBackend } from '@/helper/utils'
-import { displayProxiesRelationship, showIPAndConnectionInfo } from '@/store/settings'
+import { displayProxiesRelationship, proxiesRelationshipUseSources, showIPAndConnectionInfo } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 </script>
