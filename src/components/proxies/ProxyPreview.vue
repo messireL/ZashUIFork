@@ -9,8 +9,8 @@
         v-for="node in nodesLatency"
         :key="node.name"
         class="flex h-5 w-5 items-center justify-center transition hover:scale-110"
-        :class="[showSquares ? 'rounded-md' : 'rounded-full']"
         :class="[
+          showSquares ? 'rounded-md' : 'rounded-full',
           getBgColor(node.latency),
           now === node.name ? 'ring-2 ring-base-100 ring-offset-2 ring-offset-base-content/20' : '',
         ]"
