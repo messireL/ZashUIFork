@@ -8,6 +8,8 @@ export type UserLimit = {
   disabled?: boolean
   /** Traffic limit in bytes for the selected period. 0/undefined = no limit. */
   trafficLimitBytes?: number
+  /** Optional preferred unit for the traffic limit UI. */
+  trafficLimitUnit?: 'MB' | 'GB'
   /** Traffic period window. */
   trafficPeriod?: UserLimitPeriod
   /** Optional reset baseline timestamp (ms). */

@@ -55,6 +55,10 @@
             max="100"
           ></progress>
 
+          <div v-if="sslExpireInfo" class="mt-1 text-xs" :class="sslExpireInfo.cls">
+            {{ $t('sslExpire') }}: {{ sslExpireInfo.label }}
+          </div>
+
           <pre
             v-if="subscriptionInfo.totalLabel === '—' && showRawSub"
             class="mt-2 text-xs opacity-70 whitespace-pre-wrap break-all"
@@ -136,6 +140,101 @@ const providerStats = computed(() => {
   }
 
   return { connections, bytes, speed }
+})
+
+const getAnyFromObj = (obj: any, candidates: string[]): any => {
+  if (!obj || typeof obj !== 'object') return undefined
+  const keys = Object.keys(obj)
+
+  // exact match (case-insensitive)
+  for (const c of candidates) {
+    const k = keys.find((x) => x.toLowerCase() === c.toLowerCase())
+    if (k) {
+      const v = (obj as any)[k]
+      if (v !== undefined && v !== null && `${v}`.trim() !== '') return v
+    }
+  }
+
+  // contains match (case-insensitive)
+  for (const c of candidates) {
+    const lc = c.toLowerCase()
+    const k = keys.find((x) => x.toLowerCase().includes(lc))
+    if (k) {
+      const v = (obj as any)[k]
+      if (v !== undefined && v !== null && `${v}`.trim() !== '') return v
+    }
+  }
+
+  return undefined
+}
+
+const parseDateMaybe = (v: any): dayjs.Dayjs | null => {
+  if (v === null || v === undefined) return null
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    const ts = v > 10_000_000_000 ? v : v * 1000
+    const d = dayjs(ts)
+    return d.isValid() ? d : null
+  }
+  if (typeof v === 'string') {
+    const s = v.trim()
+    if (!s) return null
+    if (/^[0-9]{10,13}$/.test(s)) {
+      const num = Number(s)
+      return parseDateMaybe(num)
+    }
+    const d = dayjs(s)
+    return d.isValid() ? d : null
+  }
+  if (typeof v === 'object') {
+    // common shapes: { expire: ... }
+    const inner = getAnyFromObj(v, ['expire', 'expiry', 'expiration', 'notAfter', 'not_after'])
+    return parseDateMaybe(inner)
+  }
+  return null
+}
+
+const sslExpireInfo = computed(() => {
+  const p: any = proxyProvider.value as any
+  const info: any = (proxyProvider.value as any).subscriptionInfo
+
+  const raw =
+    getAnyFromObj(p, [
+      'sslExpire',
+      'ssl_expire',
+      'sslExpiration',
+      'ssl_expiration',
+      'certExpire',
+      'cert_expire',
+      'tlsExpire',
+      'tls_expire',
+      'certificateExpire',
+      'certificate_expire',
+      'certNotAfter',
+    ]) ||
+    getAnyFromObj(info, [
+      'sslExpire',
+      'ssl_expire',
+      'sslExpiration',
+      'ssl_expiration',
+      'certExpire',
+      'cert_expire',
+      'tlsExpire',
+      'tls_expire',
+      'certificateExpire',
+      'certificate_expire',
+      'certNotAfter',
+    ])
+
+  const d = parseDateMaybe(raw)
+  if (!d) return null
+
+  const days = d.diff(dayjs(), 'day')
+  const date = d.format('YYYY-MM-DD')
+
+  const cls = days < 0 ? 'text-error' : days <= 14 ? 'text-warning' : 'text-success'
+  const label = days < 0 ? `${date} (expired)` : `${date} (${days}d)`
+
+  return { date, days, cls, label }
 })
 
 const subscriptionInfo = computed(() => {

@@ -15,6 +15,8 @@
             group="list"
             :animation="150"
             :handle="'.drag-handle'"
+            :filter="'.no-drag'"
+            :prevent-on-filter="false"
             :item-key="'id'"
             @start="disableSwipe = true"
             @end="disableSwipe = false"
@@ -26,11 +28,20 @@
               >
                 <template #prefix>
                   <ChevronUpDownIcon class="drag-handle h-4 w-4 shrink-0 cursor-grab" />
+                  <LockClosedIcon
+                    v-if="isBlockedUser(sourceIP)"
+                    class="no-drag h-4 w-4 text-error"
+                    :title="$t('userBlockedTip')"
+                  />
                 </template>
                 <template #default>
                   <button
-                    class="btn btn-circle btn-ghost btn-sm"
-                    @click.stop="handlerLabelRemove(sourceIP.id)" @mousedown.stop @touchstart.stop
+                    type="button"
+                    class="no-drag btn btn-circle btn-ghost btn-sm"
+                    @click.stop.prevent="handlerLabelRemove(sourceIP.id)"
+                    @pointerdown.stop.prevent
+                    @mousedown.stop.prevent
+                    @touchstart.stop.prevent
                     :title="$t('delete')"
                   >
                     <TrashIcon class="h-4 w-4" />
@@ -53,8 +64,12 @@
             </template>
             <template #default>
               <button
-                class="btn btn-circle btn-sm"
-                @click.stop="handlerLabelAdd" @mousedown.stop @touchstart.stop
+                type="button"
+                class="no-drag btn btn-circle btn-sm"
+                @click.stop.prevent="handlerLabelAdd"
+                @pointerdown.stop.prevent
+                @mousedown.stop.prevent
+                @touchstart.stop.prevent
                 :title="$t('add')"
               >
                 <PlusIcon class="h-4 w-4" />
@@ -76,10 +91,11 @@ import SourceIPInput from '@/components/settings/SourceIPInput.vue'
 import { disableSwipe } from '@/composables/swipe'
 import { sourceIPLabelList } from '@/store/settings'
 import type { SourceIPLabel } from '@/types'
-import { ChevronUpDownIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import { ChevronUpDownIcon, LockClosedIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { v4 as uuid } from 'uuid'
 import { ref } from 'vue'
 import Draggable from 'vuedraggable'
+import { getUserLimitState } from '@/composables/userLimits'
 
 const newLabelForIP = ref<Omit<SourceIPLabel, 'id'>>({
   key: '',
@@ -112,5 +128,11 @@ const handlerLabelUpdate = (sourceIP: Partial<SourceIPLabel>) => {
     ...sourceIPLabelList.value[index],
     ...sourceIP,
   }
+}
+
+const isBlockedUser = (sourceIP: Partial<SourceIPLabel>) => {
+  const user = (sourceIP.label || sourceIP.key || '').toString().trim()
+  if (!user) return false
+  return getUserLimitState(user).blocked
 }
 </script>

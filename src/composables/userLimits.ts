@@ -1,7 +1,9 @@
 import { disconnectByIdSilentAPI, getConfigsSilentAPI, patchConfigsSilentAPI } from '@/api'
+import { agentRemoveShapeAPI, agentSetShapeAPI, agentStatusAPI } from '@/api/agent'
 import { getIPLabelFromMap } from '@/helper/sourceip'
 import { activeConnections } from '@/store/connections'
 import { sourceIPLabelList } from '@/store/settings'
+import { agentEnabled, agentEnforceBandwidth, agentShaperStatus, managedAgentShapers } from '@/store/agent'
 import {
   autoDisconnectLimitedUsers,
   hardBlockLimitedUsers,
@@ -25,6 +27,7 @@ const resolveLimit = (l?: UserLimit): UserLimitResolved => {
     disabled: l?.disabled ?? false,
     trafficPeriod: (l?.trafficPeriod ?? '30d') as UserLimitPeriod,
     trafficLimitBytes: l?.trafficLimitBytes ?? 0,
+    trafficLimitUnit: (l?.trafficLimitUnit ?? 'GB') as any,
     bandwidthLimitBps: l?.bandwidthLimitBps ?? 0,
     resetAt: l?.resetAt,
   }
@@ -40,6 +43,7 @@ export const setUserLimit = (user: string, patch: Partial<UserLimit>) => {
   const next = { ...prev, ...patch }
   // Normalize empties
   if (!next.trafficLimitBytes) delete (next as any).trafficLimitBytes
+  if (!next.trafficLimitBytes) delete (next as any).trafficLimitUnit
   if (!next.bandwidthLimitBps) delete (next as any).bandwidthLimitBps
   userLimits.value = { ...userLimits.value, [user]: next }
 }
@@ -90,8 +94,11 @@ export const getUserLimitState = (user: string) => {
   const trafficExceeded = l.enabled && l.trafficLimitBytes > 0 && usage >= l.trafficLimitBytes
   const bandwidthExceeded = l.enabled && l.bandwidthLimitBps > 0 && speed >= l.bandwidthLimitBps
 
+  // Bandwidth limits are "adult" (shaping) when the router agent is enabled.
+  const bwViaAgent = !!agentEnabled.value && !!agentEnforceBandwidth.value
+
   // Manual block works regardless of "enabled".
-  const blocked = l.disabled || (l.enabled && (trafficExceeded || bandwidthExceeded))
+  const blocked = l.disabled || (l.enabled && (trafficExceeded || (!bwViaAgent && bandwidthExceeded)))
 
   return {
     limit: l,
@@ -134,6 +141,10 @@ const ipsForUserLabel = (userLabel: string) => {
   }
   if (!out.length && looksLikeIP(userLabel)) out.push(userLabel)
   return Array.from(new Set(out))
+}
+
+export const getIpsForUser = (userLabel: string) => {
+  return ipsForUserLabel(userLabel)
 }
 
 const getCfgList = (cfg: any, key: string): string[] => {
@@ -239,11 +250,14 @@ const enforceNow = async () => {
     if (l.disabled) return true
     if (!l.enabled) return false
 
+    const bwViaAgent = !!agentEnabled.value && !!agentEnforceBandwidth.value
+
     if (l.bandwidthLimitBps && l.bandwidthLimitBps > 0) {
       const sp = speedByUser.get(user) || 0
       if (sp >= l.bandwidthLimitBps) {
         bwExceedCountByUser.value[user] = (bwExceedCountByUser.value[user] || 0) + 1
-        if (bwExceedCountByUser.value[user] >= 3) return true
+        // If bandwidth is enforced by the router agent, do not "block" the user.
+        if (!bwViaAgent && bwExceedCountByUser.value[user] >= 3) return true
       } else {
         bwExceedCountByUser.value[user] = 0
       }
@@ -306,6 +320,84 @@ const enforceNow = async () => {
   }
 }
 
+// --- Bandwidth shaping via router agent (tc/iptables) ---
+const syncAgentShapingNow = async () => {
+  const enabled = !!agentEnabled.value && !!agentEnforceBandwidth.value
+  const prev = managedAgentShapers.value || {}
+
+  // When disabled: best-effort remove everything we previously managed.
+  if (!enabled) {
+    const ips = Object.keys(prev)
+    if (!ips.length) return
+    await Promise.allSettled(ips.map((ip) => agentRemoveShapeAPI(ip)))
+    managedAgentShapers.value = {}
+    return
+  }
+
+  // Desired: from enabled users with bandwidthLimit.
+  const desired: Record<string, { upMbps: number; downMbps: number }> = {}
+  for (const [user, raw] of Object.entries(userLimits.value || {})) {
+    const l = resolveLimit(raw)
+    if (!l.enabled) continue
+    if (!l.bandwidthLimitBps || l.bandwidthLimitBps <= 0) continue
+
+    // Stored as bytes/sec; convert to Mbps (bits/sec).
+    const mbps = +(((l.bandwidthLimitBps * 8) / 1_000_000)).toFixed(2)
+    if (!mbps || mbps <= 0) continue
+
+    for (const ip of ipsForUserLabel(user)) {
+      // Single field applies to both directions.
+      desired[ip] = { upMbps: mbps, downMbps: mbps }
+    }
+  }
+
+  // If agent is offline, don't destroy the previous state; we'll retry later.
+  const st = await agentStatusAPI()
+  if (!st?.ok) return
+
+  const now = Date.now()
+  const tasks: Array<Promise<void>> = []
+
+  // Apply/Update
+  for (const [ip, v] of Object.entries(desired)) {
+    const p = prev[ip]
+    const changed = !p || p.upMbps !== v.upMbps || p.downMbps !== v.downMbps
+    if (!changed) continue
+    tasks.push(
+      agentSetShapeAPI({ ip, upMbps: v.upMbps, downMbps: v.downMbps }).then((res) => {
+        agentShaperStatus.value = {
+          ...agentShaperStatus.value,
+          [ip]: { ok: !!res.ok, error: res.ok ? undefined : res.error, at: now },
+        }
+      }),
+    )
+  }
+  // Remove
+  for (const ip of Object.keys(prev)) {
+    if (desired[ip]) continue
+    tasks.push(
+      agentRemoveShapeAPI(ip).then((res) => {
+        const next = { ...(agentShaperStatus.value || {}) }
+        // keep last error if failed
+        if (!res.ok) {
+          next[ip] = { ok: false, error: res.error, at: now }
+        } else {
+          delete next[ip]
+        }
+        agentShaperStatus.value = next
+      }),
+    )
+  }
+
+  if (tasks.length) await Promise.allSettled(tasks)
+  managedAgentShapers.value = desired
+}
+
+const syncAgentShapingDebounced = debounce(() => {
+  syncAgentShapingNow()
+}, 600)
+
+
 const enforceDebounced = debounce(() => {
   enforceNow()
 }, 500)
@@ -331,6 +423,54 @@ export const initUserLimitsEnforcer = () => {
     },
     { deep: true },
   )
+
+  // Sync shaping rules whenever limits or agent settings change.
+  watch(
+    [userLimits, agentEnabled, agentEnforceBandwidth],
+    () => {
+      syncAgentShapingDebounced()
+    },
+    { deep: true },
+  )
+}
+
+export const reapplyAgentShapingForUser = async (userLabel: string) => {
+  const enabled = !!agentEnabled.value && !!agentEnforceBandwidth.value
+  if (!enabled) return { ok: false as const, error: 'agent disabled' }
+
+  const l = resolveLimit(userLimits.value[userLabel])
+  if (!l.enabled || !l.bandwidthLimitBps || l.bandwidthLimitBps <= 0) {
+    return { ok: false as const, error: 'no bandwidth limit' }
+  }
+
+  const mbps = +(((l.bandwidthLimitBps * 8) / 1_000_000)).toFixed(2)
+  if (!mbps || mbps <= 0) return { ok: false as const, error: 'invalid limit' }
+
+  const st = await agentStatusAPI()
+  if (!st?.ok) return { ok: false as const, error: st?.error || 'offline' }
+
+  const ips = ipsForUserLabel(userLabel)
+  if (!ips.length) return { ok: false as const, error: 'no ips' }
+
+  const now = Date.now()
+  const nextManaged = { ...(managedAgentShapers.value || {}) }
+  const nextStatus = { ...(agentShaperStatus.value || {}) }
+
+  const results = await Promise.allSettled(
+    ips.map((ip) =>
+      agentSetShapeAPI({ ip, upMbps: mbps, downMbps: mbps }).then((res) => {
+        nextStatus[ip] = { ok: !!res.ok, error: res.ok ? undefined : res.error, at: now }
+        if (res.ok) nextManaged[ip] = { upMbps: mbps, downMbps: mbps }
+        return res
+      }),
+    ),
+  )
+
+  agentShaperStatus.value = nextStatus
+  managedAgentShapers.value = nextManaged
+
+  const anyFail = results.some((r) => r.status === 'fulfilled' && !(r.value as any)?.ok)
+  return anyFail ? { ok: false as const, error: 'failed' } : { ok: true as const }
 }
 
 export const limitedUsersCount = computed(() => Object.keys(userLimits.value || {}).length)

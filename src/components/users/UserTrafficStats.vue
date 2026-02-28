@@ -65,6 +65,11 @@
             <tr v-for="row in rows" :key="row.user">
               <td class="font-medium">
                 <div class="flex items-center gap-2">
+                  <LockClosedIcon
+                    v-if="limitStates[row.user]?.blocked"
+                    class="h-4 w-4 text-error"
+                    :title="$t('userBlockedTip')"
+                  />
                   <template v-if="editingUser === row.user">
                     <input
                       class="input input-xs w-full max-w-[260px]"
@@ -75,14 +80,6 @@
                   <template v-else>
                     <span class="truncate inline-block max-w-[240px]" :title="row.user">{{ row.user }}</span>
                   </template>
-
-                  <span
-                    v-if="limitStates[row.user]?.blocked"
-                    class="badge badge-xs badge-error"
-                    :title="$t('userBlockedTip')"
-                  >
-                    {{ $t('blocked') }}
-                  </span>
                 </div>
               </td>
               <td class="max-md:hidden">
@@ -147,6 +144,32 @@
                     </button>
                   </template>
                   <template v-else>
+                    <template v-if="shaperBadge[row.user]">
+                      <span
+                        class="inline-flex items-center justify-center px-1"
+                        :title="shaperBadge[row.user].title"
+                      >
+                        <component
+                          :is="shaperBadge[row.user].icon"
+                          class="h-4 w-4"
+                          :class="shaperBadge[row.user].cls"
+                        />
+                      </span>
+                      <button
+                        v-if="shaperBadge[row.user].showReapply"
+                        type="button"
+                        class="btn btn-ghost btn-circle btn-xs relative z-20"
+                        :disabled="applyingShaperUser === row.user"
+                        @click.stop.prevent="reapplyShaper(row.user)"
+                        @pointerdown.stop.prevent
+                        @mousedown.stop.prevent
+                        @touchstart.stop.prevent
+                        :title="$t('reapply')"
+                      >
+                        <span v-if="applyingShaperUser === row.user" class="loading loading-spinner loading-xs"></span>
+                        <ArrowPathIcon v-else class="h-4 w-4" />
+                      </button>
+                    </template>
                     <button
                       type="button"
                       class="btn btn-ghost btn-circle btn-xs relative z-20"
@@ -220,8 +243,21 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <label class="flex flex-col gap-1">
-              <span class="text-sm opacity-70">{{ $t('trafficLimit') }} (GiB)</span>
-              <input class="input input-sm" type="number" min="0" step="0.1" v-model.number="draftTrafficGiB" :disabled="!draftEnabled" />
+              <span class="text-sm opacity-70">{{ $t('trafficLimit') }}</span>
+              <div class="flex items-center gap-2">
+                <input
+                  class="input input-sm flex-1"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  v-model.number="draftTrafficValue"
+                  :disabled="!draftEnabled"
+                />
+                <select class="select select-sm w-20" v-model="draftTrafficUnit" :disabled="!draftEnabled">
+                  <option value="GB">GB</option>
+                  <option value="MB">MB</option>
+                </select>
+              </div>
             </label>
 
             <label class="flex flex-col gap-1">
@@ -274,15 +310,26 @@ import { prettyBytesHelper } from '@/helper/utils'
 import { activeConnections } from '@/store/connections'
 import { sourceIPLabelList } from '@/store/settings'
 import { autoDisconnectLimitedUsers, hardBlockLimitedUsers, type UserLimitPeriod } from '@/store/userLimits'
-import { clearUserLimit, getUserLimit, setUserLimit } from '@/composables/userLimits'
+import { agentEnabled, agentEnforceBandwidth, agentShaperStatus } from '@/store/agent'
+import {
+  clearUserLimit,
+  getIpsForUser,
+  getUserLimit,
+  reapplyAgentShapingForUser,
+  setUserLimit,
+} from '@/composables/userLimits'
 import { clearUserTrafficHistory, formatTraffic, getTrafficRange, userTrafficStoreSize } from '@/composables/userTraffic'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import {
   AdjustmentsHorizontalIcon,
+  ArrowPathIcon,
   CheckIcon,
+  CheckCircleIcon,
+  LockClosedIcon,
   PencilSquareIcon,
+  QuestionMarkCircleIcon,
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
@@ -511,8 +558,10 @@ const limitStates = computed(() => {
     const trafficExceeded = l.enabled && tl > 0 && usage >= tl
     const bandwidthExceeded = l.enabled && bl > 0 && sp >= bl
 
+    const bwViaAgent = !!agentEnabled.value && !!agentEnforceBandwidth.value
+
     // Manual block works regardless of "enabled".
-    const blocked = l.disabled || (l.enabled && (trafficExceeded || bandwidthExceeded))
+    const blocked = l.disabled || (l.enabled && (trafficExceeded || (!bwViaAgent && bandwidthExceeded)))
 
     const pct = tl > 0 ? Math.min(999, Math.floor((usage / tl) * 100)) : 0
 
@@ -530,20 +579,99 @@ const limitStates = computed(() => {
   return out
 })
 
+type ShaperBadge = { icon: any; cls: string; title: string; showReapply: boolean }
+
+const shaperBadge = computed<Record<string, ShaperBadge | null>>(() => {
+  const out: Record<string, ShaperBadge | null> = {}
+  const viaAgent = !!agentEnabled.value && !!agentEnforceBandwidth.value
+  if (!viaAgent) return out
+
+  const st = agentShaperStatus.value || {}
+
+  for (const row of rows.value) {
+    const l = getUserLimit(row.user)
+    if (!l.enabled || !l.bandwidthLimitBps || l.bandwidthLimitBps <= 0) {
+      out[row.user] = null
+      continue
+    }
+
+    const ips = getIpsForUser(row.user)
+    if (!ips.length) {
+      out[row.user] = {
+        icon: QuestionMarkCircleIcon,
+        cls: 'text-base-content/60',
+        title: `${row.user}: no IPs`,
+        showReapply: true,
+      }
+      continue
+    }
+
+    const statuses = ips.map((ip) => st[ip]).filter(Boolean)
+    const hasFail = ips.some((ip) => st[ip] && st[ip].ok === false)
+    const allOk = ips.every((ip) => st[ip] && st[ip].ok === true)
+
+    if (hasFail) {
+      const firstErr = ips.map((ip) => st[ip]).find((x) => x && !x.ok)?.error
+      out[row.user] = {
+        icon: XMarkIcon,
+        cls: 'text-error',
+        title: `${t('shaperFailed')}${firstErr ? `: ${firstErr}` : ''}`,
+        showReapply: true,
+      }
+    } else if (allOk) {
+      out[row.user] = {
+        icon: CheckCircleIcon,
+        cls: 'text-success',
+        title: t('shaperApplied'),
+        showReapply: true,
+      }
+    } else if (!statuses.length) {
+      out[row.user] = {
+        icon: QuestionMarkCircleIcon,
+        cls: 'text-base-content/60',
+        title: t('shaperUnknown'),
+        showReapply: true,
+      }
+    } else {
+      out[row.user] = {
+        icon: QuestionMarkCircleIcon,
+        cls: 'text-base-content/60',
+        title: t('shaperUnknown'),
+        showReapply: true,
+      }
+    }
+  }
+
+  return out
+})
+
+const applyingShaperUser = ref<string | null>(null)
+const reapplyShaper = async (user: string) => {
+  if (!user) return
+  applyingShaperUser.value = user
+  try {
+    await reapplyAgentShapingForUser(user)
+  } finally {
+    applyingShaperUser.value = null
+  }
+}
+
 // --- Limits dialog ---
 const limitsDialogOpen = ref(false)
 const limitsUser = ref('')
 
 const draftEnabled = ref(false)
 const draftDisabled = ref(false)
-const draftTrafficGiB = ref<number>(0)
+const draftTrafficValue = ref<number>(0)
+const draftTrafficUnit = ref<'GB' | 'MB'>('GB')
 const draftBandwidthMbps = ref<number>(0)
 const draftPeriod = ref<UserLimitPeriod>('30d')
 
-const bytesFromGiB = (gib: number) => {
-  const n = Number(gib)
+const bytesFromTraffic = (value: number, unit: 'GB' | 'MB') => {
+  const n = Number(value)
   if (!Number.isFinite(n) || n <= 0) return 0
-  return Math.round(n * 1024 * 1024 * 1024)
+  const factor = unit === 'GB' ? 1_000_000_000 : 1_000_000
+  return Math.round(n * factor)
 }
 
 const bpsFromMbps = (mbps: number) => {
@@ -558,7 +686,9 @@ const openLimits = (user: string) => {
   draftEnabled.value = l.enabled
   draftDisabled.value = l.disabled
   draftPeriod.value = l.trafficPeriod
-  draftTrafficGiB.value = l.trafficLimitBytes ? +(l.trafficLimitBytes / (1024 ** 3)).toFixed(2) : 0
+  draftTrafficUnit.value = (l.trafficLimitUnit as any) || (l.trafficLimitBytes >= 1_000_000_000 ? 'GB' : 'MB')
+  const factor = draftTrafficUnit.value === 'GB' ? 1_000_000_000 : 1_000_000
+  draftTrafficValue.value = l.trafficLimitBytes ? +(l.trafficLimitBytes / factor).toFixed(2) : 0
   draftBandwidthMbps.value = l.bandwidthLimitBps ? +(((l.bandwidthLimitBps * 8) / 1_000_000)).toFixed(2) : 0
   limitsDialogOpen.value = true
 }
@@ -567,7 +697,7 @@ const saveLimits = () => {
   const user = limitsUser.value
   if (!user) return
 
-  const trafficLimitBytes = bytesFromGiB(draftTrafficGiB.value)
+  const trafficLimitBytes = bytesFromTraffic(draftTrafficValue.value, draftTrafficUnit.value)
   const bandwidthLimitBps = bpsFromMbps(draftBandwidthMbps.value)
 
   const enabled = !!draftEnabled.value
@@ -585,6 +715,7 @@ const saveLimits = () => {
     disabled,
     trafficPeriod: draftPeriod.value,
     trafficLimitBytes: trafficLimitBytes || undefined,
+    trafficLimitUnit: trafficLimitBytes ? draftTrafficUnit.value : undefined,
     bandwidthLimitBps: bandwidthLimitBps || undefined,
   })
 

@@ -8,16 +8,16 @@
       <div
         v-for="node in nodesLatency"
         :key="node.name"
-        class="flex h-4 w-4 items-center justify-center rounded-full transition hover:scale-110"
-        :class="getBgColor(node.latency)"
+        class="flex h-5 w-5 items-center justify-center rounded-full transition hover:scale-110"
+        :class="[
+          getBgColor(node.latency),
+          now === node.name ? 'ring-2 ring-base-100 ring-offset-2 ring-offset-base-content/20' : '',
+        ]"
         ref="dotsRef"
         @mouseenter="(e) => makeTippy(e, node)"
         @click.stop="$emit('nodeclick', node.name)"
       >
-        <div
-          class="h-2 w-2 rounded-full bg-white"
-          v-if="now === node.name"
-        ></div>
+        <component :is="iconForLatency(node.latency)" class="h-3.5 w-3.5 text-white/90" />
       </div>
     </template>
     <div
@@ -59,6 +59,7 @@ import { useTooltip } from '@/helper/tooltip'
 import { getLatencyByName } from '@/store/proxies'
 import { lowLatency, mediumLatency, proxyPreviewType } from '@/store/settings'
 import { useElementSize } from '@vueuse/core'
+import { BoltIcon, PauseCircleIcon, PlayCircleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
 
 const props = defineProps<{
@@ -119,6 +120,13 @@ const getBgColor = (latency: number) => {
   } else {
     return 'bg-high-latency'
   }
+}
+
+const iconForLatency = (latency: number) => {
+  if (latency === NOT_CONNECTED) return XMarkIcon
+  if (latency < lowLatency.value) return BoltIcon
+  if (latency < mediumLatency.value) return PlayCircleIcon
+  return PauseCircleIcon
 }
 
 const goodsCounts = computed(() => {

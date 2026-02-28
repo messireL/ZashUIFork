@@ -1,5 +1,6 @@
 <template>
   <div class="flex h-full flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
+    <AgentCard />
     <ChartsCard title-key="router" />
     <NetworkCard v-if="showIPAndConnectionInfo" />
 
@@ -13,6 +14,7 @@
 </template>
 
 <script setup lang="ts">
+import AgentCard from '@/components/router/AgentCard.vue'
 import BackendVersion from '@/components/common/BackendVersion.vue'
 import ChartsCard from '@/components/overview/ChartsCard.vue'
 import NetworkCard from '@/components/overview/NetworkCard.vue'

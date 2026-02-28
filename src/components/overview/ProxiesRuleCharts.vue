@@ -1,5 +1,10 @@
 <template>
-  <div :class="twMerge('relative w-full overflow-hidden h-[clamp(22rem,55vh,32rem)]')" @mousemove.stop @touchmove.stop>
+  <div
+    :class="twMerge('relative w-full overflow-hidden rounded-2xl')"
+    :style="isFullScreen ? '' : `height: ${topologyHeight}px;`"
+    @mousemove.stop
+    @touchmove.stop
+  >
     <div ref="chart" class="h-full w-full" />
     <span class="border-base-content/30 text-base-content/10 bg-base-100/70 hidden" ref="colorRef" />
 
@@ -14,6 +19,18 @@
     >
       <component :is="isFullScreen ? ArrowsPointingInIcon : ArrowsPointingOutIcon" class="h-4 w-4" />
     </button>
+
+    <!-- manual resize handle (desktop) -->
+    <div
+      v-if="!isFullScreen"
+      class="absolute left-0 right-0 bottom-0 h-3 cursor-ns-resize opacity-40 hover:opacity-80"
+      @pointerdown.stop.prevent="startResize"
+      @mousedown.stop.prevent
+      @touchstart.stop.prevent
+      :title="$t('resize')"
+    >
+      <div class="mx-auto mt-1 h-1 w-16 rounded-full bg-base-content/30" />
+    </div>
   </div>
 
   <Teleport to="body">
@@ -52,7 +69,7 @@ import {
 import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
 import { ArrowsPointingInIcon, ArrowsPointingOutIcon } from '@heroicons/vue/24/outline'
-import { useElementSize } from '@vueuse/core'
+import { useElementSize, useStorage } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
 import * as echarts from 'echarts/core'
@@ -88,6 +105,43 @@ const updateFontFamily = () => {
 }
 
 const { width, height } = useElementSize(chart)
+
+// Topology height can be manually resized.
+const defaultTopologyHeight = () => {
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  return Math.round(Math.max(420, Math.min(900, vh * 0.65)))
+}
+const topologyHeight = useStorage<number>('config/topology-height-px', defaultTopologyHeight())
+const resizing = ref(false)
+let resizeStartY = 0
+let resizeStartH = 0
+
+const clampHeight = (h: number) => {
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const min = 320
+  const max = Math.max(min, Math.floor(vh * 0.9))
+  return Math.round(Math.max(min, Math.min(max, h)))
+}
+
+const onResizeMove = (e: PointerEvent) => {
+  if (!resizing.value) return
+  const dy = e.clientY - resizeStartY
+  topologyHeight.value = clampHeight(resizeStartH + dy)
+}
+
+const stopResize = () => {
+  resizing.value = false
+  window.removeEventListener('pointermove', onResizeMove)
+  window.removeEventListener('pointerup', stopResize)
+}
+
+const startResize = (e: PointerEvent) => {
+  resizing.value = true
+  resizeStartY = e.clientY
+  resizeStartH = topologyHeight.value
+  window.addEventListener('pointermove', onResizeMove)
+  window.addEventListener('pointerup', stopResize)
+}
 const labelFontSize = computed(() => {
   const w = Number(width.value) || 0
   return isFullScreen.value ? 16 : w >= 1100 ? 15 : w >= 800 ? 14 : 13
@@ -592,6 +646,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopResize()
   stopTimer()
   mainChart?.dispose()
   fsChart?.dispose()
