@@ -11,6 +11,14 @@ if [ ! -d /opt ]; then
   exit 1
 fi
 
+# Ensure HTTP daemon exists (BusyBox httpd is not always compiled in on Keenetic builds).
+# We use uhttpd from Entware (keenetic feed) as a drop-in replacement.
+if ! command -v uhttpd >/dev/null 2>&1; then
+  echo "[zash-agent] uhttpd not found. Installing uhttpd_kn (Entware keenetic feed)..." >&2
+  opkg update >/dev/null 2>&1 || true
+  opkg install uhttpd_kn >/dev/null 2>&1 || opkg install uhttpd >/dev/null 2>&1 || true
+fi
+
 WAN_IF="$(ip -4 route show default 2>/dev/null | awk '{print $5}' | head -n1)"
 [ -n "$WAN_IF" ] || WAN_IF="eth0"
 
@@ -34,6 +42,9 @@ BIND_IP="$BIND_IP"
 PORT="$PORT"
 STATE_FILE="$AGENT_DIR/var/shapers.db"
 BLOCKS_FILE="$AGENT_DIR/var/blocks.db"
+
+# Path to Mihomo YAML config on the router
+MIHOMO_CONFIG="/opt/etc/mihomo/config.yaml"
 
 # Optional: set a token to require Authorization: Bearer <token>
 TOKEN=""
@@ -59,6 +70,7 @@ PORT="${PORT:-9099}"
 STATE_FILE="${STATE_FILE:-/opt/zash-agent/var/shapers.db}"
 BLOCKS_FILE="${BLOCKS_FILE:-/opt/zash-agent/var/blocks.db}"
 TOKEN="${TOKEN:-}"
+MIHOMO_CONFIG="${MIHOMO_CONFIG:-/opt/etc/mihomo/config.yaml}"
 WAN_RATE="${WAN_RATE:-1000}"
 LAN_RATE="${LAN_RATE:-1000}"
 
@@ -83,6 +95,110 @@ reply_ok() {
   echo "Cache-Control: no-store"
   echo
   echo "$1"
+}
+
+
+b64enc() {
+  if command -v base64 >/dev/null 2>&1; then
+    base64 -w 0 2>/dev/null || base64 2>/dev/null | tr -d '\n'
+  elif command -v openssl >/dev/null 2>&1; then
+    openssl base64 -A
+  else
+    cat | tr -d '\n'
+  fi
+}
+
+ssl_not_after() {
+  host="$1"; port="$2"
+  [ -n "$host" ] || return 0
+  [ -n "$port" ] || port="443"
+  command -v openssl >/dev/null 2>&1 || return 0
+  if command -v timeout >/dev/null 2>&1; then
+    end="$(echo | timeout 7 openssl s_client -servername "$host" -connect "$host:$port" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | sed 's/^notAfter=//')"
+  else
+    end="$(echo | openssl s_client -servername "$host" -connect "$host:$port" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | sed 's/^notAfter=//')"
+  fi
+  printf '%s' "$end"
+}
+
+mihomo_config_json() {
+  if [ ! -f "$MIHOMO_CONFIG" ]; then
+    reply_ok '{"ok":false,"error":"config-not-found"}'
+    return
+  fi
+  content="$(head -c 524288 "$MIHOMO_CONFIG" | b64enc)"
+  reply_ok "$(json ok true contentB64 "$content")"
+}
+
+mihomo_providers_json() {
+  if [ ! -f "$MIHOMO_CONFIG" ]; then
+    reply_ok '{"ok":false,"error":"config-not-found"}'
+    return
+  fi
+
+  in=0
+  pname=""
+  url=""
+  out='{"ok":true,"providers":['
+  first=1
+
+  while IFS= read -r line; do
+    if [ $in -eq 0 ]; then
+      case "$line" in
+        proxy-providers:*) in=1; continue ;;
+      esac
+      continue
+    fi
+
+    echo "$line" | grep -qE '^[^[:space:]]' && break
+
+    if echo "$line" | grep -qE '^[[:space:]]{2}[^[:space:]].*:[[:space:]]*$'; then
+      pname="$(echo "$line" | sed -E 's/^[[:space:]]{2}([^:]+):.*/\1/')"
+      url=""
+      continue
+    fi
+
+    if echo "$line" | grep -qE '^[[:space:]]{4}url:[[:space:]]*'; then
+      url="$(echo "$line" | sed -E 's/^[[:space:]]{4}url:[[:space:]]*//')"
+      url="$(echo "$url" | sed -E 's/^["\x27]?//; s/["\x27]?$//')"
+
+      scheme="${url%%://*}"
+      rest="${url#*://}"
+      hostport="${rest%%/*}"
+
+      host="$hostport"
+      port="443"
+      if echo "$hostport" | grep -q '^\['; then
+        host="$(echo "$hostport" | sed -E 's/^\[([^\]]+)\].*/\1/')"
+        port_part="$(echo "$hostport" | sed -nE 's/^\[[^\]]+\]:(.*)$/\1/p')"
+        [ -n "$port_part" ] && port="$port_part"
+      else
+        host="$(printf '%s' "$hostport" | cut -d: -f1)"
+        if echo "$hostport" | grep -q ':'; then
+          port_part="$(printf '%s' "$hostport" | awk -F: '{print $NF}')"
+          [ -n "$port_part" ] && port="$port_part"
+        fi
+      fi
+
+      not_after=""
+      if [ "$scheme" = "https" ] || [ "$scheme" = "wss" ]; then
+        not_after="$(ssl_not_after "$host" "$port")"
+      fi
+
+      [ $first -eq 0 ] && out="$out,"
+      first=0
+      esc_name="$(printf '%s' "$pname" | sed 's/"/\\\"/g')"
+      esc_url="$(printf '%s' "$url" | sed 's/"/\\\"/g')"
+      esc_host="$(printf '%s' "$host" | sed 's/"/\\\"/g')"
+      esc_port="$(printf '%s' "$port" | sed 's/"/\\\"/g')"
+      esc_na="$(printf '%s' "$not_after" | sed 's/"/\\\"/g')"
+
+      out="$out{\"name\":\"$esc_name\",\"url\":\"$esc_url\",\"host\":\"$esc_host\",\"port\":\"$esc_port\",\"sslNotAfter\":\"$esc_na\"}"
+    fi
+  done < "$MIHOMO_CONFIG"
+
+  out="$out]}"
+  reply_ok "$out"
 }
 
 if [ "$REQUEST_METHOD" = "OPTIONS" ]; then
@@ -452,16 +568,18 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   exit 0
 fi
 
-echo "[zash-agent] starting httpd on $BIND_IP:$PORT"
+echo "[zash-agent] starting uhttpd on $BIND_IP:$PORT"
 
-busybox httpd -p "$BIND_IP:$PORT" -h /opt/zash-agent/www -c /opt/zash-agent/www/cgi-bin &
+UHTTPD_BIN="$(command -v uhttpd 2>/dev/null || true)"
+[ -n "$UHTTPD_BIN" ] || UHTTPD_BIN="/opt/sbin/uhttpd"
+"$UHTTPD_BIN" -f -p "$BIND_IP:$PORT" -h /opt/zash-agent/www -x /cgi-bin -t 15 -T 15 &
 echo $! > "$PID_FILE"
 
 # Re-apply saved shaping rules
 HOST="$BIND_IP"
 [ "$HOST" = "0.0.0.0" ] && HOST="127.0.0.1"
-sleep 0.2
-busybox wget -qO- "http://$HOST:$PORT/cgi-bin/api.sh?cmd=rehydrate" >/dev/null 2>&1 || true
+sleep 1
+(wget -qO- "http://$HOST:$PORT/cgi-bin/api.sh?cmd=rehydrate" >/dev/null 2>&1 || busybox wget -qO- "http://$HOST:$PORT/cgi-bin/api.sh?cmd=rehydrate" >/dev/null 2>&1 || true)
 
 EOF
 

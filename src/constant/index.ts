@@ -72,6 +72,7 @@ export enum PROXY_SORT_TYPE {
 export enum PROXY_PREVIEW_TYPE {
   AUTO = 'auto',
   DOTS = 'dots',
+  SQUARES = 'squares',
   BAR = 'bar',
 }
 

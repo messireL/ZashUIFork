@@ -139,6 +139,7 @@ const ru: LANG_MESSAGE = {
   proxyPreviewType: 'Тип предварительного просмотра прокси',
   auto: 'Авто',
   dots: 'Точки',
+  squares: 'Квадратики',
   bar: 'Полоса',
   exportSettings: 'Экспорт настроек',
   importSettings: 'Импорт настроек',

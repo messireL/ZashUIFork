@@ -137,6 +137,7 @@ const en = {
   proxyPreviewType: 'Proxy Preview Type',
   auto: 'Auto',
   dots: 'Dots',
+  squares: 'Squares',
   bar: 'Bar',
   exportSettings: 'Export Settings',
   importSettings: 'Import Settings',

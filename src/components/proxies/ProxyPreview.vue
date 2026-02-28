@@ -2,13 +2,14 @@
   <div
     ref="previewRef"
     class="flex flex-wrap"
-    :class="[showDots ? 'gap-1 pt-3' : 'gap-2 pt-4 pb-1']"
+    :class="[(showDots || showSquares) ? 'gap-1 pt-3' : 'gap-2 pt-4 pb-1']"
   >
-    <template v-if="showDots">
+    <template v-if="showDots || showSquares">
       <div
         v-for="node in nodesLatency"
         :key="node.name"
-        class="flex h-5 w-5 items-center justify-center rounded-full transition hover:scale-110"
+        class="flex h-5 w-5 items-center justify-center transition hover:scale-110"
+        :class="[showSquares ? 'rounded-md' : 'rounded-full']"
         :class="[
           getBgColor(node.latency),
           now === node.name ? 'ring-2 ring-base-100 ring-offset-2 ring-offset-base-content/20' : '',
@@ -94,6 +95,10 @@ const makeTippy = (e: Event, node: { name: string; latency: number }) => {
   tag.classList.add('flex', 'items-center', 'gap-2')
   showTip(e, tag)
 }
+
+const showSquares = computed(() => {
+  return proxyPreviewType.value === PROXY_PREVIEW_TYPE.SQUARES
+})
 
 const showDots = computed(() => {
   return (

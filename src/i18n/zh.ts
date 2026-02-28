@@ -139,6 +139,7 @@ const zh: LANG_MESSAGE = {
   proxyPreviewType: '节点预览类型',
   auto: '自动',
   dots: '点',
+  squares: '方块',
   bar: '条',
   exportSettings: '导出设置',
   importSettings: '导入设置',

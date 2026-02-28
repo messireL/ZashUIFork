@@ -135,3 +135,55 @@ export const agentUnblockMacAPI = async (mac: string): Promise<{ ok: boolean; er
     return { ok: false, error: e?.message || 'failed' }
   }
 }
+
+
+let _mihomoProvidersCache: { ok: boolean; providers?: any[]; error?: string } | null = null
+let _mihomoProvidersAt = 0
+
+export const agentMihomoConfigAPI = async (): Promise<{
+  ok: boolean
+  contentB64?: string
+  error?: string
+}> => {
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'mihomo_config' },
+      silent: true as any,
+      headers: { 'X-Zash-Silent': '1' } as any,
+    })
+    return (data || {}) as any
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'offline' }
+  }
+}
+
+export const agentMihomoProvidersAPI = async (force = false): Promise<{
+  ok: boolean
+  providers?: Array<{
+    name: string
+    url?: string
+    host?: string
+    port?: string
+    sslNotAfter?: string
+  }>
+  error?: string
+}> => {
+  const now = Date.now()
+  if (!force && _mihomoProvidersCache && now - _mihomoProvidersAt < 60_000) return _mihomoProvidersCache as any
+
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'mihomo_providers' },
+      silent: true as any,
+      headers: { 'X-Zash-Silent': '1' } as any,
+    })
+    _mihomoProvidersCache = (data || {}) as any
+    _mihomoProvidersAt = now
+    return _mihomoProvidersCache as any
+  } catch (e: any) {
+    const res = { ok: false, error: e?.message || 'offline' }
+    _mihomoProvidersCache = res as any
+    _mihomoProvidersAt = now
+    return res as any
+  }
+}

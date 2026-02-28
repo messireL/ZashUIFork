@@ -1,7 +1,7 @@
 <template>
   <CollapseCard :name="proxyProvider.name">
-    <template v-slot:title>
-      <div class="flex items-center justify-between gap-2">
+    <template v-slot:title="{ open }">
+      <div class="flex items-center justify-between gap-2 rounded-xl px-2 py-1" :class="open ? 'bg-base-200 ring-1 ring-base-300' : ''">
         <div class="text-xl font-medium">
           {{ proxyProvider.name }}
           <span class="text-base-content/60 text-sm font-normal"> ({{ proxiesCount }}) </span>
@@ -99,6 +99,8 @@
 
 <script setup lang="ts">
 import { proxyProviderHealthCheckAPI, updateProxyProviderAPI } from '@/api'
+import { agentMihomoProvidersAPI } from '@/api/agent'
+import { agentEnabled } from '@/store/agent'
 import { useBounceOnVisible } from '@/composables/bouncein'
 import { useRenderProxies } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
@@ -108,7 +110,7 @@ import { twoColumnProxyGroup } from '@/store/settings'
 import { ArrowPathIcon, BoltIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
 import { twMerge } from 'tailwind-merge'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CollapseCard from '../common/CollapseCard.vue'
 import ProxyNodeCard from './ProxyNodeCard.vue'
@@ -124,6 +126,17 @@ const proxyProvider = computed(
 )
 const allProxies = computed(() => proxyProvider.value.proxies.map((node) => node.name) ?? [])
 const { renderProxies, proxiesCount } = useRenderProxies(allProxies)
+
+const agentSslNotAfter = ref<string | null>(null)
+
+onMounted(async () => {
+  if (!agentEnabled.value) return
+  const res = await agentMihomoProvidersAPI()
+  if (!res?.ok || !res?.providers) return
+  const found = res.providers.find((p) => p?.name === props.name)
+  const na = (found as any)?.sslNotAfter
+  if (na) agentSslNotAfter.value = String(na)
+})
 
 const providerStats = computed(() => {
   const set = new Set(allProxies.value || [])
@@ -225,7 +238,9 @@ const sslExpireInfo = computed(() => {
       'certNotAfter',
     ])
 
-  const d = parseDateMaybe(raw)
+  const raw2: any = raw || agentSslNotAfter.value
+
+  const d = parseDateMaybe(raw2)
   if (!d) return null
 
   const days = d.diff(dayjs(), 'day')

@@ -4,10 +4,10 @@
       class="collapse-title cursor-pointer overflow-hidden pr-4 select-none"
       @click="showCollapse = !showCollapse"
     >
-      <slot name="title" />
+      <slot name="title" :open="showCollapse" />
       <slot
         v-if="!showCollapse"
-        name="preview"
+        name="preview" :open="showCollapse"
       />
     </div>
     <div

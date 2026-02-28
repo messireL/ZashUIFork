@@ -83,6 +83,8 @@
 
 <script setup lang="ts">
 import { getConfigsAPI, getConfigsRawAPI, reloadConfigsAPI, restartCoreAPI } from '@/api'
+import { agentMihomoConfigAPI } from '@/api/agent'
+import { agentEnabled } from '@/store/agent'
 import axios from 'axios'
 import { showNotification } from '@/helper/notification'
 import { useStorage } from '@vueuse/core'
@@ -250,6 +252,19 @@ const load = async () => {
   if (isLoading.value) return
   isLoading.value = true
   try {
+if (agentEnabled.value) {
+  const res = await agentMihomoConfigAPI()
+  if (res?.ok && res?.contentB64) {
+    try {
+      payload.value = atob(res.contentB64)
+      showNotification({ content: 'mihomoConfigLoadSuccess', type: 'alert-success' })
+      return
+    } catch {
+      // ignore decode errors and fallback
+    }
+  }
+}
+
     const fileText = await tryLoadFromFileLikeEndpoints(path.value)
     if (fileText) {
       payload.value = fileText
