@@ -33,6 +33,7 @@ LAN_IF="$LAN_IF"
 BIND_IP="$BIND_IP"
 PORT="$PORT"
 STATE_FILE="$AGENT_DIR/var/shapers.db"
+BLOCKS_FILE="$AGENT_DIR/var/blocks.db"
 
 # Optional: set a token to require Authorization: Bearer <token>
 TOKEN=""
@@ -56,6 +57,7 @@ WAN_IF="${WAN_IF:-eth0}"
 LAN_IF="${LAN_IF:-br0}"
 PORT="${PORT:-9099}"
 STATE_FILE="${STATE_FILE:-/opt/zash-agent/var/shapers.db}"
+BLOCKS_FILE="${BLOCKS_FILE:-/opt/zash-agent/var/blocks.db}"
 TOKEN="${TOKEN:-}"
 WAN_RATE="${WAN_RATE:-1000}"
 LAN_RATE="${LAN_RATE:-1000}"
@@ -89,7 +91,7 @@ if [ "$REQUEST_METHOD" = "OPTIONS" ]; then
 fi
 
 # Parse query string (key=value&...)
-cmd=""; ip=""; up=""; down=""; token_q=""
+cmd=""; ip=""; up=""; down=""; mac=""; ports=""; token_q=""
 IFS='&'
 for kv in $QUERY_STRING; do
   key="${kv%%=*}"
@@ -101,6 +103,8 @@ for kv in $QUERY_STRING; do
     ip) ip="$val" ;;
     up) up="$val" ;;
     down) down="$val" ;;
+    mac) mac="$val" ;;
+    ports) ports="$val" ;;
     token) token_q="$val" ;;
   esac
 done
@@ -116,6 +120,11 @@ fi
 
 have_tc=0
 command -v tc >/dev/null 2>&1 && have_tc=1
+
+ensure_block_chain() {
+  iptables -t filter -nL ZASH_BLOCK >/dev/null 2>&1 || iptables -t filter -N ZASH_BLOCK
+  iptables -t filter -C INPUT -i "$LAN_IF" -j ZASH_BLOCK >/dev/null 2>&1 || iptables -t filter -I INPUT 1 -i "$LAN_IF" -j ZASH_BLOCK
+}
 
 ensure_iptables_chains() {
   iptables -t mangle -nL ZASH_UP >/dev/null 2>&1 || iptables -t mangle -N ZASH_UP
@@ -137,6 +146,131 @@ ensure_tc_base() {
     tc qdisc add dev "$LAN_IF" root handle 2: htb default 1 2>/dev/null || true
     tc class add dev "$LAN_IF" parent 2: classid 2:1 htb rate "${LAN_RATE}mbit" ceil "${LAN_RATE}mbit" 2>/dev/null || true
   }
+}
+
+neighbors() {
+  # Return LAN neighbor table (IP -> MAC). Useful to keep UI limits stable across DHCP changes.
+  echo "Content-Type: application/json"
+  echo "Access-Control-Allow-Origin: *"
+  echo "Access-Control-Allow-Methods: GET, POST, OPTIONS"
+  echo "Access-Control-Allow-Headers: Content-Type, Authorization"
+  echo "Cache-Control: no-store"
+  echo
+
+  printf '{"ok":true,"items":['
+  first=1
+  ip neigh show dev "$LAN_IF" 2>/dev/null | while read -r line; do
+    ipn="$(echo "$line" | awk '{print $1}')"
+    macn="$(echo "$line" | awk '{print $5}')"
+    stn="$(echo "$line" | awk '{print $6}')"
+    echo "$macn" | grep -q ':' || continue
+    [ -n "$ipn" ] || continue
+    [ -n "$macn" ] || continue
+    # skip incomplete
+    [ "$macn" = "00:00:00:00:00:00" ] && continue
+    [ "$first" -eq 0 ] && printf ','
+    first=0
+    printf '{"ip":"%s","mac":"%s","state":"%s"}' "$ipn" "$macn" "$stn"
+  done
+  printf ']}'
+}
+
+ip2mac() {
+  # Resolve a single IP to a MAC address (best effort).
+  ip_="$1"
+  [ -n "$ip_" ] || { reply_ok '{"ok":false,"error":"missing-ip"}'; return; }
+
+  mac_=""
+  mac_="$(ip neigh show dev "$LAN_IF" to "$ip_" 2>/dev/null | awk '/lladdr/{print $5; exit}' | tr 'A-Z' 'a-z')"
+  if [ -z "$mac_" ]; then
+    mac_="$(arp -n "$ip_" 2>/dev/null | awk 'NR==2{print $3; exit}' | tr 'A-Z' 'a-z')"
+  fi
+
+  if [ -n "$mac_" ] && echo "$mac_" | grep -qiE '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'; then
+    reply_ok "$(json ok true mac "$mac_")"
+  else
+    reply_ok '{"ok":false,"error":"not-found"}'
+  fi
+}
+
+persist_block() {
+  m="$1"; p="$2"
+  mkdir -p "$(dirname "$BLOCKS_FILE")" >/dev/null 2>&1 || true
+  tmp="${BLOCKS_FILE}.tmp"
+  [ -f "$BLOCKS_FILE" ] && grep -vi "^${m} " "$BLOCKS_FILE" > "$tmp" 2>/dev/null || true
+  echo "${m} ${p}" >> "$tmp"
+  mv "$tmp" "$BLOCKS_FILE" 2>/dev/null || true
+}
+
+remove_persist_block() {
+  m="$1"
+  [ -f "$BLOCKS_FILE" ] || return 0
+  tmp="${BLOCKS_FILE}.tmp"
+  grep -vi "^${m} " "$BLOCKS_FILE" > "$tmp" 2>/dev/null || true
+  mv "$tmp" "$BLOCKS_FILE" 2>/dev/null || true
+}
+
+block_mac_ports() {
+  m="$1"; p="$2"
+  [ -n "$m" ] || { reply_ok '{"ok":false,"error":"missing-mac"}'; return; }
+  ensure_block_chain
+
+  # default ports if not provided
+  [ -n "$p" ] || p="7890,7891,1080,1181,1182"
+
+  oldIFS="$IFS"
+  IFS=','
+  for port in $p; do
+    port="$(echo "$port" | tr -d ' ')"
+    echo "$port" | grep -q '^[0-9]\+$' || continue
+    iptables -t filter -C ZASH_BLOCK -m mac --mac-source "$m" -p tcp --dport "$port" -j REJECT >/dev/null 2>&1 || \
+      iptables -t filter -A ZASH_BLOCK -m mac --mac-source "$m" -p tcp --dport "$port" -j REJECT
+    iptables -t filter -C ZASH_BLOCK -m mac --mac-source "$m" -p udp --dport "$port" -j REJECT >/dev/null 2>&1 || \
+      iptables -t filter -A ZASH_BLOCK -m mac --mac-source "$m" -p udp --dport "$port" -j REJECT
+  done
+  IFS="$oldIFS"
+
+  persist_block "$m" "$p"
+  reply_ok '{"ok":true}'
+}
+
+unblock_mac_ports() {
+  m="$1"
+  [ -n "$m" ] || { reply_ok '{"ok":false,"error":"missing-mac"}'; return; }
+  ensure_block_chain
+
+  # remove any rules for this MAC (best effort)
+  while iptables -t filter -D ZASH_BLOCK -m mac --mac-source "$m" -j REJECT >/dev/null 2>&1; do :; done
+  # Also remove with protocol/port (some iptables builds require exact match)
+  iptables -t filter -S ZASH_BLOCK 2>/dev/null | grep -i "--mac-source $m" | while read -r rule; do
+    # Convert -A to -D
+    drule="$(echo "$rule" | sed 's/^-A /-D /')"
+    iptables -t filter $drule >/dev/null 2>&1 || true
+  done
+
+  remove_persist_block "$m"
+  reply_ok '{"ok":true}'
+}
+
+rehydrate_blocks() {
+  [ -f "$BLOCKS_FILE" ] || return 0
+  ensure_block_chain
+  while read -r m p; do
+    [ -n "$m" ] || continue
+    [ -n "$p" ] || p="7890,7891,1080,1181,1182"
+    # best-effort: re-add rules
+    oldIFS="$IFS"; IFS=','
+    for port in $p; do
+      port="$(echo "$port" | tr -d ' ')"
+      echo "$port" | grep -q '^[0-9]\+$' || continue
+      iptables -t filter -C ZASH_BLOCK -m mac --mac-source "$m" -p tcp --dport "$port" -j REJECT >/dev/null 2>&1 || \
+        iptables -t filter -A ZASH_BLOCK -m mac --mac-source "$m" -p tcp --dport "$port" -j REJECT
+      iptables -t filter -C ZASH_BLOCK -m mac --mac-source "$m" -p udp --dport "$port" -j REJECT >/dev/null 2>&1 || \
+        iptables -t filter -A ZASH_BLOCK -m mac --mac-source "$m" -p udp --dport "$port" -j REJECT
+    done
+    IFS="$oldIFS"
+  done < "$BLOCKS_FILE"
+  return 0
 }
 
 ip_to_int() {
@@ -238,6 +372,7 @@ rehydrate() {
     return
   fi
   if [ ! -f "$STATE_FILE" ]; then
+    rehydrate_blocks >/dev/null 2>&1 || true
     reply_ok '{"ok":true,"count":0}'
     return
   fi
@@ -248,6 +383,7 @@ rehydrate() {
     [ -n "$down" ] || down="$up"
     apply_tc_only "$ip" "$up" "$down" && count=$((count + 1))
   done < "$STATE_FILE"
+  rehydrate_blocks >/dev/null 2>&1 || true
   reply_ok "$(printf '{"ok":true,"count":%s}' "$count")"
 }
 
@@ -259,7 +395,7 @@ status() {
   have_hashlimit=0
   iptables -m hashlimit -h >/dev/null 2>&1 && have_hashlimit=1
 
-  reply_ok "$(printf '{"ok":true,"version":"0.1","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.2","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -268,6 +404,11 @@ status() {
 
 case "$cmd" in
   status|"") status ;;
+  neighbors) neighbors ;;
+  ip2mac)
+    [ -n "$ip" ] || { reply_ok '{"ok":false,"error":"missing-ip"}'; exit 0; }
+    ip2mac "$ip"
+    ;;
   shape)
     [ -n "$ip" ] || { reply_ok '{"ok":false,"error":"missing-ip"}'; exit 0; }
     [ -n "$up" ] || up="0"
@@ -280,6 +421,12 @@ case "$cmd" in
     ;;
   rehydrate)
     rehydrate
+    ;;
+  blockmac)
+    block_mac_ports "$mac" "$ports"
+    ;;
+  unblockmac)
+    unblock_mac_ports "$mac"
     ;;
   *) reply_ok '{"ok":false,"error":"unknown-cmd"}' ;;
 esac

@@ -78,3 +78,60 @@ export const agentRemoveShapeAPI = async (ip: string): Promise<{ ok: boolean; er
     return { ok: false, error: e?.message || 'failed' }
   }
 }
+
+export type AgentNeighbor = { ip: string; mac: string; state?: string }
+
+export const agentNeighborsAPI = async (): Promise<{ ok: boolean; items?: AgentNeighbor[]; error?: string }> => {
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'neighbors' },
+      silent: true as any,
+      headers: { 'X-Zash-Silent': '1' } as any,
+    })
+    return (data || { ok: true }) as any
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'failed' }
+  }
+}
+
+export const agentIpToMacAPI = async (ip: string): Promise<{ ok: boolean; mac?: string; error?: string }> => {
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'ip2mac', ip },
+      silent: true as any,
+      headers: { 'X-Zash-Silent': '1' } as any,
+    })
+    return (data || { ok: true }) as any
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'failed' }
+  }
+}
+
+export const agentBlockMacAPI = async (args: {
+  mac: string
+  ports: number[]
+}): Promise<{ ok: boolean; error?: string }> => {
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'blockmac', mac: args.mac, ports: args.ports.join(',') },
+      silent: true as any,
+      headers: { 'X-Zash-Silent': '1' } as any,
+    })
+    return (data || { ok: true }) as any
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'failed' }
+  }
+}
+
+export const agentUnblockMacAPI = async (mac: string): Promise<{ ok: boolean; error?: string }> => {
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'unblockmac', mac },
+      silent: true as any,
+      headers: { 'X-Zash-Silent': '1' } as any,
+    })
+    return (data || { ok: true }) as any
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'failed' }
+  }
+}

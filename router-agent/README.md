@@ -31,7 +31,9 @@ Router → **Router agent**:
 ## Endpoints
 
 - `GET /cgi-bin/api.sh?cmd=status`
+- `GET /cgi-bin/api.sh?cmd=ip2mac&ip=192.168.1.2`
 - `GET /cgi-bin/api.sh?cmd=shape&ip=192.168.1.2&up=10&down=30`
 - `GET /cgi-bin/api.sh?cmd=unshape&ip=192.168.1.2`
+- `GET /cgi-bin/api.sh?cmd=neighbors`
 
 If you set a token in `/opt/zash-agent/agent.env` (TOKEN=...), UI should send `Authorization: Bearer <token>`.

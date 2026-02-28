@@ -15,6 +15,7 @@ const ru: LANG_MESSAGE = {
   submit: 'Отправить',
   cancel: 'Отмена',
   add: 'Добавить',
+  clear: 'Очистить',
   delete: 'Удалить',
   edit: 'Редактировать',
   actions: 'Действия',
@@ -34,6 +35,9 @@ const ru: LANG_MESSAGE = {
   limitsEnforcementNote:
     'Применение: жёсткая блокировка через Mihomo `lan-disallowed-ips` + отключение активных соединений. Лимит канала — через агент на роутере (если включён), иначе через отключение соединений (best effort).',
   routerAgent: 'Агент роутера',
+  rebindMac: 'Перепривязать MAC по текущему IP',
+  rebindMacApply: 'Перепривязать MAC и применить блок/шейпер',
+  multipleMacsFound: 'Найдено несколько MAC',
   agentUrl: 'URL агента',
   agentToken: 'Токен агента',
   enforceBandwidth: 'Применять лимит канала',

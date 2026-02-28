@@ -15,6 +15,7 @@ const zh: LANG_MESSAGE = {
   submit: '提交',
   cancel: '取消',
   add: '添加',
+  clear: '清除',
   delete: '删除',
   edit: '编辑',
   actions: '操作',
@@ -34,6 +35,9 @@ const zh: LANG_MESSAGE = {
   limitsEnforcementNote:
     '执行：硬阻止使用 Mihomo `lan-disallowed-ips` 并断开活动连接。带宽限额若启用路由器代理则由代理执行，否则回退为断开连接（尽力而为）。',
   routerAgent: '路由器代理',
+  rebindMac: '从当前 IP 重新绑定 MAC',
+  rebindMacApply: '重新绑定 MAC 并应用封锁/限速',
+  multipleMacsFound: '发现多个 MAC',
   agentUrl: '代理 URL',
   agentToken: '代理令牌',
   enforceBandwidth: '执行带宽限额',

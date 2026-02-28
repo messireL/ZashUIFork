@@ -1,9 +1,22 @@
 import { disconnectByIdSilentAPI, getConfigsSilentAPI, patchConfigsSilentAPI } from '@/api'
-import { agentRemoveShapeAPI, agentSetShapeAPI, agentStatusAPI } from '@/api/agent'
+import {
+  agentBlockMacAPI,
+  agentNeighborsAPI,
+  agentRemoveShapeAPI,
+  agentSetShapeAPI,
+  agentStatusAPI,
+  agentUnblockMacAPI,
+} from '@/api/agent'
 import { getIPLabelFromMap } from '@/helper/sourceip'
 import { activeConnections } from '@/store/connections'
 import { sourceIPLabelList } from '@/store/settings'
-import { agentEnabled, agentEnforceBandwidth, agentShaperStatus, managedAgentShapers } from '@/store/agent'
+import {
+  agentEnabled,
+  agentEnforceBandwidth,
+  agentShaperStatus,
+  managedAgentBlocks,
+  managedAgentShapers,
+} from '@/store/agent'
 import {
   autoDisconnectLimitedUsers,
   hardBlockLimitedUsers,
@@ -22,6 +35,7 @@ export type UserLimitResolved = Required<Pick<UserLimit, 'enabled' | 'disabled' 
 
 const resolveLimit = (l?: UserLimit): UserLimitResolved => {
   return {
+    mac: l?.mac,
     // Default: no limits until user explicitly enables them.
     enabled: l?.enabled ?? false,
     disabled: l?.disabled ?? false,
@@ -116,6 +130,76 @@ const lastDisconnectAt = ref<Record<string, number>>({})
 const bwExceedCountByUser = ref<Record<string, number>>({})
 let lastAppliedManagedCidrsKey = ''
 let lastHardBlockSyncAt = 0
+
+// Cache router neighbor table (IP -> MAC) from the agent.
+let neighborsCacheAt = 0
+let neighborsIpToMac: Record<string, string> = {}
+
+const getNeighborsIpToMac = async (): Promise<Record<string, string>> => {
+  const now = Date.now()
+  if (now - neighborsCacheAt < 5000 && Object.keys(neighborsIpToMac).length) return neighborsIpToMac
+
+  const st = await agentStatusAPI()
+  if (!st?.ok) return neighborsIpToMac
+
+  const resp = await agentNeighborsAPI()
+  if (!resp?.ok || !resp.items) return neighborsIpToMac
+
+  const map: Record<string, string> = {}
+  for (const it of resp.items) {
+    const ip = (it.ip || '').trim()
+    const mac = (it.mac || '').trim().toLowerCase()
+    if (!ip || !mac) continue
+    map[ip] = mac
+  }
+
+  neighborsCacheAt = now
+  neighborsIpToMac = map
+  return neighborsIpToMac
+}
+
+const getMihomoPortsFromConfigs = (cfg: any): number[] => {
+  const keys = ['port', 'socks-port', 'mixed-port', 'redir-port', 'tproxy-port']
+  const out: number[] = []
+  if (!cfg || typeof cfg !== 'object') return out
+  for (const k of keys) {
+    const v = (cfg as any)[k] ?? (cfg as any)[k.replace(/-/g, '')]
+    const n = Number(v)
+    if (Number.isFinite(n) && n > 0) out.push(n)
+  }
+  return Array.from(new Set(out)).sort((a, b) => a - b)
+}
+
+const syncAgentMacBlocksNow = async (desiredMacs: string[], ports: number[]) => {
+  const enabled = !!agentEnabled.value
+  if (!enabled) return
+
+  const st = await agentStatusAPI()
+  if (!st?.ok) return
+  if (st.iptables === false) return
+
+  const desired = Array.from(new Set(desiredMacs.map((m) => m.trim().toLowerCase()).filter(Boolean))).sort()
+  const prev = managedAgentBlocks.value || {}
+  const prevKeys = Object.keys(prev)
+  const portsStr = (ports || []).join(',')
+
+  // Remove blocks no longer desired.
+  const toRemove = prevKeys.filter((m) => !desired.includes(m))
+  if (toRemove.length) {
+    await Promise.allSettled(toRemove.map((m) => agentUnblockMacAPI(m)))
+  }
+
+  // Apply blocks.
+  const toApply = desired.filter((m) => !prev[m] || prev[m].ports !== portsStr)
+  if (toApply.length) {
+    await Promise.allSettled(toApply.map((m) => agentBlockMacAPI({ mac: m, ports })))
+  }
+
+  // Persist managed blocks.
+  const next: Record<string, { ports: string }> = {}
+  for (const m of desired) next[m] = { ports: portsStr }
+  managedAgentBlocks.value = next
+}
 
 const looksLikeIP = (s: string) => {
   const v = (s || '').trim()
@@ -284,9 +368,53 @@ const enforceNow = async () => {
       if (isUserBlocked(user)) blockedUsers.push(user)
     }
 
+    // If router-agent is enabled, prefer MAC-based blocks to keep blocks stable across DHCP IP changes.
+    // We still keep Mihomo `lan-disallowed-ips` in sync (IP-based) as an additional layer.
+    const desiredBlockedMacs: string[] = []
+    const ipToMac = (agentEnabled.value ? await getNeighborsIpToMac().catch(() => ({} as any)) : {}) as Record<
+      string,
+      string
+    >
+    for (const u of blockedUsers) {
+      const l = resolveLimit(userLimits.value[u])
+      if (l.mac) desiredBlockedMacs.push(l.mac)
+
+      // Auto-learn MAC for IP users (helps prevent bypass by DHCP renew).
+      if (!l.mac && looksLikeIP(u)) {
+        const mac = ipToMac[u]
+        if (mac) {
+          desiredBlockedMacs.push(mac)
+          setUserLimit(u, { mac })
+        }
+      }
+
+      // Also collect MACs from mapped IPs, if any.
+      const macsFromIps = new Set<string>()
+      for (const ip of ipsForUserLabel(u)) {
+        const mac = ipToMac[ip]
+        if (mac) {
+          desiredBlockedMacs.push(mac)
+          macsFromIps.add(mac)
+        }
+      }
+
+      // If the label resolves to a single MAC, remember it to keep blocks stable across DHCP changes.
+      if (!l.mac && macsFromIps.size === 1) {
+        setUserLimit(u, { mac: Array.from(macsFromIps)[0] })
+      }
+    }
+
     const cidrs: string[] = []
     for (const u of blockedUsers) {
-      for (const ip of ipsForUserLabel(u)) {
+      const l = resolveLimit(userLimits.value[u])
+      const ips = new Set<string>(ipsForUserLabel(u))
+      const mac = (l.mac || '').trim().toLowerCase()
+      if (mac) {
+        for (const [ip, m] of Object.entries(ipToMac)) {
+          if ((m || '').trim().toLowerCase() === mac) ips.add(ip)
+        }
+      }
+      for (const ip of Array.from(ips)) {
         const cidr = toCidr(ip)
         if (cidr) cidrs.push(cidr)
       }
@@ -295,10 +423,23 @@ const enforceNow = async () => {
     if (cidrs.length || (managedLanDisallowedCidrs.value || []).length) {
       await syncLanDisallowedIps(cidrs)
     }
+
+    // Apply MAC blocks via router-agent, targeting Mihomo listening ports.
+    if (agentEnabled.value) {
+      const cfgResp = await getConfigsSilentAPI().catch(() => null)
+      const ports = getMihomoPortsFromConfigs(cfgResp?.data) || []
+      const effectivePorts = ports.length ? ports : [7890, 7891, 1080, 1181, 1182]
+      await syncAgentMacBlocksNow(desiredBlockedMacs, effectivePorts)
+    }
   } else {
     // If hard-block disabled, clean up only entries we previously managed.
     if ((managedLanDisallowedCidrs.value || []).length) {
       await syncLanDisallowedIps([])
+    }
+
+    // Also remove any MAC blocks previously managed via agent.
+    if (agentEnabled.value && Object.keys(managedAgentBlocks.value || {}).length) {
+      await syncAgentMacBlocksNow([], [])
     }
   }
 
@@ -335,7 +476,9 @@ const syncAgentShapingNow = async () => {
   }
 
   // Desired: from enabled users with bandwidthLimit.
+  // If a user has a remembered MAC, also include current neighbor IPs for that MAC.
   const desired: Record<string, { upMbps: number; downMbps: number }> = {}
+  const ipToMac: Record<string, string> = (await getNeighborsIpToMac().catch(() => ({} as any))) as any
   for (const [user, raw] of Object.entries(userLimits.value || {})) {
     const l = resolveLimit(raw)
     if (!l.enabled) continue
@@ -345,7 +488,15 @@ const syncAgentShapingNow = async () => {
     const mbps = +(((l.bandwidthLimitBps * 8) / 1_000_000)).toFixed(2)
     if (!mbps || mbps <= 0) continue
 
-    for (const ip of ipsForUserLabel(user)) {
+    const ips = new Set<string>(ipsForUserLabel(user))
+    const mac = (l.mac || '').trim().toLowerCase()
+    if (mac) {
+      for (const [ip, m] of Object.entries(ipToMac)) {
+        if ((m || '').trim().toLowerCase() === mac) ips.add(ip)
+      }
+    }
+
+    for (const ip of Array.from(ips)) {
       // Single field applies to both directions.
       desired[ip] = { upMbps: mbps, downMbps: mbps }
     }
@@ -449,7 +600,17 @@ export const reapplyAgentShapingForUser = async (userLabel: string) => {
   const st = await agentStatusAPI()
   if (!st?.ok) return { ok: false as const, error: st?.error || 'offline' }
 
-  const ips = ipsForUserLabel(userLabel)
+  // Prefer the user's mapped IPs, but if the user has a remembered MAC,
+  // also apply to current neighbor IPs for that MAC (stable across DHCP changes).
+  const ipToMac: Record<string, string> = (await getNeighborsIpToMac().catch(() => ({} as any))) as any
+  const ipsSet = new Set<string>(ipsForUserLabel(userLabel))
+  const mac = (l.mac || '').trim().toLowerCase()
+  if (mac) {
+    for (const [ip, m] of Object.entries(ipToMac)) {
+      if ((m || '').trim().toLowerCase() === mac) ipsSet.add(ip)
+    }
+  }
+  const ips = Array.from(ipsSet)
   if (!ips.length) return { ok: false as const, error: 'no ips' }
 
   const now = Date.now()
@@ -471,6 +632,17 @@ export const reapplyAgentShapingForUser = async (userLabel: string) => {
 
   const anyFail = results.some((r) => r.status === 'fulfilled' && !(r.value as any)?.ok)
   return anyFail ? { ok: false as const, error: 'failed' } : { ok: true as const }
+}
+
+/**
+ * Force an immediate re-sync of user enforcement.
+ * Useful when the user re-binds MAC after a DHCP change and wants blocks/shaping applied right away.
+ */
+export const applyUserEnforcementNow = async () => {
+  await Promise.allSettled([
+    syncAgentShapingNow(),
+    enforceNow(),
+  ])
 }
 
 export const limitedUsersCount = computed(() => Object.keys(userLimits.value || {}).length)

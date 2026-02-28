@@ -13,6 +13,7 @@ const en = {
   submit: 'Submit',
   cancel: 'Cancel',
   add: 'Add',
+  clear: 'Clear',
   delete: 'Delete',
   edit: 'Edit',
   actions: 'Actions',
@@ -32,6 +33,9 @@ const en = {
   limitsEnforcementNote:
     'Enforcement: hard blocks use Mihomo `lan-disallowed-ips` (hard block) + disconnect active connections. Bandwidth limit is enforced by the router agent when enabled; otherwise by disconnecting (best effort).',
   routerAgent: 'Router agent',
+  rebindMac: 'Rebind MAC from current IP',
+  rebindMacApply: 'Rebind MAC and apply block/shaper',
+  multipleMacsFound: 'Multiple MACs found',
   agentUrl: 'Agent URL',
   agentToken: 'Agent token',
   enforceBandwidth: 'Enforce bandwidth',

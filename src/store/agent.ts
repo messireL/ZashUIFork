@@ -41,3 +41,11 @@ export const managedAgentShapers = useStorage<Record<string, { upMbps: number; d
 export const agentShaperStatus = useStorage<
   Record<string, { ok: boolean; at: number; error?: string }>
 >('config/agent-shaper-status-v1', {})
+
+/**
+ * MAC blocks managed by the UI (best-effort). Key = mac.
+ */
+export const managedAgentBlocks = useStorage<Record<string, { ports: string }>>(
+  'config/agent-managed-blocks-v1',
+  {},
+)

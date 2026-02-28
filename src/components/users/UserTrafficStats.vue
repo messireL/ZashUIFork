@@ -91,11 +91,17 @@
 
               <td class="text-right font-mono max-lg:hidden">
                 <template v-if="limitStates[row.user]?.trafficLimitBytes">
-                  <div class="whitespace-nowrap">
+                  <div
+                    class="whitespace-nowrap"
+                    :class="limitStates[row.user].enabled ? '' : 'opacity-40'"
+                  >
                     {{ format(limitStates[row.user].usageBytes) }} /
                     {{ format(limitStates[row.user].trafficLimitBytes) }}
                   </div>
-                  <div class="text-xs opacity-60">
+                  <div
+                    class="text-xs opacity-60"
+                    :class="limitStates[row.user].enabled ? '' : 'opacity-40'"
+                  >
                     {{ limitStates[row.user].periodLabel }} · {{ limitStates[row.user].percent }}%
                   </div>
                 </template>
@@ -106,7 +112,10 @@
 
               <td class="text-right font-mono max-lg:hidden">
                 <template v-if="limitStates[row.user]?.bandwidthLimitBps">
-                  <div class="whitespace-nowrap">
+                  <div
+                    class="whitespace-nowrap"
+                    :class="limitStates[row.user].enabled ? '' : 'opacity-40'"
+                  >
                     {{ speed(limitStates[row.user].speedBps) }} /
                     {{ speed(limitStates[row.user].bandwidthLimitBps) }}
                   </div>
@@ -239,6 +248,58 @@
             <input type="checkbox" class="toggle" v-model="draftDisabled" />
           </label>
 
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-sm">
+                MAC
+                <span class="text-xs opacity-60">({{ $t('routerAgent') }})</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <code
+                  class="text-xs px-2 py-1 rounded bg-base-200"
+                  :class="draftMac ? '' : 'opacity-50'"
+                  :title="draftMac || ''"
+                >
+                  {{ draftMac || '—' }}
+                </code>
+
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  :disabled="!agentEnabled"
+                  @click="refreshMac"
+                  :title="$t('rebindMac')"
+                >
+                  <ArrowPathIcon class="h-4 w-4" :class="macLoading ? 'animate-spin' : ''" />
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  :disabled="!agentEnabled"
+                  @click="refreshMacAndApply"
+                  :title="$t('rebindMacApply')"
+                >
+                  <div class="flex items-center gap-1">
+                    <ArrowPathIcon class="h-4 w-4" :class="macApplyLoading ? 'animate-spin' : ''" />
+                    <CheckIcon class="h-4 w-4" />
+                  </div>
+                </button>
+
+                <button type="button" class="btn btn-ghost btn-xs" :disabled="!draftMac" @click="clearMac">
+                  {{ $t('clear') }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="macCandidates.length > 1" class="flex items-center gap-2">
+              <select class="select select-sm" v-model="draftMac">
+                <option v-for="m in macCandidates" :key="m" :value="m">{{ m }}</option>
+              </select>
+              <span class="text-xs opacity-60">{{ $t('multipleMacsFound') }}</span>
+            </div>
+          </div>
+
           <div class="divider my-0"></div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -315,6 +376,7 @@ import {
   clearUserLimit,
   getIpsForUser,
   getUserLimit,
+  applyUserEnforcementNow,
   reapplyAgentShapingForUser,
   setUserLimit,
 } from '@/composables/userLimits'
@@ -511,6 +573,7 @@ const limitStates = computed(() => {
   const out: Record<
     string,
     {
+      enabled: boolean
       usageBytes: number
       trafficLimitBytes: number
       bandwidthLimitBps: number
@@ -525,8 +588,6 @@ const limitStates = computed(() => {
   const windows = new Map<string, { startTs: number; endTs: number; users: string[] }>()
   for (const row of rows.value) {
     const l = getUserLimit(row.user)
-    if (!l.enabled && !l.disabled) continue
-
     const hasTraffic = (l.trafficLimitBytes || 0) > 0
     const hasBw = (l.bandwidthLimitBps || 0) > 0
     if (!hasTraffic && !hasBw && !l.disabled) continue
@@ -566,6 +627,7 @@ const limitStates = computed(() => {
     const pct = tl > 0 ? Math.min(999, Math.floor((usage / tl) * 100)) : 0
 
     out[row.user] = {
+      enabled: !!l.enabled,
       usageBytes: usage,
       trafficLimitBytes: tl,
       bandwidthLimitBps: bl,
@@ -662,6 +724,10 @@ const limitsUser = ref('')
 
 const draftEnabled = ref(false)
 const draftDisabled = ref(false)
+const draftMac = ref('')
+const macCandidates = ref<string[]>([])
+const macLoading = ref(false)
+const macApplyLoading = ref(false)
 const draftTrafficValue = ref<number>(0)
 const draftTrafficUnit = ref<'GB' | 'MB'>('GB')
 const draftBandwidthMbps = ref<number>(0)
@@ -685,12 +751,83 @@ const openLimits = (user: string) => {
   const l = getUserLimit(user)
   draftEnabled.value = l.enabled
   draftDisabled.value = l.disabled
+  draftMac.value = (l.mac || '').toString().trim().toLowerCase()
+  macCandidates.value = draftMac.value ? [draftMac.value] : []
   draftPeriod.value = l.trafficPeriod
   draftTrafficUnit.value = (l.trafficLimitUnit as any) || (l.trafficLimitBytes >= 1_000_000_000 ? 'GB' : 'MB')
   const factor = draftTrafficUnit.value === 'GB' ? 1_000_000_000 : 1_000_000
   draftTrafficValue.value = l.trafficLimitBytes ? +(l.trafficLimitBytes / factor).toFixed(2) : 0
   draftBandwidthMbps.value = l.bandwidthLimitBps ? +(((l.bandwidthLimitBps * 8) / 1_000_000)).toFixed(2) : 0
   limitsDialogOpen.value = true
+}
+
+const refreshMac = async () => {
+  const user = limitsUser.value
+  if (!user) return
+  if (!agentEnabled.value) return
+
+  const ips = getIpsForUser(user)
+  if (!ips.length) return
+
+  macLoading.value = true
+  try {
+    const macs = new Set<string>()
+
+    // Lazy import to avoid increasing initial bundle work.
+    const { agentIpToMacAPI, agentNeighborsAPI } = await import('@/api/agent')
+
+    // Prefer a direct ip->mac lookup (new agent). Fall back to neighbors list.
+    for (const ip of ips) {
+      const r = await agentIpToMacAPI(ip)
+      const mac = (r?.mac || '').trim().toLowerCase()
+      if (r?.ok && mac) macs.add(mac)
+      // If command is unsupported, fall back to neighbors.
+      if (!r?.ok && (r?.error || '').includes('unknown-cmd')) {
+        const n = await agentNeighborsAPI()
+        if (n?.ok && n.items) {
+          for (const it of n.items) {
+            if ((it.ip || '').trim() !== ip) continue
+            const m = (it.mac || '').trim().toLowerCase()
+            if (m) macs.add(m)
+          }
+        }
+      }
+    }
+
+    const list = Array.from(macs).filter(Boolean)
+    macCandidates.value = list
+    if (list.length === 1) draftMac.value = list[0]
+  } finally {
+    macLoading.value = false
+  }
+}
+
+const refreshMacAndApply = async () => {
+  const user = limitsUser.value
+  if (!user) return
+  if (!agentEnabled.value) return
+
+  macApplyLoading.value = true
+  try {
+    await refreshMac()
+    const mac = (draftMac.value || '').trim().toLowerCase()
+    if (!mac) return
+
+    // Persist learned MAC even if the user doesn't press "Save".
+    setUserLimit(user, { mac })
+
+    // Apply blocks/shaping right away (helps when DHCP changes IPs).
+    await applyUserEnforcementNow()
+    // Best-effort: also re-apply shaping for this user.
+    await reapplyAgentShapingForUser(user)
+  } finally {
+    macApplyLoading.value = false
+  }
+}
+
+const clearMac = () => {
+  draftMac.value = ''
+  macCandidates.value = []
 }
 
 const saveLimits = () => {
@@ -713,6 +850,7 @@ const saveLimits = () => {
   setUserLimit(user, {
     enabled,
     disabled,
+    mac: draftMac.value ? draftMac.value : undefined,
     trafficPeriod: draftPeriod.value,
     trafficLimitBytes: trafficLimitBytes || undefined,
     trafficLimitUnit: trafficLimitBytes ? draftTrafficUnit.value : undefined,

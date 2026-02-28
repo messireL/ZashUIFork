@@ -3,6 +3,8 @@ import { useStorage } from '@vueuse/core'
 export type UserLimitPeriod = '1d' | '30d' | 'month'
 
 export type UserLimit = {
+  /** Optional MAC identity for the user (used to keep blocks/limits stable across DHCP IP changes). */
+  mac?: string
   enabled?: boolean
   /** Hard disable for the user (manual block). */
   disabled?: boolean
