@@ -34,9 +34,9 @@ export const agentStatusAPI = async (): Promise<AgentStatus> => {
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
       params: { cmd: 'status' },
-      // don't show global toast
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
+      // NOTE: this axios instance does not use the global interceptors.
+      // Adding custom headers (like X-Zash-Silent) triggers CORS preflight
+      // from browsers, so keep requests headerless unless a token is set.
     })
     return (data || {}) as AgentStatus
   } catch (e: any) {
@@ -57,8 +57,6 @@ export const agentSetShapeAPI = async (args: {
         up: args.upMbps,
         down: args.downMbps,
       },
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
     })
     return (data || { ok: true }) as any
   } catch (e: any) {
@@ -70,8 +68,6 @@ export const agentRemoveShapeAPI = async (ip: string): Promise<{ ok: boolean; er
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
       params: { cmd: 'unshape', ip },
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
     })
     return (data || { ok: true }) as any
   } catch (e: any) {
@@ -85,8 +81,6 @@ export const agentNeighborsAPI = async (): Promise<{ ok: boolean; items?: AgentN
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
       params: { cmd: 'neighbors' },
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
     })
     return (data || { ok: true }) as any
   } catch (e: any) {
@@ -98,8 +92,6 @@ export const agentIpToMacAPI = async (ip: string): Promise<{ ok: boolean; mac?: 
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
       params: { cmd: 'ip2mac', ip },
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
     })
     return (data || { ok: true }) as any
   } catch (e: any) {
@@ -114,8 +106,6 @@ export const agentBlockMacAPI = async (args: {
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
       params: { cmd: 'blockmac', mac: args.mac, ports: args.ports.join(',') },
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
     })
     return (data || { ok: true }) as any
   } catch (e: any) {
@@ -127,8 +117,6 @@ export const agentUnblockMacAPI = async (mac: string): Promise<{ ok: boolean; er
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
       params: { cmd: 'unblockmac', mac },
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
     })
     return (data || { ok: true }) as any
   } catch (e: any) {
@@ -148,8 +136,6 @@ export const agentMihomoConfigAPI = async (): Promise<{
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
       params: { cmd: 'mihomo_config' },
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
     })
     return (data || {}) as any
   } catch (e: any) {
@@ -174,8 +160,6 @@ export const agentMihomoProvidersAPI = async (force = false): Promise<{
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
       params: { cmd: 'mihomo_providers' },
-      silent: true as any,
-      headers: { 'X-Zash-Silent': '1' } as any,
     })
     _mihomoProvidersCache = (data || {}) as any
     _mihomoProvidersAt = now
