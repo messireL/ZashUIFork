@@ -92,6 +92,7 @@ reply_ok() {
   echo "Access-Control-Allow-Origin: *"
   echo "Access-Control-Allow-Methods: GET, POST, OPTIONS"
   echo "Access-Control-Allow-Headers: Content-Type, Authorization"
+  echo "Access-Control-Allow-Private-Network: true"
   echo "Cache-Control: no-store"
   echo
   echo "$1"
@@ -270,6 +271,7 @@ neighbors() {
   echo "Access-Control-Allow-Origin: *"
   echo "Access-Control-Allow-Methods: GET, POST, OPTIONS"
   echo "Access-Control-Allow-Headers: Content-Type, Authorization"
+  echo "Access-Control-Allow-Private-Network: true"
   echo "Cache-Control: no-store"
   echo
 
@@ -511,7 +513,7 @@ status() {
   have_hashlimit=0
   iptables -m hashlimit -h >/dev/null 2>&1 && have_hashlimit=1
 
-  reply_ok "$(printf '{"ok":true,"version":"0.2","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.3","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -544,6 +546,12 @@ case "$cmd" in
   unblockmac)
     unblock_mac_ports "$mac"
     ;;
+  mihomo_config)
+    mihomo_config_json
+    ;;
+  mihomo_providers)
+    mihomo_providers_json
+    ;;
   *) reply_ok '{"ok":false,"error":"unknown-cmd"}' ;;
 esac
 
@@ -560,6 +568,7 @@ ENV_FILE="/opt/zash-agent/agent.env"
 
 PORT="${PORT:-9099}"
 BIND_IP="${BIND_IP:-0.0.0.0}"
+LAN_IF="${LAN_IF:-br0}"
 
 PID_FILE="/opt/zash-agent/var/httpd.pid"
 
@@ -569,6 +578,12 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
 fi
 
 echo "[zash-agent] starting uhttpd on $BIND_IP:$PORT"
+
+# Allow LAN access to agent port (best effort)
+if command -v iptables >/dev/null 2>&1; then
+  iptables -C INPUT -i "$LAN_IF" -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null ||     iptables -I INPUT 1 -i "$LAN_IF" -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || true
+fi
+
 
 UHTTPD_BIN="$(command -v uhttpd 2>/dev/null || true)"
 [ -n "$UHTTPD_BIN" ] || UHTTPD_BIN="/opt/sbin/uhttpd"
@@ -599,6 +614,14 @@ case "$1" in
       pid="$(cat "$PID_FILE")"
       kill "$pid" 2>/dev/null || true
       rm -f "$PID_FILE"
+    fi
+    # Remove firewall allow rule (best effort)
+    ENV_FILE="/opt/zash-agent/agent.env"
+    [ -f "$ENV_FILE" ] && . "$ENV_FILE"
+    PORT="${PORT:-9099}"
+    LAN_IF="${LAN_IF:-br0}"
+    if command -v iptables >/dev/null 2>&1; then
+      iptables -D INPUT -i "$LAN_IF" -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || true
     fi
     ;;
   restart)
