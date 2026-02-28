@@ -262,6 +262,19 @@
 
       <div v-if="!topologyPresets.length" class="text-sm opacity-70">—</div>
     </div>
+
+    <div class="divider my-4" />
+
+    <div class="flex items-center justify-between gap-2">
+      <button class="btn btn-sm btn-ghost" @click="resetPresets" :title="$t('resetPresets')">
+        <ArrowUturnLeftIcon class="h-4 w-4" />
+        {{ $t('resetPresets') }}
+      </button>
+      <div class="text-xs opacity-60">
+        {{ $t('presetMeaning') }}
+      </div>
+    </div>
+
   </DialogWrapper>
 
 </template>
@@ -284,7 +297,7 @@ import {
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
-import { ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon} from '@heroicons/vue/24/outline'
 import { useElementSize, useStorage } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -520,6 +533,13 @@ const ensureDefaultPresets = () => {
   ]
 }
 ensureDefaultPresets()
+
+const resetPresets = () => {
+  topologyPresets.value = []
+  activePresetId.value = ''
+  ensureDefaultPresets()
+  showNotification(t('presetResetDone'))
+}
 
 const presetSummary = (p: TopologyPreset) => {
   const parts = [

@@ -75,6 +75,8 @@ const add = (user: string, dl: number, ul: number, ts = Date.now()) => {
   save()
 }
 
+const connTotals = new Map<string, { dl: number; ul: number }>()
+
 let started = false
 export const initUserTrafficRecorder = () => {
   if (started) return
@@ -82,15 +84,42 @@ export const initUserTrafficRecorder = () => {
 
   load()
 
-  // Every WS tick, connections list updates with *delta* downloadSpeed/uploadSpeed.
+  // Every WS tick, connections list updates with per-connection counters (download/upload).
+  // We compute deltas ourselves so that short-lived connections are still counted on their first appearance.
   watch(
     activeConnections,
     (list) => {
       const now = Date.now()
+      const seen = new Set<string>()
       for (const c of list) {
+        const id = (c as any)?.id || ''
+        if (!id) continue
+        seen.add(id)
+
         const ip = c?.metadata?.sourceIP || ''
         const user = getIPLabelFromMap(ip)
-        add(user, c.downloadSpeed || 0, c.uploadSpeed || 0, now)
+
+        const curDl = Number((c as any)?.download ?? 0) || 0
+        const curUl = Number((c as any)?.upload ?? 0) || 0
+
+        const prev = connTotals.get(id)
+        let d = curDl
+        let u = curUl
+        if (prev) {
+          d = curDl - (prev.dl || 0)
+          u = curUl - (prev.ul || 0)
+        }
+        if (!Number.isFinite(d) || d < 0) d = 0
+        if (!Number.isFinite(u) || u < 0) u = 0
+
+        add(user, d, u, now)
+
+        connTotals.set(id, { dl: curDl, ul: curUl })
+      }
+
+      // prune ended connections
+      for (const id of Array.from(connTotals.keys())) {
+        if (!seen.has(id)) connTotals.delete(id)
       }
     },
     { deep: false },
@@ -113,6 +142,52 @@ export const getTrafficRange = (startTs: number, endTs: number) => {
       cur.ul += v.ul || 0
       out.set(user, cur)
     }
+  }
+
+  return out
+}
+
+
+export type TrafficGroupBy = 'day' | 'week' | 'month'
+
+const isoWeekStart = (d: dayjs.Dayjs) => {
+  // Monday as start of week
+  const dow = d.day() // 0..6 (Sun..Sat)
+  const diff = (dow + 6) % 7
+  return d.subtract(diff, 'day').startOf('day')
+}
+
+const groupKeyForHour = (hourKey: string, groupBy: TrafficGroupBy) => {
+  const t = dayjs(hourKey, 'YYYY-MM-DDTHH')
+  if (groupBy === 'day') return t.startOf('day').format('YYYY-MM-DD')
+  if (groupBy === 'month') return t.startOf('month').format('YYYY-MM')
+  // week
+  return isoWeekStart(t).format('YYYY-MM-DD')
+}
+
+export const getTrafficGrouped = (startTs: number, endTs: number, groupBy: TrafficGroupBy) => {
+  // Returns: Map<periodKey, Map<user, {dl, ul}>>
+  const out = new Map<string, Map<string, UserTrafficBucket>>()
+
+  const startKey = dayjs(startTs).startOf('hour')
+  const endKey = dayjs(endTs).startOf('hour')
+
+  for (let t = startKey; t.isBefore(endKey) || t.isSame(endKey); t = t.add(1, 'hour')) {
+    const k = t.format('YYYY-MM-DDTHH')
+    const bucket = store.value[k]
+    if (!bucket) continue
+
+    const gk = groupKeyForHour(k, groupBy)
+    const g = out.get(gk) || new Map<string, UserTrafficBucket>()
+
+    for (const [user, v] of Object.entries(bucket)) {
+      const cur = g.get(user) || { dl: 0, ul: 0 }
+      cur.dl += v.dl || 0
+      cur.ul += v.ul || 0
+      g.set(user, cur)
+    }
+
+    out.set(gk, g)
   }
 
   return out

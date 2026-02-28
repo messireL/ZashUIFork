@@ -1,6 +1,7 @@
 import { disconnectByIdSilentAPI, getConfigsSilentAPI, patchConfigsSilentAPI } from '@/api'
 import {
   agentBlockMacAPI,
+  agentIpToMacAPI,
   agentNeighborsAPI,
   agentRemoveShapeAPI,
   agentSetShapeAPI,
@@ -134,8 +135,16 @@ let lastHardBlockSyncAt = 0
 // Cache router neighbor table (IP -> MAC) from the agent.
 let neighborsCacheAt = 0
 let neighborsIpToMac: Record<string, string> = {}
+let neighborsUnsupported = false
+
+// Cache per-IP lookups (ip2mac) as well, since some agents don't support `neighbors`.
+let ipToMacCacheAt = 0
+let ipToMacCache: Record<string, string> = {}
+let ip2macUnsupported = false
 
 const getNeighborsIpToMac = async (): Promise<Record<string, string>> => {
+  if (neighborsUnsupported) return neighborsIpToMac
+
   const now = Date.now()
   if (now - neighborsCacheAt < 5000 && Object.keys(neighborsIpToMac).length) return neighborsIpToMac
 
@@ -143,7 +152,10 @@ const getNeighborsIpToMac = async (): Promise<Record<string, string>> => {
   if (!st?.ok) return neighborsIpToMac
 
   const resp = await agentNeighborsAPI()
-  if (!resp?.ok || !resp.items) return neighborsIpToMac
+  if (!resp?.ok || !resp.items) {
+    if ((resp as any)?.error && String((resp as any).error).includes('unknown-cmd')) neighborsUnsupported = true
+    return neighborsIpToMac
+  }
 
   const map: Record<string, string> = {}
   for (const it of resp.items) {
@@ -156,6 +168,54 @@ const getNeighborsIpToMac = async (): Promise<Record<string, string>> => {
   neighborsCacheAt = now
   neighborsIpToMac = map
   return neighborsIpToMac
+}
+
+const resolveIpToMac = async (ips: string[]): Promise<Record<string, string>> => {
+  const out: Record<string, string> = {}
+  const list = Array.from(new Set((ips || []).map((x) => (x || '').trim()).filter(Boolean)))
+  if (!list.length) return out
+
+  const now = Date.now()
+  // fast path from cache (~30s)
+  if (now - ipToMacCacheAt < 30000 && Object.keys(ipToMacCache).length) {
+    for (const ip of list) {
+      const mac = ipToMacCache[ip]
+      if (mac) out[ip] = mac
+    }
+    if (Object.keys(out).length === list.length) return out
+  }
+
+  const st = await agentStatusAPI()
+  if (!st?.ok) return out
+
+  // Prefer ip2mac (widely supported). Fall back to neighbors if ip2mac is unsupported.
+  for (const ip of list) {
+    if (out[ip]) continue
+    if (!ip2macUnsupported) {
+      const r = await agentIpToMacAPI(ip)
+      const mac = (r?.mac || '').trim().toLowerCase()
+      if (r?.ok && mac) {
+        out[ip] = mac
+        continue
+      }
+      if (!r?.ok && String(r?.error || '').includes('unknown-cmd')) {
+        ip2macUnsupported = true
+      }
+    }
+  }
+
+  if (ip2macUnsupported) {
+    const neigh = await getNeighborsIpToMac().catch(() => ({} as any))
+    for (const ip of list) {
+      if (out[ip]) continue
+      const mac = (neigh as any)?.[ip]
+      if (mac) out[ip] = String(mac).trim().toLowerCase()
+    }
+  }
+
+  ipToMacCacheAt = now
+  ipToMacCache = { ...ipToMacCache, ...out }
+  return out
 }
 
 const getMihomoPortsFromConfigs = (cfg: any): number[] => {
@@ -371,7 +431,12 @@ const enforceNow = async () => {
     // If router-agent is enabled, prefer MAC-based blocks to keep blocks stable across DHCP IP changes.
     // We still keep Mihomo `lan-disallowed-ips` in sync (IP-based) as an additional layer.
     const desiredBlockedMacs: string[] = []
-    const ipToMac = (agentEnabled.value ? await getNeighborsIpToMac().catch(() => ({} as any)) : {}) as Record<
+    const neededIps: string[] = []
+    for (const u of blockedUsers) {
+      if (looksLikeIP(u)) neededIps.push(u)
+      for (const ip of ipsForUserLabel(u)) neededIps.push(ip)
+    }
+    const ipToMac = (agentEnabled.value ? await resolveIpToMac(neededIps).catch(() => ({} as any)) : {}) as Record<
       string,
       string
     >

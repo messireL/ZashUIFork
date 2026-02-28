@@ -14,7 +14,10 @@
           <option :value="0">{{ $t('all') }}</option>
           <option v-for="n in [10, 20, 30, 50, 100]" :key="n" :value="n">top {{ n }}</option>
         </select>
-        <button type="button" class="btn btn-sm" @click="clearHistory">
+        <button type=\"button\" class=\"btn btn-sm\" @click=\"reportDialogOpen = true\">
+          {{ $t('reports') }}
+        </button>
+        <button type=\"button\" class=\"btn btn-sm\" @click=\"clearHistory\">
           {{ $t('clearHistory') }}
         </button>
       </div>
@@ -231,6 +234,85 @@
         {{ $t('userTrafficTip') }} ({{ $t('buckets') }}: {{ buckets }})
       </div>
 
+      
+      <DialogWrapper v-model="reportDialogOpen">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="text-base font-semibold">{{ $t('reports') }}</div>
+          <div class="text-xs opacity-70 font-mono">
+            {{ reportRangeLabel }}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <label class="flex flex-col gap-1 text-sm">
+            <span class="opacity-70">{{ $t('groupBy') }}</span>
+            <select class="select select-sm" v-model="reportGroupBy">
+              <option value="day">{{ $t('day') }}</option>
+              <option value="week">{{ $t('week') }}</option>
+              <option value="month">{{ $t('month') }}</option>
+            </select>
+          </label>
+
+          <label class="flex flex-col gap-1 text-sm">
+            <span class="opacity-70">{{ $t('user') }}</span>
+            <select class="select select-sm" v-model="reportUser">
+              <option value="">{{ $t('allUsers') }}</option>
+              <option v-for="u in reportUsers" :key="u" :value="u">
+                {{ u }}
+              </option>
+            </select>
+          </label>
+
+          <label class="flex items-center justify-between gap-2 sm:pt-6">
+            <span class="text-sm opacity-70">{{ $t('skipEmpty') }}</span>
+            <input type="checkbox" class="toggle" v-model="reportSkipEmpty" />
+          </label>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-2 mt-2">
+          <button type="button" class="btn btn-sm" @click="exportTableCsv">
+            {{ $t('exportTableCsv') }}
+          </button>
+          <button type="button" class="btn btn-sm btn-primary" @click="exportReportCsv">
+            {{ $t('exportReportCsv') }}
+          </button>
+        </div>
+
+        <div class="mt-3 overflow-x-auto max-h-[52vh]">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>{{ $t('period') }}</th>
+                <th>{{ $t('user') }}</th>
+                <th class="text-right">{{ $t('download') }}</th>
+                <th class="text-right">{{ $t('upload') }}</th>
+                <th class="text-right">{{ $t('total') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in reportPreviewRows" :key="r.period + '|' + r.user">
+                <td class="font-mono whitespace-nowrap">{{ r.period }}</td>
+                <td class="truncate max-w-[320px]" :title="r.user">{{ r.user }}</td>
+                <td class="text-right font-mono">{{ format(r.dl) }}</td>
+                <td class="text-right font-mono">{{ format(r.ul) }}</td>
+                <td class="text-right font-mono">{{ format(r.dl + r.ul) }}</td>
+              </tr>
+
+              <tr v-if="!reportPreviewRows.length">
+                <td colspan="5" class="text-center opacity-60">{{ $t('noContent') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-2 text-xs opacity-60">
+          {{ $t('reportRows') }}: {{ reportRowsCount }}
+          <span v-if="reportPreviewLimited">
+            · {{ $t('previewLimited') }}
+          </span>
+        </div>
+      </DialogWrapper>
+
       <DialogWrapper v-model="limitsDialogOpen">
         <div class="flex items-center justify-between gap-2 mb-2">
           <div class="text-base font-semibold">{{ $t('limits') }}</div>
@@ -380,7 +462,7 @@ import {
   reapplyAgentShapingForUser,
   setUserLimit,
 } from '@/composables/userLimits'
-import { clearUserTrafficHistory, formatTraffic, getTrafficRange, userTrafficStoreSize } from '@/composables/userTraffic'
+import { clearUserTrafficHistory, formatTraffic, getTrafficGrouped, getTrafficRange, type TrafficGroupBy, userTrafficStoreSize } from '@/composables/userTraffic'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
