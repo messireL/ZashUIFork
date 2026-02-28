@@ -12,7 +12,8 @@ export type UserLimitResolved = Required<Pick<UserLimit, 'enabled' | 'disabled' 
 
 const resolveLimit = (l?: UserLimit): UserLimitResolved => {
   return {
-    enabled: l?.enabled ?? true,
+    // Default: no limits until user explicitly enables them.
+    enabled: l?.enabled ?? false,
     disabled: l?.disabled ?? false,
     trafficPeriod: (l?.trafficPeriod ?? '30d') as UserLimitPeriod,
     trafficLimitBytes: l?.trafficLimitBytes ?? 0,
@@ -81,7 +82,8 @@ export const getUserLimitState = (user: string) => {
   const trafficExceeded = l.enabled && l.trafficLimitBytes > 0 && usage >= l.trafficLimitBytes
   const bandwidthExceeded = l.enabled && l.bandwidthLimitBps > 0 && speed >= l.bandwidthLimitBps
 
-  const blocked = l.enabled && (l.disabled || trafficExceeded || bandwidthExceeded)
+  // Manual block works regardless of "enabled".
+  const blocked = l.disabled || (l.enabled && (trafficExceeded || bandwidthExceeded))
 
   return {
     limit: l,
@@ -96,6 +98,7 @@ export const getUserLimitState = (user: string) => {
 // --- Enforcement (best-effort) ---
 let started = false
 const lastDisconnectAt = ref<Record<string, number>>({})
+const bwExceedCountByUser = ref<Record<string, number>>({})
 
 const cleanupDisconnectCache = () => {
   const now = Date.now()
@@ -154,12 +157,17 @@ const enforceNow = async () => {
 
   const isUserBlocked = (user: string): boolean => {
     const l = resolveLimit(userLimits.value[user])
-    if (!l.enabled) return false
     if (l.disabled) return true
+    if (!l.enabled) return false
 
     if (l.bandwidthLimitBps && l.bandwidthLimitBps > 0) {
       const sp = speedByUser.get(user) || 0
-      if (sp >= l.bandwidthLimitBps) return true
+      if (sp >= l.bandwidthLimitBps) {
+        bwExceedCountByUser.value[user] = (bwExceedCountByUser.value[user] || 0) + 1
+        if (bwExceedCountByUser.value[user] >= 3) return true
+      } else {
+        bwExceedCountByUser.value[user] = 0
+      }
     }
 
     if (l.trafficLimitBytes && l.trafficLimitBytes > 0) {

@@ -1,8 +1,5 @@
 <template>
   <div class="flex h-full flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
-    <ChartsCard />
-    <NetworkCard v-if="showIPAndConnectionInfo" />
-
     <div class="card" v-if="displayProxiesRelationship">
       <div class="card-title px-4 pt-4 flex items-center justify-between gap-2">
         <span>{{ $t('proxiesRelationship') }}</span>
@@ -52,11 +49,9 @@
 
 <script setup lang="ts">
 import BackendVersion from '@/components/common/BackendVersion.vue'
-import ChartsCard from '@/components/overview/ChartsCard.vue'
 import ConnectionHistory from '@/components/overview/ConnectionHistory.vue'
-import NetworkCard from '@/components/overview/NetworkCard.vue'
 import ProxiesRuleCharts from '@/components/overview/ProxiesRuleCharts.vue'
 import { getLabelFromBackend } from '@/helper/utils'
-import { displayProxiesRelationship, proxiesRelationshipTopN, proxiesRelationshipWeightMode, showIPAndConnectionInfo } from '@/store/settings'
+import { displayProxiesRelationship, proxiesRelationshipTopN, proxiesRelationshipWeightMode } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 </script>

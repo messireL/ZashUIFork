@@ -1,6 +1,7 @@
 const en = {
   setup: 'Setup',
   overview: 'Overview',
+  router: 'Router',
   proxies: 'Proxies',
   rules: 'Rules',
   connections: 'Connections',

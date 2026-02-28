@@ -2,13 +2,7 @@ import { NOT_CONNECTED, PROXY_CHAIN_DIRECTION, PROXY_TYPE, ROUTE_NAME } from '@/
 import { showNotification } from '@/helper/notification'
 import { timeSaved } from '@/store/overview'
 import { hiddenGroupMap, proxyMap } from '@/store/proxies'
-import {
-  customThemes,
-  lowLatency,
-  mediumLatency,
-  proxyChainDirection,
-  splitOverviewPage,
-} from '@/store/settings'
+import { customThemes, lowLatency, mediumLatency, proxyChainDirection } from '@/store/settings'
 import type { Connection } from '@/types'
 import dayjs from 'dayjs'
 import * as ipaddr from 'ipaddr.js'
@@ -138,7 +132,7 @@ export const getColorForLatency = (latency: number) => {
 
 export const renderRoutes = computed(() => {
   return Object.values(ROUTE_NAME).filter((r) => {
-    return ![ROUTE_NAME.setup, !splitOverviewPage.value && ROUTE_NAME.overview].includes(r)
+    return ![ROUTE_NAME.setup].includes(r)
   })
 })
 

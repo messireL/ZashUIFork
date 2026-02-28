@@ -7,6 +7,7 @@ import ConnectionsPage from '@/views/ConnectionsPage.vue'
 import HomePage from '@/views/HomePage.vue'
 import LogsPage from '@/views/LogsPage.vue'
 import OverviewPage from '@/views/OverviewPage.vue'
+import RouterPage from '@/views/RouterPage.vue'
 import ProxiesPage from '@/views/ProxiesPage.vue'
 import RulesPage from '@/views/RulesPage.vue'
 import SettingsPage from '@/views/SettingsPage.vue'
@@ -26,6 +27,11 @@ const childrenRouter = [
     path: 'overview',
     name: ROUTE_NAME.overview,
     component: OverviewPage,
+  },
+  {
+    path: 'router',
+    name: ROUTE_NAME.router,
+    component: RouterPage,
   },
   {
     path: 'connections',

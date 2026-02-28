@@ -7,11 +7,6 @@
 
     <div class="card-body grid grid-cols-1 gap-2 lg:grid-cols-2">
       <div class="flex items-center justify-between gap-2">
-        {{ $t('splitOverviewPage') }}
-        <input class="toggle" type="checkbox" v-model="splitOverviewPage" />
-      </div>
-
-      <div class="flex items-center justify-between gap-2">
         {{ $t('showIPAndConnectionInfo') }}
         <input class="toggle" type="checkbox" v-model="showIPAndConnectionInfo" />
       </div>
@@ -38,7 +33,7 @@
         </div>
       </template>
 
-      <div class="flex items-center justify-between gap-2" v-if="splitOverviewPage">
+      <div class="flex items-center justify-between gap-2">
         {{ $t('displayProxiesRelationship') }}
         <input class="toggle" type="checkbox" v-model="displayProxiesRelationship" />
       </div>
@@ -115,13 +110,12 @@ import {
   numberOfChartsInSidebar,
   showIPAndConnectionInfo,
   showStatisticsWhenSidebarCollapsed,
-  splitOverviewPage,
   twoIpTokensText,
   proxiesRelationshipColorMode,
   proxiesRelationshipSourceMode,
   proxiesRelationshipTopN,
   proxiesRelationshipTopNChain,
   proxiesRelationshipWeightMode,
+  proxiesRelationshipUseSources,
 } from '@/store/settings'
-import { proxiesRelationshipUseSources } from '@/store/settings'
 </script>

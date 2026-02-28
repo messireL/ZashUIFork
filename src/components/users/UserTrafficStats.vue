@@ -221,12 +221,12 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <label class="flex flex-col gap-1">
               <span class="text-sm opacity-70">{{ $t('trafficLimit') }} (GiB)</span>
-              <input class="input input-sm" type="number" min="0" step="0.1" v-model.number="draftTrafficGiB" />
+              <input class="input input-sm" type="number" min="0" step="0.1" v-model.number="draftTrafficGiB" :disabled="!draftEnabled" />
             </label>
 
             <label class="flex flex-col gap-1">
               <span class="text-sm opacity-70">{{ $t('period') }}</span>
-              <select class="select select-sm" v-model="draftPeriod">
+              <select class="select select-sm" v-model="draftPeriod" :disabled="!draftEnabled">
                 <option value="1d">{{ $t('last24h') }}</option>
                 <option value="30d">{{ $t('last30d') }}</option>
                 <option value="month">{{ $t('thisMonth') }}</option>
@@ -236,7 +236,7 @@
 
           <label class="flex flex-col gap-1">
             <span class="text-sm opacity-70">{{ $t('bandwidthLimit') }} (Mbps)</span>
-            <input class="input input-sm" type="number" min="0" step="0.1" v-model.number="draftBandwidthMbps" />
+            <input class="input input-sm" type="number" min="0" step="0.1" v-model.number="draftBandwidthMbps" :disabled="!draftEnabled" />
             <span class="text-xs opacity-60">{{ $t('bandwidthLimitTip') }}</span>
           </label>
 
@@ -246,7 +246,7 @@
           </div>
 
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <button type="button" class="btn btn-sm" @click="resetCounter">{{ $t('resetUsage') }}</button>
+            <button type="button" class="btn btn-sm" @click="resetCounter" :disabled="!draftEnabled">{{ $t('resetUsage') }}</button>
             <div class="flex items-center gap-2">
               <button type="button" class="btn btn-ghost btn-sm" @click="clearLimits">{{ $t('clearLimits') }}</button>
               <button type="button" class="btn btn-primary btn-sm" @click="saveLimits">{{ $t('save') }}</button>
@@ -528,7 +528,7 @@ const limitStates = computed(() => {
 const limitsDialogOpen = ref(false)
 const limitsUser = ref('')
 
-const draftEnabled = ref(true)
+const draftEnabled = ref(false)
 const draftDisabled = ref(false)
 const draftTrafficGiB = ref<number>(0)
 const draftBandwidthMbps = ref<number>(0)
@@ -564,9 +564,19 @@ const saveLimits = () => {
   const trafficLimitBytes = bytesFromGiB(draftTrafficGiB.value)
   const bandwidthLimitBps = bpsFromMbps(draftBandwidthMbps.value)
 
+  const enabled = !!draftEnabled.value
+  const disabled = !!draftDisabled.value
+
+  // Default: don't persist an entry unless user really sets something.
+  if (!enabled && !disabled && !trafficLimitBytes && !bandwidthLimitBps) {
+    clearUserLimit(user)
+    limitsDialogOpen.value = false
+    return
+  }
+
   setUserLimit(user, {
-    enabled: draftEnabled.value,
-    disabled: draftDisabled.value,
+    enabled,
+    disabled,
     trafficPeriod: draftPeriod.value,
     trafficLimitBytes: trafficLimitBytes || undefined,
     bandwidthLimitBps: bandwidthLimitBps || undefined,

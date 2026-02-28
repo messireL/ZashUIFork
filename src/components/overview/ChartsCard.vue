@@ -2,7 +2,7 @@
   <!-- overview -->
   <div class="card w-full">
     <div class="card-title px-4 pt-4">
-      {{ $t('overview') }}
+      {{ $t(titleKey) }}
     </div>
     <div class="card-body gap-4">
       <StatisticsStats type="overview" />
@@ -16,6 +16,15 @@
 </template>
 
 <script setup lang="ts">
+withDefaults(
+  defineProps<{
+    titleKey?: string
+  }>(),
+  {
+    titleKey: 'overview',
+  },
+)
+
 import ConnectionsCharts from '@/components/overview/ConnectionsCharts.vue'
 import MemoryCharts from '@/components/overview/MemoryCharts.vue'
 import SpeedCharts from '@/components/overview/SpeedCharts.vue'
