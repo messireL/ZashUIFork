@@ -12,7 +12,7 @@
         </select>
         <select class="select select-sm" v-model.number="topN">
           <option :value="0">{{ $t('all') }}</option>
-          <option v-for="n in [10,20,30,50,100]" :key="n" :value="n">top {{ n }}</option>
+          <option v-for="n in [10, 20, 30, 50, 100]" :key="n" :value="n">top {{ n }}</option>
         </select>
         <button type="button" class="btn btn-sm" @click="clearHistory">
           {{ $t('clearHistory') }}
@@ -56,22 +56,34 @@
                 {{ $t('total') }}
                 <span class="opacity-60" v-if="sortKey === 'total'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
               </th>
+              <th class="text-right max-lg:hidden">{{ $t('trafficLimit') }}</th>
+              <th class="text-right max-lg:hidden">{{ $t('bandwidthLimit') }}</th>
               <th class="text-right">{{ $t('actions') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.user">
               <td class="font-medium">
-                <template v-if="editingUser === row.user">
-                  <input
-                    class="input input-xs w-full max-w-[260px]"
-                    v-model="editingName"
-                    :placeholder="$t('user')"
-                  />
-                </template>
-                <template v-else>
-                  <span class="truncate inline-block max-w-[240px]" :title="row.user">{{ row.user }}</span>
-                </template>
+                <div class="flex items-center gap-2">
+                  <template v-if="editingUser === row.user">
+                    <input
+                      class="input input-xs w-full max-w-[260px]"
+                      v-model="editingName"
+                      :placeholder="$t('user')"
+                    />
+                  </template>
+                  <template v-else>
+                    <span class="truncate inline-block max-w-[240px]" :title="row.user">{{ row.user }}</span>
+                  </template>
+
+                  <span
+                    v-if="limitStates[row.user]?.blocked"
+                    class="badge badge-xs badge-error"
+                    :title="$t('userBlockedTip')"
+                  >
+                    {{ $t('blocked') }}
+                  </span>
+                </div>
               </td>
               <td class="max-md:hidden">
                 <span class="truncate inline-block max-w-[420px] opacity-70" :title="row.keys">{{ row.keys }}</span>
@@ -79,48 +91,105 @@
               <td class="text-right font-mono">{{ format(row.dl) }}</td>
               <td class="text-right font-mono">{{ format(row.ul) }}</td>
               <td class="text-right font-mono">{{ format(row.dl + row.ul) }}</td>
-              <td class="text-right relative z-30 pointer-events-auto">
-                <div class="flex justify-end gap-1 pointer-events-auto">
-<template v-if="editingUser === row.user">
-                  <button
-                    type="button" class="btn btn-ghost btn-circle btn-xs relative z-20"
-                    :disabled="!editingName.trim()"
-                    @click.stop.prevent="saveEdit" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
-                    :title="$t('save')"
-                  >
-                    <CheckIcon class="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button" class="btn btn-ghost btn-circle btn-xs relative z-20"
-                    @click.stop.prevent="cancelEdit" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
-                    :title="$t('cancel')"
-                  >
-                    <XMarkIcon class="h-4 w-4" />
-                  </button>
+
+              <td class="text-right font-mono max-lg:hidden">
+                <template v-if="limitStates[row.user]?.trafficLimitBytes">
+                  <div class="whitespace-nowrap">
+                    {{ format(limitStates[row.user].usageBytes) }} /
+                    {{ format(limitStates[row.user].trafficLimitBytes) }}
+                  </div>
+                  <div class="text-xs opacity-60">
+                    {{ limitStates[row.user].periodLabel }} · {{ limitStates[row.user].percent }}%
+                  </div>
                 </template>
                 <template v-else>
-                  <button
-                    type="button" class="btn btn-ghost btn-circle btn-xs relative z-20"
-                    @click.stop.prevent="startEdit(row.user)" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
-                    :title="$t('edit')"
-                  >
-                    <PencilSquareIcon class="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button" class="btn btn-ghost btn-circle btn-xs relative z-20"
-                    :disabled="!hasMapping(row.user)"
-                    @click.stop.prevent="removeUser(row.user)" @pointerdown.stop.prevent @mousedown.stop.prevent @touchstart.stop.prevent
-                    :title="$t('delete')"
-                  >
-                    <TrashIcon class="h-4 w-4" />
-                  </button>
+                  <span class="opacity-50">—</span>
                 </template>
+              </td>
+
+              <td class="text-right font-mono max-lg:hidden">
+                <template v-if="limitStates[row.user]?.bandwidthLimitBps">
+                  <div class="whitespace-nowrap">
+                    {{ speed(limitStates[row.user].speedBps) }} /
+                    {{ speed(limitStates[row.user].bandwidthLimitBps) }}
+                  </div>
+                </template>
+                <template v-else>
+                  <span class="opacity-50">—</span>
+                </template>
+              </td>
+
+              <td class="text-right relative z-30 pointer-events-auto">
+                <div class="flex justify-end gap-1 pointer-events-auto">
+                  <template v-if="editingUser === row.user">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-circle btn-xs relative z-20"
+                      :disabled="!editingName.trim()"
+                      @click.stop.prevent="saveEdit"
+                      @pointerdown.stop.prevent
+                      @mousedown.stop.prevent
+                      @touchstart.stop.prevent
+                      :title="$t('save')"
+                    >
+                      <CheckIcon class="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-circle btn-xs relative z-20"
+                      @click.stop.prevent="cancelEdit"
+                      @pointerdown.stop.prevent
+                      @mousedown.stop.prevent
+                      @touchstart.stop.prevent
+                      :title="$t('cancel')"
+                    >
+                      <XMarkIcon class="h-4 w-4" />
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-circle btn-xs relative z-20"
+                      @click.stop.prevent="openLimits(row.user)"
+                      @pointerdown.stop.prevent
+                      @mousedown.stop.prevent
+                      @touchstart.stop.prevent
+                      :title="$t('limits')"
+                    >
+                      <AdjustmentsHorizontalIcon class="h-4 w-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-circle btn-xs relative z-20"
+                      @click.stop.prevent="startEdit(row.user)"
+                      @pointerdown.stop.prevent
+                      @mousedown.stop.prevent
+                      @touchstart.stop.prevent
+                      :title="$t('edit')"
+                    >
+                      <PencilSquareIcon class="h-4 w-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-circle btn-xs relative z-20"
+                      :disabled="!hasMapping(row.user)"
+                      @click.stop.prevent="removeUser(row.user)"
+                      @pointerdown.stop.prevent
+                      @mousedown.stop.prevent
+                      @touchstart.stop.prevent
+                      :title="$t('delete')"
+                    >
+                      <TrashIcon class="h-4 w-4" />
+                    </button>
+                  </template>
                 </div>
               </td>
             </tr>
 
             <tr v-if="!rows.length">
-              <td colspan="6" class="text-center opacity-60">{{ $t('noContent') }}</td>
+              <td colspan="8" class="text-center opacity-60">{{ $t('noContent') }}</td>
             </tr>
           </tbody>
         </table>
@@ -129,17 +198,89 @@
       <div class="text-xs opacity-60">
         {{ $t('userTrafficTip') }} ({{ $t('buckets') }}: {{ buckets }})
       </div>
+
+      <DialogWrapper v-model="limitsDialogOpen">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="text-base font-semibold">{{ $t('limits') }}</div>
+          <div class="text-sm opacity-70 truncate max-w-[60%]" :title="limitsUser">{{ limitsUser }}</div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-3">
+          <label class="flex items-center justify-between gap-2">
+            <span class="text-sm">{{ $t('enabled') }}</span>
+            <input type="checkbox" class="toggle" v-model="draftEnabled" />
+          </label>
+
+          <label class="flex items-center justify-between gap-2">
+            <span class="text-sm">{{ $t('blocked') }}</span>
+            <input type="checkbox" class="toggle" v-model="draftDisabled" />
+          </label>
+
+          <div class="divider my-0"></div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label class="flex flex-col gap-1">
+              <span class="text-sm opacity-70">{{ $t('trafficLimit') }} (GiB)</span>
+              <input class="input input-sm" type="number" min="0" step="0.1" v-model.number="draftTrafficGiB" />
+            </label>
+
+            <label class="flex flex-col gap-1">
+              <span class="text-sm opacity-70">{{ $t('period') }}</span>
+              <select class="select select-sm" v-model="draftPeriod">
+                <option value="1d">{{ $t('last24h') }}</option>
+                <option value="30d">{{ $t('last30d') }}</option>
+                <option value="month">{{ $t('thisMonth') }}</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-sm opacity-70">{{ $t('bandwidthLimit') }} (Mbps)</span>
+            <input class="input input-sm" type="number" min="0" step="0.1" v-model.number="draftBandwidthMbps" />
+            <span class="text-xs opacity-60">{{ $t('bandwidthLimitTip') }}</span>
+          </label>
+
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-xs opacity-70">{{ $t('autoDisconnectLimitedUsers') }}</div>
+            <input type="checkbox" class="toggle toggle-sm" v-model="autoDisconnectLimitedUsers" />
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <button type="button" class="btn btn-sm" @click="resetCounter">{{ $t('resetUsage') }}</button>
+            <div class="flex items-center gap-2">
+              <button type="button" class="btn btn-ghost btn-sm" @click="clearLimits">{{ $t('clearLimits') }}</button>
+              <button type="button" class="btn btn-primary btn-sm" @click="saveLimits">{{ $t('save') }}</button>
+            </div>
+          </div>
+
+          <div class="text-xs opacity-60">
+            {{ $t('limitsEnforcementNote') }}
+          </div>
+        </div>
+      </DialogWrapper>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { clearUserTrafficHistory, formatTraffic, getTrafficRange, userTrafficStoreSize } from '@/composables/userTraffic'
+import DialogWrapper from '@/components/common/DialogWrapper.vue'
+import { getIPLabelFromMap } from '@/helper/sourceip'
+import { prettyBytesHelper } from '@/helper/utils'
+import { activeConnections } from '@/store/connections'
 import { sourceIPLabelList } from '@/store/settings'
+import { autoDisconnectLimitedUsers, type UserLimitPeriod } from '@/store/userLimits'
+import { clearUserLimit, getUserLimit, setUserLimit } from '@/composables/userLimits'
+import { clearUserTrafficHistory, formatTraffic, getTrafficRange, userTrafficStoreSize } from '@/composables/userTraffic'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
-import { CheckIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import {
+  AdjustmentsHorizontalIcon,
+  CheckIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  XMarkIcon,
+} from '@heroicons/vue/24/outline'
 
 type Row = { user: string; keys: string; dl: number; ul: number }
 
@@ -275,14 +416,177 @@ const rows = computed<Row[]>(() => {
     const bt = b.dl + b.ul
     return dir * (at - bt)
   })
+
   if (topN.value > 0) return sorted.slice(0, topN.value)
   return sorted
 })
 
+const speed = (bps: number) => `${prettyBytesHelper(bps || 0)}/s`
 const format = (b: number) => formatTraffic(b)
 const buckets = computed(() => userTrafficStoreSize.value)
 
 const clearHistory = () => {
   clearUserTrafficHistory()
+}
+
+// --- Limits aggregation for the table ---
+const windowForLimit = (period: UserLimitPeriod, resetAt?: number) => {
+  const now = dayjs()
+  let start = now.subtract(30, 'day')
+  if (period === '1d') start = now.subtract(24, 'hour')
+  if (period === 'month') start = now.startOf('month')
+  let startTs = start.valueOf()
+  if (resetAt && resetAt > startTs) startTs = resetAt
+  return { startTs, endTs: now.valueOf() }
+}
+
+const periodLabel = (p: UserLimitPeriod) => {
+  if (p === '1d') return '24h'
+  if (p === 'month') return 'month'
+  return '30d'
+}
+
+const speedByUser = computed(() => {
+  const map: Record<string, number> = {}
+  for (const c of activeConnections.value) {
+    const user = getIPLabelFromMap(c?.metadata?.sourceIP || '')
+    map[user] = (map[user] || 0) + (c.downloadSpeed || 0) + (c.uploadSpeed || 0)
+  }
+  return map
+})
+
+const limitStates = computed(() => {
+  const out: Record<
+    string,
+    {
+      usageBytes: number
+      trafficLimitBytes: number
+      bandwidthLimitBps: number
+      speedBps: number
+      blocked: boolean
+      percent: string
+      periodLabel: string
+    }
+  > = {}
+
+  // Build windows per user appearing in the table.
+  const windows = new Map<string, { startTs: number; endTs: number; users: string[] }>()
+  for (const row of rows.value) {
+    const l = getUserLimit(row.user)
+    if (!l.enabled) continue
+
+    const hasTraffic = (l.trafficLimitBytes || 0) > 0
+    const hasBw = (l.bandwidthLimitBps || 0) > 0
+    if (!hasTraffic && !hasBw && !l.disabled) continue
+
+    const w = windowForLimit(l.trafficPeriod, l.resetAt)
+    const key = `${l.trafficPeriod}:${w.startTs}`
+    const item = windows.get(key) || { ...w, users: [] }
+    item.users.push(row.user)
+    windows.set(key, item)
+  }
+
+  const aggByKey = new Map<string, Map<string, { dl: number; ul: number }>>()
+  for (const [key, w] of windows.entries()) {
+    aggByKey.set(key, getTrafficRange(w.startTs, w.endTs))
+  }
+
+  for (const row of rows.value) {
+    const l = getUserLimit(row.user)
+    const w = windowForLimit(l.trafficPeriod, l.resetAt)
+    const key = `${l.trafficPeriod}:${w.startTs}`
+    const agg = aggByKey.get(key)
+    const t = agg?.get(row.user) || { dl: 0, ul: 0 }
+    const usage = (t.dl || 0) + (t.ul || 0)
+    const tl = l.trafficLimitBytes || 0
+
+    const sp = speedByUser.value[row.user] || 0
+    const bl = l.bandwidthLimitBps || 0
+
+    const trafficExceeded = l.enabled && tl > 0 && usage >= tl
+    const bandwidthExceeded = l.enabled && bl > 0 && sp >= bl
+
+    const blocked = l.enabled && (l.disabled || trafficExceeded || bandwidthExceeded)
+
+    const pct = tl > 0 ? Math.min(999, Math.floor((usage / tl) * 100)) : 0
+
+    out[row.user] = {
+      usageBytes: usage,
+      trafficLimitBytes: tl,
+      bandwidthLimitBps: bl,
+      speedBps: sp,
+      blocked,
+      percent: tl > 0 ? String(pct) : '0',
+      periodLabel: periodLabel(l.trafficPeriod),
+    }
+  }
+
+  return out
+})
+
+// --- Limits dialog ---
+const limitsDialogOpen = ref(false)
+const limitsUser = ref('')
+
+const draftEnabled = ref(true)
+const draftDisabled = ref(false)
+const draftTrafficGiB = ref<number>(0)
+const draftBandwidthMbps = ref<number>(0)
+const draftPeriod = ref<UserLimitPeriod>('30d')
+
+const bytesFromGiB = (gib: number) => {
+  const n = Number(gib)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return Math.round(n * 1024 * 1024 * 1024)
+}
+
+const bpsFromMbps = (mbps: number) => {
+  const n = Number(mbps)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return Math.round((n * 1_000_000) / 8)
+}
+
+const openLimits = (user: string) => {
+  limitsUser.value = user
+  const l = getUserLimit(user)
+  draftEnabled.value = l.enabled
+  draftDisabled.value = l.disabled
+  draftPeriod.value = l.trafficPeriod
+  draftTrafficGiB.value = l.trafficLimitBytes ? +(l.trafficLimitBytes / (1024 ** 3)).toFixed(2) : 0
+  draftBandwidthMbps.value = l.bandwidthLimitBps ? +(((l.bandwidthLimitBps * 8) / 1_000_000)).toFixed(2) : 0
+  limitsDialogOpen.value = true
+}
+
+const saveLimits = () => {
+  const user = limitsUser.value
+  if (!user) return
+
+  const trafficLimitBytes = bytesFromGiB(draftTrafficGiB.value)
+  const bandwidthLimitBps = bpsFromMbps(draftBandwidthMbps.value)
+
+  setUserLimit(user, {
+    enabled: draftEnabled.value,
+    disabled: draftDisabled.value,
+    trafficPeriod: draftPeriod.value,
+    trafficLimitBytes: trafficLimitBytes || undefined,
+    bandwidthLimitBps: bandwidthLimitBps || undefined,
+  })
+
+  limitsDialogOpen.value = false
+}
+
+const clearLimits = () => {
+  const user = limitsUser.value
+  if (!user) return
+  clearUserLimit(user)
+  limitsDialogOpen.value = false
+}
+
+const resetCounter = () => {
+  const user = limitsUser.value
+  if (!user) return
+  setUserLimit(user, {
+    resetAt: Date.now(),
+  })
 }
 </script>

@@ -66,6 +66,14 @@ export const isCoreUpdateAvailable = ref(false)
 export const fetchVersionAPI = () => {
   return axios.get<{ version: string }>('/version')
 }
+
+export const fetchVersionSilentAPI = () => {
+  return axios.get<{ version: string }>('/version', {
+    timeout: 4000,
+    silent: true as any,
+    headers: { 'X-Zash-Silent': '1' } as any,
+  })
+}
 export const isSingBox = computed(() => version.value?.includes('sing-box'))
 export const zashboardVersion = ref(__APP_VERSION__)
 
@@ -160,6 +168,13 @@ export const updateRuleProviderAPI = (name: string) => {
 
 export const disconnectByIdAPI = (id: string) => {
   return axios.delete(`/connections/${id}`)
+}
+
+export const disconnectByIdSilentAPI = (id: string) => {
+  return axios.delete(`/connections/${id}`, {
+    silent: true as any,
+    headers: { 'X-Zash-Silent': '1' } as any,
+  })
 }
 
 export const disconnectAllAPI = () => {

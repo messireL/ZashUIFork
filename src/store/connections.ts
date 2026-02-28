@@ -29,6 +29,8 @@ export const isPaused = ref(false)
 export const downloadTotal = ref(0)
 export const uploadTotal = ref(0)
 
+export const lastConnectionsTick = ref<number>(0)
+
 let cancel: () => void
 let previousConnectionsMap = new Map<string, Connection>()
 
@@ -48,6 +50,8 @@ export const initConnections = () => {
   }>()
   const unwatch = watch(ws.data, (data) => {
     if (!data) return
+
+    lastConnectionsTick.value = Date.now()
 
     downloadTotal.value = data.downloadTotal
     uploadTotal.value = data.uploadTotal

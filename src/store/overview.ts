@@ -6,10 +6,12 @@ export const timeSaved = 60
 const initValue = new Array(timeSaved).fill(0).map((v, i) => ({ name: i, value: v }))
 
 export const memory = ref<number>(0)
+export const lastMemoryTick = ref<number>(0)
 export const memoryHistory = ref([...initValue])
 export const connectionsHistory = ref([...initValue])
 
 export const downloadSpeed = ref<number>(0)
+export const lastTrafficTick = ref<number>(0)
 export const uploadSpeed = ref<number>(0)
 export const downloadSpeedHistory = ref([...initValue])
 export const uploadSpeedHistory = ref([...initValue])
@@ -31,6 +33,7 @@ export const initSatistic = () => {
     (data) => {
       if (!data) return
       const timestamp = Date.now().valueOf()
+      lastMemoryTick.value = timestamp
 
       if (data.inuse === 0) {
         return
@@ -61,6 +64,7 @@ export const initSatistic = () => {
       if (!data) return
 
       const timestamp = Date.now().valueOf()
+      lastTrafficTick.value = timestamp
 
       downloadSpeed.value = data.down
       uploadSpeed.value = data.up

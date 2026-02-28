@@ -1,12 +1,28 @@
 <template>
   <div class="card w-full max-w-none">
     <div class="card-title px-4 pt-4 flex items-center justify-between gap-2">
-      <span>{{ $t('mihomoConfigEditor') }}</span>
       <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-ghost btn-circle btn-sm"
+          @click="expanded = !expanded"
+          :title="expanded ? $t('collapse') : $t('expand')"
+        >
+          <ChevronUpIcon v-if="expanded" class="h-4 w-4" />
+          <ChevronDownIcon v-else class="h-4 w-4" />
+        </button>
+        <span>{{ $t('mihomoConfigEditor') }}</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <div class="text-xs opacity-70 hidden md:block">
+          <span v-if="isFullYaml">{{ $t('configFullYaml') }}</span>
+          <span v-else>{{ $t('configRuntime') }}</span>
+        </div>
         <button class="btn btn-sm" :class="isLoading && 'loading'" @click="load">
           {{ $t('load') }}
         </button>
-        <button class="btn btn-sm" :class="isReloading && 'loading'" @click="apply">
+        <button class="btn btn-sm" :class="isReloading && 'loading'" @click="apply" :disabled="!expanded">
           {{ $t('applyAndReload') }}
         </button>
         <button class="btn btn-sm" :class="isRestarting && 'loading'" @click="restart">
@@ -16,31 +32,50 @@
     </div>
 
     <div class="card-body gap-2">
-      <div class="text-xs opacity-70">
-        {{ $t('mihomoConfigEditorTip') }}
-      </div>
-
-      <label class="flex flex-col gap-1">
-        <span class="text-xs opacity-70">{{ $t('configPath') }}</span>
-        <input class="input input-sm" v-model="path" readonly />
-      </label>
-
-      <textarea
-        class="textarea textarea-sm font-mono w-full h-[70vh] min-h-[28rem] resize-y leading-5 overflow-x-auto whitespace-pre [tab-size:2]"
-        wrap="off"
-        v-model="payload"
-        :placeholder="$t('pasteYamlHere')"
-      ></textarea>
-
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="text-xs opacity-60">
-          {{ $t('mihomoConfigDraftSaved') }}
+        <div class="text-xs opacity-70">
+          <span class="opacity-70">{{ $t('configPath') }}:</span>
+          <span class="font-mono">{{ path }}</span>
         </div>
-        <button class="btn btn-ghost btn-sm" @click="clearDraft">{{ $t('clearDraft') }}</button>
+        <div class="text-xs opacity-60">
+          <span v-if="isFullYaml">{{ $t('configFullYaml') }}</span>
+          <span v-else>{{ $t('mihomoConfigLoadPartial') }}</span>
+        </div>
       </div>
 
-      <div class="text-xs opacity-60">
-        {{ $t('mihomoConfigLoadNote') }}
+      <div
+        class="transparent-collapse collapse rounded-none shadow-none"
+        :class="expanded ? 'collapse-open' : ''"
+      >
+        <div class="collapse-content p-0">
+          <div v-if="expanded" class="grid grid-cols-1 gap-2">
+            <div class="text-xs opacity-70">
+              {{ $t('mihomoConfigEditorTip') }}
+            </div>
+
+            <textarea
+              class="textarea textarea-sm font-mono w-full h-[70vh] min-h-[28rem] resize-y leading-5 overflow-x-auto whitespace-pre [tab-size:2]"
+              wrap="off"
+              v-model="payload"
+              :placeholder="$t('pasteYamlHere')"
+            ></textarea>
+
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="text-xs opacity-60">
+                {{ $t('mihomoConfigDraftSaved') }}
+              </div>
+              <button class="btn btn-ghost btn-sm" @click="clearDraft">{{ $t('clearDraft') }}</button>
+            </div>
+
+            <div class="text-xs opacity-60">
+              {{ $t('mihomoConfigLoadNote') }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-xs opacity-60" v-if="!expanded">
+        {{ $t('configCollapsedTip') }}
       </div>
     </div>
   </div>
@@ -51,18 +86,19 @@ import { getConfigsAPI, getConfigsRawAPI, reloadConfigsAPI, restartCoreAPI } fro
 import axios from 'axios'
 import { showNotification } from '@/helper/notification'
 import { useStorage } from '@vueuse/core'
-import { onMounted, ref } from 'vue'
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/vue/24/outline'
+import { computed, onMounted, ref } from 'vue'
 
 const path = useStorage('config/mihomo-config-path', '/opt/etc/mihomo/config.yaml')
 const payload = useStorage('config/mihomo-config-payload', '')
+const expanded = useStorage('config/mihomo-config-expanded', false)
 
 const isLoading = ref(false)
 const isReloading = ref(false)
 const isRestarting = ref(false)
 
 const dumpYaml = (value: any): string => {
-  const isScalar = (v: any) =>
-    v === null || ['string', 'number', 'boolean'].includes(typeof v)
+  const isScalar = (v: any) => v === null || ['string', 'number', 'boolean'].includes(typeof v)
 
   const scalarInline = (v: any) => {
     if (v === null) return 'null'
@@ -140,7 +176,6 @@ const dumpYaml = (value: any): string => {
 const looksLikeFullConfig = (s: string) => {
   const t = (s || '').trim()
   if (!t) return false
-  // basic markers of a real mihomo YAML (not runtime /configs JSON)
   return (
     /(^|\n)\s*proxies\s*:/m.test(t) ||
     /(^|\n)\s*proxy-groups\s*:/m.test(t) ||
@@ -153,8 +188,12 @@ const looksLikeFullConfig = (s: string) => {
 const looksLikeRuntimeConfigs = (obj: any) => {
   if (!obj || typeof obj !== 'object') return false
   const keys = Object.keys(obj)
-  const hasPorts = keys.some((k) => ['port', 'socks-port', 'redir-port', 'tproxy-port', 'mixed-port'].includes(k))
-  const hasGroups = keys.some((k) => ['proxy-groups', 'proxies', 'rules', 'proxy-providers', 'rule-providers'].includes(k))
+  const hasPorts = keys.some((k) =>
+    ['port', 'socks-port', 'redir-port', 'tproxy-port', 'mixed-port'].includes(k),
+  )
+  const hasGroups = keys.some((k) =>
+    ['proxy-groups', 'proxies', 'rules', 'proxy-providers', 'rule-providers'].includes(k),
+  )
   return hasPorts && !hasGroups
 }
 
@@ -184,7 +223,6 @@ const tryLoadFromFileLikeEndpoints = async (pathValue: string): Promise<string |
       if (typeof data === 'string') {
         const s = data.trim()
         if (looksLikeFullConfig(s)) return data
-        // some backends respond with JSON envelope: {"payload":"..."}
         if ((s.startsWith('{') || s.startsWith('[')) && (s.endsWith('}') || s.endsWith(']'))) {
           try {
             const parsed = JSON.parse(s)
@@ -206,11 +244,12 @@ const tryLoadFromFileLikeEndpoints = async (pathValue: string): Promise<string |
   return null
 }
 
+const isFullYaml = computed(() => looksLikeFullConfig(payload.value || ''))
+
 const load = async () => {
   if (isLoading.value) return
   isLoading.value = true
   try {
-    // 1) Try to load full config file (if backend supports it)
     const fileText = await tryLoadFromFileLikeEndpoints(path.value)
     if (fileText) {
       payload.value = fileText
@@ -218,21 +257,18 @@ const load = async () => {
       return
     }
 
-    // 2) Fallback: /configs raw (may return YAML or runtime JSON)
     const raw = await getConfigsRawAPI({ path: path.value })
     const data: any = raw?.data
 
     if (typeof data === 'string' && data.trim().length > 0) {
       const s = data.trim()
 
-      // YAML (already good)
       if (looksLikeFullConfig(s)) {
         payload.value = data
         showNotification({ content: 'mihomoConfigLoadSuccess', type: 'alert-success' })
         return
       }
 
-      // JSON string
       if (s.startsWith('{') || s.startsWith('[')) {
         try {
           const parsed = JSON.parse(s)
@@ -251,7 +287,7 @@ const load = async () => {
           showNotification({ content: 'mihomoConfigLoadPartial', type: 'alert-info' })
           return
         } catch {
-          // fall through: treat as raw text
+          // fall through
         }
       }
 
@@ -260,7 +296,6 @@ const load = async () => {
       return
     }
 
-    // 3) Fallback: JSON /configs
     const json = await getConfigsAPI()
     payload.value = `# Converted from /configs (JSON)\n# Comments/ordering may differ from the original mihomo YAML.\n\n${dumpYaml(json.data)}`
     showNotification({ content: 'mihomoConfigLoadPartial', type: 'alert-info' })

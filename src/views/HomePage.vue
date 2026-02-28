@@ -89,6 +89,7 @@ import RulesCtrl from '@/components/sidebar/RulesCtrl.tsx'
 import SideBar from '@/components/sidebar/SideBar.vue'
 import { useSettings } from '@/composables/settings'
 import { initUserTrafficRecorder } from '@/composables/userTraffic'
+import { initUserLimitsEnforcer } from '@/composables/userLimits'
 import { useSwipeRouter } from '@/composables/swipe'
 import { PROXY_TAB_TYPE, ROUTE_ICON_MAP, ROUTE_NAME, RULE_TAB_TYPE } from '@/constant'
 import { renderRoutes } from '@/helper'
@@ -138,6 +139,7 @@ watch(
     fetchRules()
     initConnections()
     initUserTrafficRecorder()
+    initUserLimitsEnforcer()
     initLogs()
     initSatistic()
   },
