@@ -8,9 +8,27 @@
     <div ref="chart" class="h-full w-full" />
     <span class="border-base-content/30 text-base-content/10 bg-base-100/70 hidden" ref="colorRef" />
 
-    <div v-if="filterMode !== 'none'" class="absolute left-2 top-2 z-10">
-      <button class="badge badge-outline cursor-pointer hover:opacity-80" @click.stop="clearFilter" :title="$t('clear')">
+
+    <div class="absolute left-2 top-2 z-10 flex flex-wrap items-center gap-2">
+      <button
+        v-if="filterMode !== 'none'"
+        class="badge badge-outline cursor-pointer hover:opacity-80"
+        @click.stop="clearFilter"
+        :title="$t('clear')"
+      >
         {{ filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude') }}
+      </button>
+
+      <button class="btn btn-ghost btn-xs" @click.stop="presetDialogShow = true" :title="$t('presets')">
+        <BookmarkIcon class="h-4 w-4" />
+        <span class="max-sm:hidden">{{ $t('presets') }}</span>
+        <span
+          v-if="activePreset"
+          class="badge badge-outline badge-sm ml-1 max-w-[160px] truncate"
+          :title="activePreset.name"
+        >
+          {{ activePreset.name }}
+        </span>
       </button>
     </div>
 
@@ -180,11 +198,78 @@
       </div>
     </div>
   </Teleport>
+
+
+
+  <!-- presets: save/restore topology scene (filters/modes) -->
+  <DialogWrapper v-model="presetDialogShow">
+    <div class="flex items-center justify-between gap-3">
+      <div class="text-lg font-semibold">{{ $t('presets') }}</div>
+      <div class="text-xs opacity-70 truncate max-w-[60%]" :title="currentSceneSummary">{{ currentSceneSummary }}</div>
+    </div>
+
+    <div class="mt-3 flex items-center gap-2">
+      <TextInput v-model="newPresetName" class="flex-1" :placeholder="$t('presetNamePlaceholder')" />
+      <button class="btn btn-sm" @click="createPreset">
+        <PlusIcon class="h-4 w-4" />
+        {{ $t('save') }}
+      </button>
+    </div>
+    <div class="mt-2 text-xs opacity-70">{{ $t('presetTip') }}</div>
+
+    <div class="divider my-4" />
+
+    <div class="space-y-2">
+      <div v-for="p in topologyPresets" :key="p.id" class="card bg-base-200/40">
+        <div class="card-body p-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div v-if="editingPresetId === p.id" class="flex items-center gap-2">
+                <TextInput v-model="editingPresetName" class="flex-1" />
+                <button class="btn btn-xs" @click="confirmRenamePreset(p)" :title="$t('save')">
+                  <CheckIcon class="h-4 w-4" />
+                </button>
+              </div>
+              <div v-else class="font-semibold truncate" :title="p.name">{{ p.name }}</div>
+              <div class="text-xs opacity-70 mt-1" :title="presetSummary(p)">{{ presetSummary(p) }}</div>
+            </div>
+
+            <div class="flex flex-col items-end gap-1">
+              <button
+                class="btn btn-xs w-24"
+                :class="activePresetId === p.id ? 'btn-active' : 'btn-outline'"
+                @click="applyPreset(p)"
+              >
+                {{ $t('apply') }}
+              </button>
+
+              <button class="btn btn-xs btn-ghost w-24" @click="overwritePreset(p)" :title="$t('overwritePreset')">
+                {{ $t('update') }}
+              </button>
+
+              <div class="flex items-center justify-end gap-1">
+                <button class="btn btn-xs btn-ghost btn-square" @click="startRenamePreset(p)" :title="$t('rename')">
+                  <PencilIcon class="h-4 w-4" />
+                </button>
+                <button class="btn btn-xs btn-ghost btn-square" @click="deletePreset(p)" :title="$t('delete')">
+                  <TrashIcon class="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!topologyPresets.length" class="text-sm opacity-70">—</div>
+    </div>
+  </DialogWrapper>
+
 </template>
 
 <script setup lang="ts">
 import { backgroundImage } from '@/helper/indexeddb'
 import { prettyBytesHelper } from '@/helper/utils'
+import { showNotification } from '@/helper/notification'
 import { activeConnections } from '@/store/connections'
 import { proxyProviederList } from '@/store/proxies'
 import {
@@ -199,7 +284,7 @@ import {
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
-import { ArrowsPointingInIcon, ArrowsPointingOutIcon, FunnelIcon, NoSymbolIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useElementSize, useStorage } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -209,6 +294,8 @@ import { debounce } from 'lodash'
 import { twMerge } from 'tailwind-merge'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import DialogWrapper from '@/components/common/DialogWrapper.vue'
+import TextInput from '@/components/common/TextInput.vue'
 
 echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
 
@@ -340,6 +427,172 @@ type FilterMode = 'none' | 'only' | 'exclude'
 const focus = ref<Focus | null>(null)
 const filterMode = ref<FilterMode>('none')
 const filterFocus = ref<Focus | null>(null)
+
+
+type TopologyPreset = {
+  id: string
+  name: string
+  weightMode: 'traffic' | 'count'
+  topN: number
+  colorMode: 'none' | 'rule' | 'provider' | 'proxy'
+  filterMode: FilterMode
+  filterFocus: Focus | null
+}
+
+const presetDialogShow = ref(false)
+const topologyPresets = useStorage<TopologyPreset[]>('config/topology-presets', [])
+const activePresetId = useStorage<string>('config/topology-preset-active', '')
+const activePreset = computed(() => topologyPresets.value.find((p) => p.id === activePresetId.value) || null)
+
+const newPresetName = ref('')
+const editingPresetId = ref<string | null>(null)
+const editingPresetName = ref('')
+
+const stageLabel = (st: FocusStage) =>
+  st === 'C'
+    ? t('proxiesRelationshipClients')
+    : st === 'R'
+      ? t('rule')
+      : st === 'G'
+        ? t('proxyGroup')
+        : t('proxies')
+
+const normalizeSavedFilter = () => {
+  if (filterMode.value === 'none' || !filterFocus.value || filterFocus.value.kind !== 'value') {
+    return { mode: 'none' as FilterMode, focus: null as Focus | null }
+  }
+  return { mode: filterMode.value, focus: { ...filterFocus.value } as Focus }
+}
+
+const captureScene = () => {
+  const ff = normalizeSavedFilter()
+  return {
+    weightMode: proxiesRelationshipWeightMode.value,
+    topN: Number(proxiesRelationshipTopN.value) || 40,
+    colorMode: proxiesRelationshipColorMode.value,
+    filterMode: ff.mode,
+    filterFocus: ff.focus,
+  }
+}
+
+const currentSceneSummary = computed(() => {
+  const s = captureScene()
+  const parts = [
+    proxiesRelationshipWeightMode.value === 'count' ? t('count') : t('traffic'),
+    `Top ${s.topN}`,
+  ]
+  if (s.filterMode !== 'none' && s.filterFocus?.kind === 'value') {
+    parts.push(`${s.filterMode === 'only' ? t('topologyFilterOnly') : t('topologyFilterExclude')} · ${stageLabel(s.filterFocus.stage)}`)
+  }
+  return parts.join(' · ')
+})
+
+const ensureDefaultPresets = () => {
+  if (topologyPresets.value?.length) return
+  topologyPresets.value = [
+    {
+      id: 'streaming',
+      name: t('presetStreaming'),
+      weightMode: 'traffic',
+      topN: 60,
+      colorMode: 'proxy',
+      filterMode: 'none',
+      filterFocus: null,
+    },
+    {
+      id: 'work',
+      name: t('presetWork'),
+      weightMode: 'traffic',
+      topN: 40,
+      colorMode: 'proxy',
+      filterMode: 'none',
+      filterFocus: null,
+    },
+    {
+      id: 'gaming',
+      name: t('presetGaming'),
+      weightMode: 'count',
+      topN: 30,
+      colorMode: 'proxy',
+      filterMode: 'none',
+      filterFocus: null,
+    },
+  ]
+}
+ensureDefaultPresets()
+
+const presetSummary = (p: TopologyPreset) => {
+  const parts = [
+    p.weightMode === 'count' ? t('count') : t('traffic'),
+    `Top ${p.topN}`,
+  ]
+  if (p.filterMode !== 'none' && p.filterFocus?.kind === 'value') {
+    const who = stageLabel(p.filterFocus.stage)
+    parts.push(`${p.filterMode === 'only' ? t('topologyFilterOnly') : t('topologyFilterExclude')} · ${who}`)
+  }
+  return parts.join(' · ')
+}
+
+const applyPreset = (p: TopologyPreset) => {
+  proxiesRelationshipWeightMode.value = p.weightMode
+  proxiesRelationshipTopN.value = p.topN
+  proxiesRelationshipColorMode.value = p.colorMode
+
+  if (p.filterMode === 'none' || !p.filterFocus) {
+    clearFilter()
+  } else {
+    filterMode.value = p.filterMode
+    filterFocus.value = { ...p.filterFocus }
+  }
+
+  activePresetId.value = p.id
+  showNotification({ content: 'presetApplied', type: 'alert-success', timeout: 1800 })
+}
+
+const genId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
+const createPreset = () => {
+  const name = (newPresetName.value || '').trim()
+  if (!name) {
+    showNotification({ content: 'presetNeedName', type: 'alert-warning' })
+    return
+  }
+  const scene = captureScene()
+  const p: TopologyPreset = { id: genId(), name, ...scene }
+  topologyPresets.value = [p, ...(topologyPresets.value || [])]
+  activePresetId.value = p.id
+  newPresetName.value = ''
+  showNotification({ content: 'presetSaved', type: 'alert-success', timeout: 1800 })
+}
+
+const overwritePreset = (p: TopologyPreset) => {
+  const scene = captureScene()
+  topologyPresets.value = (topologyPresets.value || []).map((x) => (x.id === p.id ? { ...x, ...scene } : x))
+  activePresetId.value = p.id
+  showNotification({ content: 'presetUpdated', type: 'alert-success', timeout: 1800 })
+}
+
+const startRenamePreset = (p: TopologyPreset) => {
+  editingPresetId.value = p.id
+  editingPresetName.value = p.name
+}
+
+const confirmRenamePreset = (p: TopologyPreset) => {
+  const nm = (editingPresetName.value || '').trim()
+  if (!nm) return
+  topologyPresets.value = (topologyPresets.value || []).map((x) => (x.id === p.id ? { ...x, name: nm } : x))
+  editingPresetId.value = null
+  editingPresetName.value = ''
+  showNotification({ content: 'presetRenamed', type: 'alert-success', timeout: 1800 })
+}
+
+const deletePreset = (p: TopologyPreset) => {
+  const ok = confirm(t('confirmDeletePreset', { name: p.name }))
+  if (!ok) return
+  topologyPresets.value = (topologyPresets.value || []).filter((x) => x.id !== p.id)
+  if (activePresetId.value === p.id) activePresetId.value = ''
+  showNotification({ content: 'presetDeleted', type: 'alert-success', timeout: 1800 })
+}
 
 const setFocus = (v: Focus) => {
   focus.value = v
