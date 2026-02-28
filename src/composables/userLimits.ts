@@ -1,7 +1,15 @@
-import { disconnectByIdSilentAPI } from '@/api'
+import { disconnectByIdSilentAPI, getConfigsSilentAPI, patchConfigsSilentAPI } from '@/api'
 import { getIPLabelFromMap } from '@/helper/sourceip'
 import { activeConnections } from '@/store/connections'
-import { autoDisconnectLimitedUsers, type UserLimit, type UserLimitPeriod, userLimits } from '@/store/userLimits'
+import { sourceIPLabelList } from '@/store/settings'
+import {
+  autoDisconnectLimitedUsers,
+  hardBlockLimitedUsers,
+  managedLanDisallowedCidrs,
+  type UserLimit,
+  type UserLimitPeriod,
+  userLimits,
+} from '@/store/userLimits'
 import dayjs from 'dayjs'
 import { debounce } from 'lodash'
 import { computed, ref, watch } from 'vue'
@@ -99,6 +107,75 @@ export const getUserLimitState = (user: string) => {
 let started = false
 const lastDisconnectAt = ref<Record<string, number>>({})
 const bwExceedCountByUser = ref<Record<string, number>>({})
+let lastAppliedManagedCidrsKey = ''
+let lastHardBlockSyncAt = 0
+
+const looksLikeIP = (s: string) => {
+  const v = (s || '').trim()
+  if (!v) return false
+  const v4 = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(v)
+  const v6 = v.includes(':')
+  return v4 || v6
+}
+
+const toCidr = (ipOrCidr: string) => {
+  const v = (ipOrCidr || '').trim()
+  if (!v) return ''
+  if (v.includes('/')) return v
+  if (v.includes(':')) return `${v}/128`
+  return `${v}/32`
+}
+
+const ipsForUserLabel = (userLabel: string) => {
+  const out: string[] = []
+  for (const it of sourceIPLabelList.value) {
+    const label = it.label || it.key
+    if (label === userLabel || it.key === userLabel) out.push(it.key)
+  }
+  if (!out.length && looksLikeIP(userLabel)) out.push(userLabel)
+  return Array.from(new Set(out))
+}
+
+const getCfgList = (cfg: any, key: string): string[] => {
+  if (!cfg || typeof cfg !== 'object') return []
+  // prefer exact key
+  const v = (cfg as any)[key]
+  if (Array.isArray(v)) return v.filter((x) => typeof x === 'string')
+  // fallback: case-insensitive search
+  const k = Object.keys(cfg).find((kk) => kk.toLowerCase() === key.toLowerCase())
+  const vv = k ? (cfg as any)[k] : undefined
+  if (Array.isArray(vv)) return vv.filter((x) => typeof x === 'string')
+  return []
+}
+
+const syncLanDisallowedIps = async (desiredManagedCidrs: string[]) => {
+  const desired = Array.from(new Set(desiredManagedCidrs.filter(Boolean))).sort()
+  const desiredKey = desired.join('|')
+  const now = Date.now()
+  // Avoid hammering /configs: if desired hasn't changed, sync at most every 15s.
+  if (desiredKey === lastAppliedManagedCidrsKey && now - lastHardBlockSyncAt < 15_000) return
+
+  const prevManaged = Array.from(new Set((managedLanDisallowedCidrs.value || []).filter(Boolean))).sort()
+
+  const cfgResp = await getConfigsSilentAPI().catch(() => null)
+  const cfg: any = cfgResp?.data
+  const current = getCfgList(cfg, 'lan-disallowed-ips')
+
+  // Keep entries not managed by UI, update only managed ones.
+  const nonManaged = current.filter((x) => !prevManaged.includes(x))
+  const next = Array.from(new Set([...nonManaged, ...desired]))
+
+  // Patch only if changed
+  const curKey = Array.from(new Set(current)).sort().join('|')
+  const nextKey = Array.from(new Set(next)).sort().join('|')
+  if (curKey !== nextKey) {
+    await patchConfigsSilentAPI({ 'lan-disallowed-ips': next }).catch(() => null)
+  }
+
+  managedLanDisallowedCidrs.value = desired
+  lastAppliedManagedCidrsKey = desiredKey
+  lastHardBlockSyncAt = now
+}
 
 const cleanupDisconnectCache = () => {
   const now = Date.now()
@@ -117,7 +194,9 @@ const shouldDisconnect = (connId: string) => {
 }
 
 const enforceNow = async () => {
-  if (!autoDisconnectLimitedUsers.value) return
+  const useDisconnect = !!autoDisconnectLimitedUsers.value
+  const useHardBlock = !!hardBlockLimitedUsers.value
+  if (!useDisconnect && !useHardBlock) return
 
   cleanupDisconnectCache()
 
@@ -184,13 +263,41 @@ const enforceNow = async () => {
     return false
   }
 
+  // --- Hard block via Mihomo `lan-disallowed-ips` ---
+  if (useHardBlock) {
+    const blockedUsers: string[] = []
+    for (const [user] of Object.entries(userLimits.value)) {
+      if (isUserBlocked(user)) blockedUsers.push(user)
+    }
+
+    const cidrs: string[] = []
+    for (const u of blockedUsers) {
+      for (const ip of ipsForUserLabel(u)) {
+        const cidr = toCidr(ip)
+        if (cidr) cidrs.push(cidr)
+      }
+    }
+
+    if (cidrs.length || (managedLanDisallowedCidrs.value || []).length) {
+      await syncLanDisallowedIps(cidrs)
+    }
+  } else {
+    // If hard-block disabled, clean up only entries we previously managed.
+    if ((managedLanDisallowedCidrs.value || []).length) {
+      await syncLanDisallowedIps([])
+    }
+  }
+
   // Disconnect active connections for blocked users
   const tasks: Promise<any>[] = []
-  for (const [user, ids] of connsByUser.entries()) {
-    if (!isUserBlocked(user)) continue
-    for (const id of ids) {
-      if (!shouldDisconnect(id)) continue
-      tasks.push(disconnectByIdSilentAPI(id).catch(() => null))
+  // If hard-block is enabled we still disconnect to make the block immediate.
+  if (useDisconnect || useHardBlock) {
+    for (const [user, ids] of connsByUser.entries()) {
+      if (!isUserBlocked(user)) continue
+      for (const id of ids) {
+        if (!shouldDisconnect(id)) continue
+        tasks.push(disconnectByIdSilentAPI(id).catch(() => null))
+      }
     }
   }
 

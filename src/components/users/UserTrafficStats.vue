@@ -245,6 +245,11 @@
             <input type="checkbox" class="toggle toggle-sm" v-model="autoDisconnectLimitedUsers" />
           </div>
 
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-xs opacity-70">{{ $t('hardBlockLimitedUsers') }}</div>
+            <input type="checkbox" class="toggle toggle-sm" v-model="hardBlockLimitedUsers" />
+          </div>
+
           <div class="flex flex-wrap items-center justify-between gap-2">
             <button type="button" class="btn btn-sm" @click="resetCounter" :disabled="!draftEnabled">{{ $t('resetUsage') }}</button>
             <div class="flex items-center gap-2">
@@ -268,7 +273,7 @@ import { getIPLabelFromMap } from '@/helper/sourceip'
 import { prettyBytesHelper } from '@/helper/utils'
 import { activeConnections } from '@/store/connections'
 import { sourceIPLabelList } from '@/store/settings'
-import { autoDisconnectLimitedUsers, type UserLimitPeriod } from '@/store/userLimits'
+import { autoDisconnectLimitedUsers, hardBlockLimitedUsers, type UserLimitPeriod } from '@/store/userLimits'
 import { clearUserLimit, getUserLimit, setUserLimit } from '@/composables/userLimits'
 import { clearUserTrafficHistory, formatTraffic, getTrafficRange, userTrafficStoreSize } from '@/composables/userTraffic'
 import dayjs from 'dayjs'
@@ -473,7 +478,7 @@ const limitStates = computed(() => {
   const windows = new Map<string, { startTs: number; endTs: number; users: string[] }>()
   for (const row of rows.value) {
     const l = getUserLimit(row.user)
-    if (!l.enabled) continue
+    if (!l.enabled && !l.disabled) continue
 
     const hasTraffic = (l.trafficLimitBytes || 0) > 0
     const hasBw = (l.bandwidthLimitBps || 0) > 0
@@ -506,7 +511,8 @@ const limitStates = computed(() => {
     const trafficExceeded = l.enabled && tl > 0 && usage >= tl
     const bandwidthExceeded = l.enabled && bl > 0 && sp >= bl
 
-    const blocked = l.enabled && (l.disabled || trafficExceeded || bandwidthExceeded)
+    // Manual block works regardless of "enabled".
+    const blocked = l.disabled || (l.enabled && (trafficExceeded || bandwidthExceeded))
 
     const pct = tl > 0 ? Math.min(999, Math.floor((usage / tl) * 100)) : 0
 

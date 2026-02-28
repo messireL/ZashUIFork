@@ -185,6 +185,14 @@ export const getConfigsAPI = () => {
   return axios.get<Config>('/configs')
 }
 
+export const getConfigsSilentAPI = () => {
+  return axios.get<Config>('/configs', {
+    timeout: 6000,
+    silent: true as any,
+    headers: { 'X-Zash-Silent': '1' } as any,
+  })
+}
+
 
 export const getConfigsRawAPI = (cfg?: { path?: string }) => {
   return axios.get<string>('/configs', {
@@ -200,6 +208,16 @@ export const getConfigsRawAPI = (cfg?: { path?: string }) => {
 
 export const patchConfigsAPI = (configs: Record<string, string | boolean | object | number>) => {
   return axios.patch('/configs', configs)
+}
+
+export const patchConfigsSilentAPI = (
+  configs: Record<string, string | boolean | object | number>,
+) => {
+  return axios.patch('/configs', configs, {
+    timeout: 8000,
+    silent: true as any,
+    headers: { 'X-Zash-Silent': '1' } as any,
+  })
 }
 
 export const flushFakeIPAPI = () => {

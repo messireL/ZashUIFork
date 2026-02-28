@@ -28,3 +28,18 @@ export const autoDisconnectLimitedUsers = useStorage<boolean>(
   'config/user-limits-auto-disconnect',
   true,
 )
+
+/**
+ * If enabled, the UI will also enforce blocks by updating Mihomo config:
+ * adding blocked IPs to `lan-disallowed-ips` (hard block).
+ */
+export const hardBlockLimitedUsers = useStorage<boolean>('config/user-limits-hard-block', true)
+
+/**
+ * A list of CIDRs managed by the UI inside Mihomo `lan-disallowed-ips`.
+ * We only remove entries that we previously added.
+ */
+export const managedLanDisallowedCidrs = useStorage<string[]>(
+  'config/user-limits-managed-lan-disallowed-cidrs',
+  [],
+)

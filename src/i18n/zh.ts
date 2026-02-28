@@ -29,7 +29,9 @@ const zh: LANG_MESSAGE = {
   resetUsage: '重置计数',
   clearLimits: '清除限额',
   autoDisconnectLimitedUsers: '超限/阻止时自动断开',
-  limitsEnforcementNote: '说明：在此核心版本上，UI 只能通过 API 断开活动连接；这是一种近似阻止方式，并非防火墙规则。',
+  hardBlockLimitedUsers: '通过 lan-disallowed-ips 硬阻止（推荐）',
+  limitsEnforcementNote:
+    '执行：启用后，UI 会把被阻止的 IP 加到 Mihomo `lan-disallowed-ips`（硬阻止）并断开活动连接。带宽限额通过断开连接执行（best effort）。',
   userBlockedTip: '用户被手动阻止或已超限。',
   expand: '展开',
   collapse: '收起',

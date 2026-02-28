@@ -27,7 +27,9 @@ const en = {
   resetUsage: 'Reset counter',
   clearLimits: 'Clear limits',
   autoDisconnectLimitedUsers: 'Auto-disconnect when blocked/over-limit',
-  limitsEnforcementNote: 'Note: on this core build, UI can only disconnect active connections via API. This approximates blocking but is not a firewall rule.',
+  hardBlockLimitedUsers: 'Hard-block via lan-disallowed-ips (recommended)',
+  limitsEnforcementNote:
+    'Enforcement: if enabled, the UI will add blocked IPs to Mihomo `lan-disallowed-ips` (hard block) and disconnect active connections. Bandwidth limit is enforced by disconnecting (best effort).',
   userBlockedTip: 'User is manually blocked or exceeded a limit.',
   expand: 'Expand',
   collapse: 'Collapse',
