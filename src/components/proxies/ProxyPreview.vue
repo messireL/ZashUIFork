@@ -12,7 +12,9 @@
         :class="[
           showSquares ? 'rounded-md' : 'rounded-full',
           getBgColor(node.latency),
-          now === node.name ? 'ring-2 ring-base-100 ring-offset-2 ring-offset-base-content/20' : '',
+          highlightNodeName === node.name
+            ? 'ring-2 ring-base-100 ring-offset-2 ring-offset-base-content/20'
+            : '',
         ]"
         ref="dotsRef"
         @mouseenter="(e) => makeTippy(e, node)"
@@ -57,7 +59,8 @@
 import { NOT_CONNECTED, PROXY_PREVIEW_TYPE } from '@/constant'
 import { getColorForLatency } from '@/helper'
 import { useTooltip } from '@/helper/tooltip'
-import { getLatencyByName } from '@/store/proxies'
+import { activeConnections } from '@/store/connections'
+import { getLatencyByName, getNowProxyNodeName } from '@/store/proxies'
 import { lowLatency, mediumLatency, proxyPreviewType } from '@/store/settings'
 import { useElementSize } from '@vueuse/core'
 import { BoltIcon, PauseCircleIcon, PlayCircleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
@@ -115,6 +118,45 @@ const nodesLatency = computed(() =>
     }
   }),
 )
+
+/**
+ * "now" in Mihomo can be a group (e.g. selector -> loadbalance group),
+ * while the preview often shows concrete proxies.
+ * To highlight the actually used proxy, we:
+ * 1) prefer a proxy found in active connections chain for this group
+ * 2) fallback to resolved now node name
+ * 3) fallback to now itself
+ */
+const highlightNodeName = computed(() => {
+  const now = props.now || ''
+
+  // direct match
+  if (now && props.nodes.includes(now)) return now
+
+  // try to infer the real hop from active connections
+  if (props.groupName) {
+    const best = activeConnections.value
+      .filter((c) => Array.isArray((c as any).chains) && (c as any).chains.includes(props.groupName))
+      .map((c) => {
+        const chains = (c as any).chains as string[]
+        const leaf = chains?.[chains.length - 1] || ''
+        const total = (Number((c as any).download) || 0) + (Number((c as any).upload) || 0)
+        return { leaf, total }
+      })
+      .filter((x) => x.leaf && props.nodes.includes(x.leaf))
+      .sort((a, b) => b.total - a.total)[0]
+
+    if (best?.leaf) return best.leaf
+  }
+
+  // resolve through now-chains (selector -> urltest -> proxy)
+  if (now) {
+    const resolved = getNowProxyNodeName(now)
+    if (resolved && props.nodes.includes(resolved)) return resolved
+  }
+
+  return now
+})
 const getBgColor = (latency: number) => {
   if (latency === NOT_CONNECTED) {
     return 'bg-base-content/60'
