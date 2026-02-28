@@ -8,12 +8,12 @@
       <div
         v-for="node in nodesLatency"
         :key="node.name"
-        class="flex h-5 w-5 items-center justify-center transition hover:scale-110"
+        class="relative flex h-5 w-5 items-center justify-center transition hover:scale-110"
         :class="[
           showSquares ? 'rounded-md' : 'rounded-full',
           getBgColor(node.latency),
           highlightNodeName === node.name
-            ? 'ring-2 ring-base-100 ring-offset-2 ring-offset-base-content/20'
+            ? 'ring-4 ring-warning ring-offset-2 ring-offset-base-100'
             : '',
         ]"
         ref="dotsRef"
@@ -21,6 +21,10 @@
         @click.stop="$emit('nodeclick', node.name)"
       >
         <component :is="iconForLatency(node.latency)" class="h-3.5 w-3.5 text-white/90" />
+        <span
+          v-if="highlightNodeName === node.name"
+          class="pointer-events-none absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-warning ring-2 ring-base-100 shadow"
+        />
       </div>
     </template>
     <div
