@@ -14,10 +14,10 @@
           <option :value="0">{{ $t('all') }}</option>
           <option v-for="n in [10, 20, 30, 50, 100]" :key="n" :value="n">top {{ n }}</option>
         </select>
-        <button type=\"button\" class=\"btn btn-sm\" @click=\"reportDialogOpen = true\">
+	      <button type="button" class="btn btn-sm" @click="reportDialogOpen = true">
           {{ $t('reports') }}
         </button>
-        <button type=\"button\" class=\"btn btn-sm\" @click=\"clearHistory\">
+	      <button type="button" class="btn btn-sm" @click="clearHistory">
           {{ $t('clearHistory') }}
         </button>
       </div>
