@@ -684,6 +684,7 @@ import {
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { v4 as uuidv4 } from 'uuid'
 import {
   AdjustmentsHorizontalIcon,
@@ -705,6 +706,7 @@ const editingUser = ref<string | null>(null)
 const editingName = ref('')
 
 const router = useRouter()
+const { t } = useI18n()
 
 // --- Bulk actions (profiles / mass apply) ---
 const selectedMap = ref<Record<string, boolean>>({})
