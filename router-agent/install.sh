@@ -380,7 +380,8 @@ unblock_mac_ports() {
   # remove any rules for this MAC (best effort)
   while iptables -t filter -D ZASH_BLOCK -m mac --mac-source "$m" -j REJECT >/dev/null 2>&1; do :; done
   # Also remove with protocol/port (some iptables builds require exact match)
-  iptables -t filter -S ZASH_BLOCK 2>/dev/null | grep -i "--mac-source $m" | while read -r rule; do
+  # NOTE: pattern starts with "--" so we must pass "--" to grep to avoid it being parsed as an option
+  iptables -t filter -S ZASH_BLOCK 2>/dev/null | grep -i -F -- "--mac-source $m" | while read -r rule; do
     # Convert -A to -D
     drule="$(echo "$rule" | sed 's/^-A /-D /')"
     iptables -t filter $drule >/dev/null 2>&1 || true
@@ -632,7 +633,7 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.1","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
