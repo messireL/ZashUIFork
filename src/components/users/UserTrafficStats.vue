@@ -75,6 +75,20 @@
                   <div class="flex items-center gap-2">
                     <LockClosedIcon class="h-4 w-4 text-error" />
                     <span class="truncate inline-block max-w-[240px]" :title="b.user">{{ b.user }}</span>
+                    <div class="flex items-center gap-1">
+                      <CircleStackIcon
+                        v-if="b.trafficLimitBytes"
+                        class="h-4 w-4"
+                        :class="b.limitEnabled ? 'text-info' : 'opacity-40'"
+                        :title="trafficIconTitle(b.trafficLimitBytes, b.periodKey, b.limitEnabled)"
+                      />
+                      <BoltIcon
+                        v-if="b.bandwidthLimitBps"
+                        class="h-4 w-4"
+                        :class="b.limitEnabled ? 'text-warning' : 'opacity-40'"
+                        :title="bandwidthIconTitle(b.bandwidthLimitBps, b.limitEnabled)"
+                      />
+                    </div>
                     <span v-if="b.reasonManual" class="badge badge-error badge-outline">{{ $t('manualBlock') }}</span>
                     <span v-else-if="b.reasonTraffic" class="badge badge-warning badge-outline">{{ $t('trafficExceeded') }}</span>
                     <span v-else-if="b.reasonBandwidth" class="badge badge-warning badge-outline">{{ $t('bandwidthExceeded') }}</span>
@@ -187,6 +201,20 @@
                   </template>
                   <template v-else>
                     <span class="truncate inline-block max-w-[240px]" :title="row.user">{{ row.user }}</span>
+                    <div class="flex items-center gap-1">
+                      <CircleStackIcon
+                        v-if="limitStates[row.user]?.trafficLimitBytes"
+                        class="h-4 w-4"
+                        :class="limitStates[row.user].enabled ? 'text-info' : 'opacity-40'"
+                        :title="trafficIconTitle(limitStates[row.user].trafficLimitBytes, getUserLimit(row.user).trafficPeriod, limitStates[row.user].enabled)"
+                      />
+                      <BoltIcon
+                        v-if="limitStates[row.user]?.bandwidthLimitBps"
+                        class="h-4 w-4"
+                        :class="limitStates[row.user].enabled ? 'text-warning' : 'opacity-40'"
+                        :title="bandwidthIconTitle(limitStates[row.user].bandwidthLimitBps, limitStates[row.user].enabled)"
+                      />
+                    </div>
                   </template>
                 </div>
               </td>
@@ -207,10 +235,21 @@
                     {{ format(limitStates[row.user].trafficLimitBytes) }}
                   </div>
                   <div
-                    class="text-xs opacity-60"
+                    class="text-xs opacity-60 flex items-center justify-end gap-1"
                     :class="limitStates[row.user].enabled ? '' : 'opacity-40'"
                   >
-                    {{ limitStates[row.user].periodLabel }} · {{ limitStates[row.user].percent }}%
+                    <span>{{ limitStates[row.user].periodLabel }} · {{ limitStates[row.user].percent }}%</span>
+                    <CircleStackIcon
+                      class="h-4 w-4"
+                      :class="limitStates[row.user].enabled ? 'text-info' : 'opacity-40'"
+                      :title="trafficIconTitle(limitStates[row.user].trafficLimitBytes, getUserLimit(row.user).trafficPeriod, limitStates[row.user].enabled)"
+                    />
+                    <BoltIcon
+                      v-if="limitStates[row.user].bandwidthLimitBps"
+                      class="h-4 w-4"
+                      :class="limitStates[row.user].enabled ? 'text-warning' : 'opacity-40'"
+                      :title="bandwidthIconTitle(limitStates[row.user].bandwidthLimitBps, limitStates[row.user].enabled)"
+                    />
                   </div>
                 </template>
                 <template v-else>
@@ -569,15 +608,25 @@ import {
   reapplyAgentShapingForUser,
   setUserLimit,
 } from '@/composables/userLimits'
-import { clearUserTrafficHistory, formatTraffic, getTrafficGrouped, getTrafficRange, type TrafficGroupBy, userTrafficStoreSize } from '@/composables/userTraffic'
+import {
+  clearUserTrafficHistory,
+  formatTraffic,
+  getTrafficGrouped,
+  getTrafficRange,
+  getUserHourBucket,
+  type TrafficGroupBy,
+  userTrafficStoreSize,
+} from '@/composables/userTraffic'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import {
   AdjustmentsHorizontalIcon,
   ArrowPathIcon,
+  BoltIcon,
   CheckIcon,
   CheckCircleIcon,
+  CircleStackIcon,
   LockClosedIcon,
   PencilSquareIcon,
   QuestionMarkCircleIcon,
@@ -728,25 +777,59 @@ const speed = (bps: number) => `${prettyBytesHelper(bps || 0)}/s`
 const format = (b: number) => formatTraffic(b)
 const buckets = computed(() => userTrafficStoreSize.value)
 
+const bpsToMbps = (bps: number) => {
+  const v = ((bps || 0) * 8) / 1_000_000
+  if (!Number.isFinite(v) || v <= 0) return '0'
+  const r = v >= 100 ? Math.round(v) : Math.round(v * 10) / 10
+  return String(r).replace(/\.0$/, '')
+}
+
+const trafficIconTitle = (limitBytes: number, period: UserLimitPeriod, enabled: boolean) => {
+  const on = enabled ? '' : ' (выкл)'
+  return `Лимит трафика: ${format(limitBytes)} / ${periodLabel(period)}${on}`
+}
+
+const bandwidthIconTitle = (bps: number, enabled: boolean) => {
+  const on = enabled ? '' : ' (выкл)'
+  return `Лимит канала: ${bpsToMbps(bps)} Mbps${on}`
+}
+
 const clearHistory = () => {
   clearUserTrafficHistory()
 }
 
 // --- Limits aggregation for the table ---
 const normalizeResetAt = (ts: number) => {
+  // legacy fallback (when baseline fields are missing)
   const d = dayjs(ts)
   if (d.minute() === 0 && d.second() === 0 && d.millisecond() === 0) return ts
   return d.add(1, 'hour').startOf('hour').valueOf()
 }
 
-const windowForLimit = (period: UserLimitPeriod, resetAt?: number) => {
+const hasResetBaseline = (l: any) => {
+  return !!l?.resetHourKey && Number.isFinite(l?.resetHourDl) && Number.isFinite(l?.resetHourUl)
+}
+
+const windowForLimit = (l: ReturnType<typeof getUserLimit>) => {
   const now = dayjs()
   let start = now.subtract(30, 'day')
-  if (period === '1d') start = now.subtract(24, 'hour')
-  if (period === 'month') start = now.startOf('month')
+  if (l.trafficPeriod === '1d') start = now.subtract(24, 'hour')
+  if (l.trafficPeriod === 'month') start = now.startOf('month')
   let startTs = start.valueOf()
-  if (resetAt && resetAt > startTs) startTs = normalizeResetAt(resetAt)
-  return { startTs, endTs: now.valueOf() }
+
+  let useBaseline = false
+  if (l.resetAt && l.resetAt > startTs) {
+    if (hasResetBaseline(l)) {
+      startTs = l.resetAt
+      useBaseline = true
+    } else {
+      startTs = normalizeResetAt(l.resetAt)
+      useBaseline = false
+    }
+  }
+
+  const startHourTs = dayjs(startTs).startOf('hour').valueOf()
+  return { startTs, startHourTs, endTs: now.valueOf(), useBaseline }
 }
 
 const periodLabel = (p: UserLimitPeriod) => {
@@ -780,32 +863,45 @@ const limitStates = computed(() => {
   > = {}
 
   // Build windows per user appearing in the table.
-  const windows = new Map<string, { startTs: number; endTs: number; users: string[] }>()
+  const windows = new Map<string, { startHourTs: number; endTs: number; users: string[] }>()
   for (const row of rows.value) {
     const l = getUserLimit(row.user)
     const hasTraffic = (l.trafficLimitBytes || 0) > 0
     const hasBw = (l.bandwidthLimitBps || 0) > 0
     if (!hasTraffic && !hasBw && !l.disabled) continue
 
-    const w = windowForLimit(l.trafficPeriod, l.resetAt)
-    const key = `${l.trafficPeriod}:${w.startTs}`
-    const item = windows.get(key) || { ...w, users: [] }
+    const w = windowForLimit(l)
+    const key = `${l.trafficPeriod}:${w.startHourTs}`
+    const item = windows.get(key) || { startHourTs: w.startHourTs, endTs: w.endTs, users: [] }
     item.users.push(row.user)
     windows.set(key, item)
   }
 
   const aggByKey = new Map<string, Map<string, { dl: number; ul: number }>>()
   for (const [key, w] of windows.entries()) {
-    aggByKey.set(key, getTrafficRange(w.startTs, w.endTs))
+    aggByKey.set(key, getTrafficRange(w.startHourTs, w.endTs))
   }
 
   for (const row of rows.value) {
     const l = getUserLimit(row.user)
-    const w = windowForLimit(l.trafficPeriod, l.resetAt)
-    const key = `${l.trafficPeriod}:${w.startTs}`
+    const w = windowForLimit(l)
+    const key = `${l.trafficPeriod}:${w.startHourTs}`
     const agg = aggByKey.get(key)
-    const t = agg?.get(row.user) || { dl: 0, ul: 0 }
-    const usage = (t.dl || 0) + (t.ul || 0)
+    const keys = new Set<string>([row.user])
+    for (const ip of getIpsForUser(row.user) || []) keys.add(ip)
+
+    let dl = 0
+    let ul = 0
+    for (const k of keys) {
+      const t = agg?.get(k)
+      dl += t?.dl || 0
+      ul += t?.ul || 0
+    }
+    if (w.useBaseline) {
+      dl = Math.max(0, dl - (l.resetHourDl || 0))
+      ul = Math.max(0, ul - (l.resetHourUl || 0))
+    }
+    const usage = dl + ul
     const tl = l.trafficLimitBytes || 0
 
     const sp = speedByUser.value[row.user] || 0
@@ -838,6 +934,28 @@ const limitStates = computed(() => {
 
 const blockedActionBusy = ref(false)
 
+const setResetBaselineNow = (user: string, extra: Record<string, any> = {}) => {
+  const now = Date.now()
+  const keys = new Set<string>([user])
+  for (const ip of getIpsForUser(user) || []) keys.add(ip)
+
+  let dl = 0
+  let ul = 0
+  for (const k of keys) {
+    const b = getUserHourBucket(k, now)
+    dl += b.dl || 0
+    ul += b.ul || 0
+  }
+
+  setUserLimit(user, {
+    ...extra,
+    resetAt: now,
+    resetHourKey: dayjs(now).format('YYYY-MM-DDTHH'),
+    resetHourDl: dl,
+    resetHourUl: ul,
+  })
+}
+
 const applyNow = async () => {
   if (blockedActionBusy.value) return
   blockedActionBusy.value = true
@@ -854,8 +972,10 @@ const blockedList = computed(() => {
     ips: string
     usageBytes: number
     trafficLimitBytes: number
+    bandwidthLimitBps: number
     limitEnabled: boolean
     periodLabel: string
+    periodKey: UserLimitPeriod
     reasonManual: boolean
     reasonTraffic: boolean
     reasonBandwidth: boolean
@@ -871,8 +991,10 @@ const blockedList = computed(() => {
       ips,
       usageBytes: st.usageBytes || 0,
       trafficLimitBytes: st.limit.trafficLimitBytes || 0,
+      bandwidthLimitBps: st.limit.bandwidthLimitBps || 0,
       limitEnabled: !!st.limit.enabled,
       periodLabel: periodLabel(st.limit.trafficPeriod),
+      periodKey: st.limit.trafficPeriod,
       reasonManual: !!st.limit.disabled,
       reasonTraffic: !!st.trafficExceeded,
       reasonBandwidth: !!st.bandwidthExceeded,
@@ -896,10 +1018,8 @@ const unblockAndReset = async (user: string) => {
   blockedActionBusy.value = true
   try {
     const l = getUserLimit(user)
-    setUserLimit(user, {
+    setResetBaselineNow(user, {
       disabled: false,
-      // Reset usage baseline so traffic limits stop re-blocking immediately.
-      resetAt: normalizeResetAt(Date.now()),
       // Keep enabled as-is.
       enabled: l.enabled,
     })
@@ -918,7 +1038,7 @@ const disableLimitsQuick = async (user: string) => {
   if (blockedActionBusy.value) return
   blockedActionBusy.value = true
   try {
-    setUserLimit(user, { enabled: false, disabled: false, resetAt: normalizeResetAt(Date.now()) })
+    setResetBaselineNow(user, { enabled: false, disabled: false })
     await applyUserEnforcementNow()
     showNotification({ content: 'blockedDisableDone', params: { user }, type: 'alert-success', timeout: 2200 })
   } catch (e) {
@@ -1203,9 +1323,7 @@ const clearLimits = async () => {
 const resetCounter = async () => {
   const user = limitsUser.value
   if (!user) return
-  setUserLimit(user, {
-    resetAt: normalizeResetAt(Date.now()),
-  })
+  setResetBaselineNow(user)
   try {
     await applyUserEnforcementNow()
   } catch {

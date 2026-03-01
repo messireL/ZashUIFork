@@ -48,6 +48,9 @@ const resolveLimit = (l?: UserLimit): UserLimitResolved => {
     trafficLimitUnit: (l?.trafficLimitUnit ?? 'GB') as any,
     bandwidthLimitBps: l?.bandwidthLimitBps ?? 0,
     resetAt: l?.resetAt,
+    resetHourKey: l?.resetHourKey,
+    resetHourDl: l?.resetHourDl,
+    resetHourUl: l?.resetHourUl,
   }
 }
 
@@ -63,6 +66,19 @@ export const setUserLimit = (user: string, patch: Partial<UserLimit>) => {
   if (!next.trafficLimitBytes) delete (next as any).trafficLimitBytes
   if (!next.trafficLimitBytes) delete (next as any).trafficLimitUnit
   if (!next.bandwidthLimitBps) delete (next as any).bandwidthLimitBps
+  // If resetAt is cleared, clear baseline too.
+  if (!next.resetAt) {
+    delete (next as any).resetAt
+    delete (next as any).resetHourKey
+    delete (next as any).resetHourDl
+    delete (next as any).resetHourUl
+  }
+  // If baseline is incomplete, drop it.
+  if (!(next as any).resetHourKey) {
+    delete (next as any).resetHourKey
+    delete (next as any).resetHourDl
+    delete (next as any).resetHourUl
+  }
   userLimits.value = { ...userLimits.value, [user]: next }
 }
 
@@ -73,9 +89,37 @@ export const clearUserLimit = (user: string) => {
 }
 
 const normalizeResetAt = (ts: number) => {
+  // Fallback for legacy entries without a baseline: move reset to next hour
+  // so the hourly bucket math can't immediately re-block.
   const d = dayjs(ts)
   if (d.minute() === 0 && d.second() === 0 && d.millisecond() === 0) return ts
   return d.add(1, 'hour').startOf('hour').valueOf()
+}
+
+const hasResetBaseline = (l: UserLimitResolved) => {
+  return !!l.resetHourKey && Number.isFinite(l.resetHourDl as any) && Number.isFinite(l.resetHourUl as any)
+}
+
+const getTrafficWindowForLimit = (l: UserLimitResolved) => {
+  const now = dayjs()
+  let baseStart = now.subtract(30, 'day')
+  if (l.trafficPeriod === '1d') baseStart = now.subtract(24, 'hour')
+  else if (l.trafficPeriod === 'month') baseStart = now.startOf('month')
+
+  let startTs = baseStart.valueOf()
+  let useBaseline = false
+  if (l.resetAt && Number.isFinite(l.resetAt) && l.resetAt > startTs) {
+    if (hasResetBaseline(l)) {
+      startTs = l.resetAt
+      useBaseline = true
+    } else {
+      startTs = normalizeResetAt(l.resetAt)
+      useBaseline = false
+    }
+  }
+
+  const startHourTs = dayjs(startTs).startOf('hour').valueOf()
+  return { startTs, startHourTs, endTs: now.valueOf(), useBaseline }
 }
 
 const getWindow = (period: UserLimitPeriod, resetAt?: number) => {
@@ -86,17 +130,56 @@ const getWindow = (period: UserLimitPeriod, resetAt?: number) => {
   else start = now.subtract(30, 'day')
 
   let startTs = start.valueOf()
-  if (resetAt && Number.isFinite(resetAt) && resetAt > startTs) startTs = normalizeResetAt(resetAt)
+  if (resetAt && Number.isFinite(resetAt) && resetAt > startTs) startTs = resetAt
 
   return { startTs, endTs: now.valueOf() }
 }
 
 export const getUserUsageBytes = (user: string, limit?: UserLimitResolved) => {
   const l = limit || getUserLimit(user)
-  const { startTs, endTs } = getWindow(l.trafficPeriod, l.resetAt)
+  const baseStart = (() => {
+    const now = dayjs()
+    let s = now.subtract(30, 'day')
+    if (l.trafficPeriod === '1d') s = now.subtract(24, 'hour')
+    if (l.trafficPeriod === 'month') s = now.startOf('month')
+    return s.valueOf()
+  })()
+
+  let startTs = baseStart
+  let useBaseline = false
+  if (l.resetAt && Number.isFinite(l.resetAt) && l.resetAt > startTs) {
+    if (hasResetBaseline(l)) {
+      startTs = l.resetAt
+      useBaseline = true
+    } else {
+      // legacy behavior
+      startTs = normalizeResetAt(l.resetAt)
+      useBaseline = false
+    }
+  }
+
+  const { endTs } = getWindow(l.trafficPeriod, undefined)
   const agg = getTrafficRange(startTs, endTs)
-  const t = agg.get(user) || { dl: 0, ul: 0 }
-  return (t.dl || 0) + (t.ul || 0)
+  // Sum traffic for the label itself PLUS any mapped keys (IPs). This makes usage resilient
+  // to changes in the SourceIP map (traffic can be stored under IP or under label).
+  const keys = new Set<string>([user])
+  for (const it of sourceIPLabelList.value || []) {
+    const name = (it.label || it.key || '').toString()
+    if (name === user && it.key) keys.add(it.key)
+  }
+
+  let dl = 0
+  let ul = 0
+  for (const k of keys) {
+    const t = agg.get(k)
+    dl += t?.dl || 0
+    ul += t?.ul || 0
+  }
+  if (useBaseline) {
+    dl = Math.max(0, dl - (l.resetHourDl || 0))
+    ul = Math.max(0, ul - (l.resetHourUl || 0))
+  }
+  return dl + ul
 }
 
 export const getUserCurrentSpeedBps = (user: string) => {
@@ -418,20 +501,20 @@ const enforceNow = async () => {
 
   // Compute traffic aggregates for the distinct periods present in limits
   const usersWithTrafficLimits: Array<{ user: string; l: UserLimitResolved }> = []
-  const periods = new Map<string, { startTs: number; endTs: number }>()
+  const periods = new Map<string, { startHourTs: number; endTs: number }>()
   for (const [user, raw] of Object.entries(userLimits.value)) {
     const l = resolveLimit(raw)
     if (!l.enabled) continue
     if (l.trafficLimitBytes && l.trafficLimitBytes > 0) {
       usersWithTrafficLimits.push({ user, l })
-      const w = getWindow(l.trafficPeriod, l.resetAt)
-      periods.set(`${l.trafficPeriod}:${w.startTs}`, w)
+      const w = getTrafficWindowForLimit(l)
+      periods.set(`${l.trafficPeriod}:${w.startHourTs}`, { startHourTs: w.startHourTs, endTs: w.endTs })
     }
   }
 
   const aggByWindow = new Map<string, Map<string, { dl: number; ul: number }>>()
   for (const [k, w] of periods.entries()) {
-    aggByWindow.set(k, getTrafficRange(w.startTs, w.endTs))
+    aggByWindow.set(k, getTrafficRange(w.startHourTs, w.endTs))
   }
 
   const isUserBlocked = (user: string): boolean => {
@@ -453,12 +536,25 @@ const enforceNow = async () => {
     }
 
     if (l.trafficLimitBytes && l.trafficLimitBytes > 0) {
-      const w = getWindow(l.trafficPeriod, l.resetAt)
-      const key = `${l.trafficPeriod}:${w.startTs}`
+      const w = getTrafficWindowForLimit(l)
+      const key = `${l.trafficPeriod}:${w.startHourTs}`
       const agg = aggByWindow.get(key)
       if (agg) {
-        const t = agg.get(user)
-        const used = (t?.dl || 0) + (t?.ul || 0)
+        const keys = new Set<string>([user])
+        for (const ip of ipsForUserLabel(user)) keys.add(ip)
+
+        let dl = 0
+        let ul = 0
+        for (const k of keys) {
+          const t = agg.get(k)
+          dl += t?.dl || 0
+          ul += t?.ul || 0
+        }
+        if (w.useBaseline) {
+          dl = Math.max(0, dl - (l.resetHourDl || 0))
+          ul = Math.max(0, ul - (l.resetHourUl || 0))
+        }
+        const used = dl + ul
         if (used >= l.trafficLimitBytes) return true
       }
     }

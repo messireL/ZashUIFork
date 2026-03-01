@@ -37,6 +37,14 @@ const save = debounce(() => {
 
 const bucketKey = (ts: number) => dayjs(ts).format('YYYY-MM-DDTHH')
 
+export const getUserHourBucket = (user: string, ts = Date.now()): UserTrafficBucket => {
+  const u = (user || '').toString()
+  if (!u) return { dl: 0, ul: 0 }
+  const k = bucketKey(ts)
+  const b = store.value?.[k]?.[u]
+  return { dl: b?.dl || 0, ul: b?.ul || 0 }
+}
+
 const trimOld = () => {
   const cutoff = dayjs().subtract(MAX_DAYS, 'day')
   const next: UserTrafficStore = {}

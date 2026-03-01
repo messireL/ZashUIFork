@@ -16,6 +16,13 @@ export type UserLimit = {
   trafficPeriod?: UserLimitPeriod
   /** Optional reset baseline timestamp (ms). */
   resetAt?: number
+  /**
+   * When resetAt is within an hour bucket, we store a baseline of the current-hour counters
+   * so we can subtract pre-reset traffic and avoid immediate re-blocking.
+   */
+  resetHourKey?: string
+  resetHourDl?: number
+  resetHourUl?: number
   /** Bandwidth limit in bytes per second (download+upload). 0/undefined = no limit. */
   bandwidthLimitBps?: number
 }
