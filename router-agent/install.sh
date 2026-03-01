@@ -638,7 +638,7 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.3","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.4","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -905,7 +905,16 @@ fi
 
 UHTTPD_BIN="$(command -v uhttpd 2>/dev/null || true)"
 [ -n "$UHTTPD_BIN" ] || UHTTPD_BIN="/opt/sbin/uhttpd"
-"$UHTTPD_BIN" -f -p "$BIND_IP:$PORT" -h /opt/zash-agent/www -x /cgi-bin -t 15 -T 15 &
+
+LOG_DIR="/opt/var/log/zash-agent"
+LOG_FILE="$LOG_DIR/uhttpd.log"
+mkdir -p "$LOG_DIR" || true
+# Prevent huge log growth (keep last ~2000 lines if >1 MiB)
+if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+  tail -n 2000 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE" || true
+fi
+
+"$UHTTPD_BIN" -f -p "$BIND_IP:$PORT" -h /opt/zash-agent/www -x /cgi-bin -t 15 -T 15 >>"$LOG_FILE" 2>&1 </dev/null &
 echo $! > "$PID_FILE"
 
 # Re-apply saved shaping rules
