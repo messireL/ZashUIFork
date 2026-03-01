@@ -101,6 +101,54 @@
         <span class="ml-1 font-mono">{{ fmtTs(lastFreshnessOkAt) }}</span>
       </div>
 
+      <details v-if="lastGeoUpdate?.at" class="rounded-lg border border-base-content/10 bg-base-200/40 p-2">
+        <summary class="cursor-pointer text-xs font-semibold opacity-80">
+          {{ $t('lastGeoUpdateResult') }}
+          <span class="ml-2 font-mono opacity-70">{{ fmtTs(lastGeoUpdate.at) }}</span>
+          <span v-if="lastGeoUpdate.ok" class="ml-2 badge badge-success badge-xs">OK</span>
+          <span v-else class="ml-2 badge badge-error badge-xs">ERR</span>
+        </summary>
+
+        <div class="mt-2 flex flex-col gap-1 text-xs">
+          <div v-for="it in (lastGeoUpdate.items || [])" :key="it.kind + ':' + it.path" class="flex flex-col gap-1 rounded-md border border-base-content/10 bg-base-100/40 p-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <span class="font-semibold opacity-80">{{ geoKindLabel(it.kind) }}</span>
+                <span class="ml-2 font-mono opacity-70" :title="it.path">{{ shortPath(it.path) }}</span>
+                <span v-if="it.changed" class="ml-2 badge badge-info badge-xs">{{ $t('changed') }}</span>
+              </div>
+              <div class="shrink-0 font-mono opacity-80">{{ fmtMtime(it.mtimeSec) }}</div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 opacity-70">
+              <div v-if="it.method">
+                <span class="opacity-60">{{ $t('method') }}:</span>
+                <span class="ml-1 font-mono">{{ it.method }}</span>
+              </div>
+              <div v-if="typeof it.sizeBytes === 'number' && it.sizeBytes >= 0">
+                <span class="opacity-60">{{ $t('size') }}:</span>
+                <span class="ml-1 font-mono">{{ prettyBytesHelper(it.sizeBytes) }}</span>
+              </div>
+              <div v-if="it.source" class="min-w-0">
+                <span class="opacity-60">{{ $t('source') }}:</span>
+                <span class="ml-1 truncate font-mono" :title="it.source">{{ it.source }}</span>
+              </div>
+            </div>
+
+            <div v-if="it.ok === false || it.error" class="text-error">
+              {{ it.error || 'failed' }}
+            </div>
+          </div>
+
+          <div v-if="lastGeoUpdate.note" class="mt-1 text-[11px] opacity-60">
+            {{ lastGeoUpdate.note }}
+          </div>
+          <div class="text-[11px] opacity-60">
+            {{ $t('geoRestartTip') }}
+          </div>
+        </div>
+      </details>
+
       <div class="grid gap-2 md:grid-cols-2">
         <div class="rounded-lg border border-base-content/10 bg-base-200/40 p-2">
           <div class="mb-1 text-sm font-semibold">{{ $t('geoFiles') }}</div>
@@ -426,6 +474,30 @@ watch([logsAuto, logSource, logLines, agentEnabled], () => {
 const { t } = useI18n()
 
 const lastFreshnessOkAt = useStorage<number>('runtime/tasks-last-freshness-ok-at-v1', 0)
+
+type GeoUpdateResult = {
+  at: number
+  ok: boolean
+  items: Array<{
+    kind: string
+    path: string
+    ok?: boolean
+    changed?: boolean
+    mtimeSec?: number
+    sizeBytes?: number
+    method?: string
+    source?: string
+    error?: string
+  }>
+  note?: string
+}
+
+const lastGeoUpdate = useStorage<GeoUpdateResult>('runtime/tasks-last-geo-update-v1', {
+  at: 0,
+  ok: true,
+  items: [],
+  note: '',
+})
 
 type GeoInfoItem = {
   kind: string
@@ -774,15 +846,40 @@ const updateGeoNow = async () => {
   const id = startJob(t('updateGeoNow'))
   try {
     const r: any = await agentGeoUpdateAPI()
+    const itemsRaw = Array.isArray(r?.items) ? r.items : []
+    const items = itemsRaw
+      .filter((x: any) => x && x.path)
+      .map((x: any) => ({
+        kind: String(x.kind || ''),
+        path: String(x.path || ''),
+        ok: typeof x.ok === 'boolean' ? x.ok : (x.ok ?? true),
+        changed: !!x.changed,
+        mtimeSec: typeof x.mtimeSec === 'number' ? x.mtimeSec : Number(x.mtimeSec || 0) || undefined,
+        sizeBytes: typeof x.sizeBytes === 'number' ? x.sizeBytes : Number(x.sizeBytes || 0) || undefined,
+        method: String(x.method || ''),
+        source: String(x.source || ''),
+        error: String(x.error || ''),
+      }))
+
+    const failItems = items.filter((x: any) => x.ok === false || !!x.error)
+    const okAll = !!r?.ok && failItems.length === 0
+    const changedKinds = items.filter((x: any) => x.changed).map((x: any) => x.kind).join(', ')
+
+    lastGeoUpdate.value = {
+      at: Date.now(),
+      ok: okAll,
+      items,
+      note: String(r?.note || ''),
+    }
+
     if (!r?.ok) {
-      finishJob(id, { ok: false, error: r?.error || 'failed' })
+      finishJob(id, { ok: false, error: r?.error || 'failed', meta: { changed: changedKinds || '—' } })
       showNotification({ content: 'operationFailed', type: 'alert-error', timeout: 2200 })
       return
     }
-    const items = Array.isArray(r?.items) ? r.items : []
-    const changed = items.filter((x: any) => x?.changed).map((x: any) => x.kind).join(', ')
-    finishJob(id, { ok: true, meta: { changed: changed || '—' } })
-    showNotification({ content: 'updateGeoSuccess', type: 'alert-success', timeout: 1600 })
+
+    finishJob(id, { ok: okAll, meta: { changed: changedKinds || '—', fail: failItems.length } })
+    showNotification({ content: okAll ? 'updateGeoSuccess' : 'operationFailed', type: okAll ? 'alert-success' : 'alert-warning', timeout: 2200 })
     await refreshFreshness()
   } catch (e: any) {
     finishJob(id, { ok: false, error: e?.message || 'failed' })
