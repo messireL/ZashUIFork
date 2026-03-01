@@ -143,6 +143,7 @@ const ru: LANG_MESSAGE = {
   lastGeoUpdateResult: 'Результат последнего обновления GEO',
   lastRuleProvidersUpdateResult: 'Результат последнего обновления rule-providers',
   activeProxy: 'Активный прокси',
+  bestLatencyProxy: 'Лучший по задержке',
   copyProxyName: 'Копировать имя прокси',
   copyProxyUri: 'Копировать URI прокси',
   testProxyLatency: 'Проверить задержку',

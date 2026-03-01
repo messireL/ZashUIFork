@@ -141,6 +141,7 @@ const en = {
   lastGeoUpdateResult: 'Last GEO update result',
   lastRuleProvidersUpdateResult: 'Last rule-providers update result',
   activeProxy: 'Active proxy',
+  bestLatencyProxy: 'Best latency',
   copyProxyName: 'Copy proxy name',
   copyProxyUri: 'Copy proxy URI',
   testProxyLatency: 'Test latency',

@@ -143,6 +143,7 @@ const zh: LANG_MESSAGE = {
   lastGeoUpdateResult: '最近一次GEO更新结果',
   lastRuleProvidersUpdateResult: '上次 rule-providers 更新结果',
   activeProxy: '当前代理',
+  bestLatencyProxy: '最低延迟',
   copyProxyName: '复制代理名称',
   copyProxyUri: '复制代理 URI',
   testProxyLatency: '测试延迟',

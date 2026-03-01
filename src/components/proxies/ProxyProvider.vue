@@ -91,26 +91,25 @@
       <div class="flex flex-col gap-2">
         <ProxyPreview
           :nodes="renderProxies"
-          :now="activeProxy"
+          :now="displayProxyName"
           :group-name="proxyProvider.name"
         />
 
-        <div
-          v-if="activeProxy"
-          class="flex flex-wrap items-center gap-1.5 text-xs"
-        >
-          <span class="opacity-70">{{ $t('activeProxy') }}:</span>
+        <div class="flex flex-wrap items-center gap-1.5 text-xs">
+          <span class="opacity-70">{{ activeProxy ? $t('activeProxy') : $t('bestLatencyProxy') }}:</span>
           <span
             class="font-mono truncate max-w-[18rem]"
-            :title="activeProxy"
+            :class="activeProxy ? '' : 'opacity-70'"
+            :title="displayProxyName || ''"
           >
-            {{ activeProxy }}
+            {{ displayProxyName || '—' }}
           </span>
 
           <button
             type="button"
             class="btn btn-ghost btn-xs btn-circle"
             @click.stop="copyActiveName"
+            :disabled="!displayProxyName"
             :title="$t('copyProxyName')"
           >
             <ClipboardDocumentIcon class="h-4 w-4" />
@@ -120,7 +119,7 @@
             type="button"
             class="btn btn-ghost btn-xs btn-circle"
             @click.stop="testActiveNode"
-            :disabled="isActiveTesting"
+            :disabled="isActiveTesting || !displayProxyName"
             :title="$t('testProxyLatency')"
           >
             <span
@@ -170,6 +169,7 @@ import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
 import { fetchProxies, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
+import { NOT_CONNECTED } from '@/constant'
 import { twoColumnProxyGroup } from '@/store/settings'
 import { ArrowPathIcon, BoltIcon, ClipboardDocumentIcon, LinkIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
@@ -237,6 +237,28 @@ const activeProxy = computed(() => {
   }
 
   return bestName
+})
+
+// Fallback: if there are no active connections, show the best (lowest) latency proxy.
+const bestLatencyProxy = computed(() => {
+  let best = ''
+  let bestLatency = Number.POSITIVE_INFINITY
+
+  for (const name of renderProxies.value || []) {
+    const l = getLatencyByName(name, proxyProvider.value?.name)
+    if (l === NOT_CONNECTED) continue
+    if (typeof l !== 'number' || !Number.isFinite(l) || l <= 0) continue
+    if (l < bestLatency) {
+      bestLatency = l
+      best = name
+    }
+  }
+
+  return best
+})
+
+const displayProxyName = computed(() => {
+  return activeProxy.value || bestLatencyProxy.value || ''
 })
 
 const getAnyFromObj = (obj: any, candidates: string[]): any => {
@@ -535,7 +557,7 @@ const updateProviderClickHandler = async () => {
 const isActiveTesting = ref(false)
 
 const activeProxyNode = computed(() => {
-  const name = activeProxy.value
+  const name = displayProxyName.value
   return name ? (proxyMap.value as any)?.[name] : null
 })
 
@@ -563,8 +585,8 @@ const copyText = async (text: string) => {
 }
 
 const copyActiveName = async () => {
-  if (!activeProxy.value) return
-  await copyText(activeProxy.value)
+  if (!displayProxyName.value) return
+  await copyText(displayProxyName.value)
 }
 
 const copyActiveUri = async () => {
@@ -573,12 +595,12 @@ const copyActiveUri = async () => {
 }
 
 const testActiveNode = async () => {
-  if (!activeProxy.value) return
+  if (!displayProxyName.value) return
   if (isActiveTesting.value) return
 
   isActiveTesting.value = true
   try {
-    await proxyLatencyTest(activeProxy.value, getTestUrl(proxyProvider.value?.name))
+    await proxyLatencyTest(displayProxyName.value, getTestUrl(proxyProvider.value?.name))
   } finally {
     isActiveTesting.value = false
   }
