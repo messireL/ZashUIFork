@@ -148,7 +148,7 @@ export const agentUnblockIpAPI = async (ip: string): Promise<{ ok: boolean; erro
 }
 
 export const agentLogsAPI = async (args: {
-  type: 'mihomo' | 'agent'
+  type: 'mihomo' | 'agent' | 'config'
   lines?: number
 }): Promise<{ ok: boolean; kind?: string; path?: string; contentB64?: string; error?: string }> => {
   try {

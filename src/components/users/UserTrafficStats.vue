@@ -35,6 +35,102 @@
         </label>
       </div>
 
+
+      <div class="rounded-lg border border-base-content/10 bg-base-200/30 p-2">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <div class="text-sm font-semibold">{{ $t('blockedUsers') }}</div>
+            <span v-if="blockedList.length" class="badge badge-error">{{ blockedList.length }}</span>
+            <span v-else class="badge">{{ blockedList.length }}</span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-xs btn-ghost"
+            @click="applyNow"
+            :disabled="blockedActionBusy"
+            :title="$t('applyEnforcementNow')"
+          >
+            <ArrowPathIcon class="h-4 w-4" :class="blockedActionBusy ? 'animate-spin' : ''" />
+          </button>
+        </div>
+
+        <div v-if="!blockedList.length" class="mt-1 text-sm opacity-60">
+          {{ $t('noBlockedUsers') }}
+        </div>
+
+        <div v-else class="mt-2 overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>{{ $t('user') }}</th>
+                <th class="max-md:hidden">IP</th>
+                <th class="text-right">{{ $t('traffic') }}</th>
+                <th class="text-right max-lg:hidden">{{ $t('limits') }}</th>
+                <th class="text-right">{{ $t('actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="b in blockedList" :key="b.user">
+                <td class="font-medium">
+                  <div class="flex items-center gap-2">
+                    <LockClosedIcon class="h-4 w-4 text-error" />
+                    <span class="truncate inline-block max-w-[240px]" :title="b.user">{{ b.user }}</span>
+                    <span v-if="b.reasonManual" class="badge badge-error badge-outline">{{ $t('manualBlock') }}</span>
+                    <span v-else-if="b.reasonTraffic" class="badge badge-warning badge-outline">{{ $t('trafficExceeded') }}</span>
+                    <span v-else-if="b.reasonBandwidth" class="badge badge-warning badge-outline">{{ $t('bandwidthExceeded') }}</span>
+                  </div>
+                </td>
+                <td class="max-md:hidden">
+                  <span class="truncate inline-block max-w-[420px] opacity-70" :title="b.ips">{{ b.ips }}</span>
+                </td>
+                <td class="text-right font-mono whitespace-nowrap">
+                  <span v-if="b.limitEnabled && b.trafficLimitBytes">
+                    {{ format(b.usageBytes) }} / {{ format(b.trafficLimitBytes) }}
+                  </span>
+                  <span v-else class="opacity-60">—</span>
+                </td>
+                <td class="text-right font-mono max-lg:hidden whitespace-nowrap">
+                  <span v-if="b.limitEnabled">
+                    {{ b.periodLabel }}
+                  </span>
+                  <span v-else class="opacity-60">—</span>
+                </td>
+                <td class="text-right">
+                  <div class="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-circle btn-xs"
+                      @click.stop.prevent="openLimits(b.user)"
+                      :title="$t('limits')"
+                    >
+                      <AdjustmentsHorizontalIcon class="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      @click="unblockAndReset(b.user)"
+                      :disabled="blockedActionBusy"
+                      :title="$t('unblockAndReset')"
+                    >
+                      {{ $t('unblockAndReset') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      @click="disableLimitsQuick(b.user)"
+                      :disabled="blockedActionBusy"
+                      :title="$t('disableLimits')"
+                    >
+                      {{ $t('disableLimits') }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="overflow-x-auto">
         <table class="table table-sm">
           <thead>
@@ -452,12 +548,13 @@ import { getIPLabelFromMap } from '@/helper/sourceip'
 import { prettyBytesHelper } from '@/helper/utils'
 import { activeConnections } from '@/store/connections'
 import { sourceIPLabelList } from '@/store/settings'
-import { autoDisconnectLimitedUsers, hardBlockLimitedUsers, type UserLimitPeriod } from '@/store/userLimits'
+import { autoDisconnectLimitedUsers, hardBlockLimitedUsers, userLimits, type UserLimitPeriod } from '@/store/userLimits'
 import { agentEnabled, agentEnforceBandwidth, agentShaperStatus } from '@/store/agent'
 import {
   clearUserLimit,
   getIpsForUser,
   getUserLimit,
+  getUserLimitState,
   applyUserEnforcementNow,
   reapplyAgentShapingForUser,
   setUserLimit,
@@ -722,6 +819,92 @@ const limitStates = computed(() => {
 
   return out
 })
+
+const blockedActionBusy = ref(false)
+
+const applyNow = async () => {
+  if (blockedActionBusy.value) return
+  blockedActionBusy.value = true
+  try {
+    await applyUserEnforcementNow()
+  } finally {
+    blockedActionBusy.value = false
+  }
+}
+
+const blockedList = computed(() => {
+  const out: Array<{
+    user: string
+    ips: string
+    usageBytes: number
+    trafficLimitBytes: number
+    limitEnabled: boolean
+    periodLabel: string
+    reasonManual: boolean
+    reasonTraffic: boolean
+    reasonBandwidth: boolean
+  }> = []
+
+  const keys = Object.keys(userLimits.value || {})
+  for (const user of keys) {
+    const st = getUserLimitState(user)
+    if (!st.blocked) continue
+    const ips = (getIpsForUser(user) || []).join(', ')
+    out.push({
+      user,
+      ips,
+      usageBytes: st.usageBytes || 0,
+      trafficLimitBytes: st.limit.trafficLimitBytes || 0,
+      limitEnabled: !!st.limit.enabled,
+      periodLabel: periodLabel(st.limit.trafficPeriod),
+      reasonManual: !!st.limit.disabled,
+      reasonTraffic: !!st.trafficExceeded,
+      reasonBandwidth: !!st.bandwidthExceeded,
+    })
+  }
+
+  // Sort: manual first, then traffic exceed, then bandwidth.
+  out.sort((a, b) => {
+    const pa = a.reasonManual ? 0 : a.reasonTraffic ? 1 : a.reasonBandwidth ? 2 : 3
+    const pb = b.reasonManual ? 0 : b.reasonTraffic ? 1 : b.reasonBandwidth ? 2 : 3
+    if (pa !== pb) return pa - pb
+    return a.user.localeCompare(b.user)
+  })
+
+  return out
+})
+
+const unblockAndReset = async (user: string) => {
+  if (!user) return
+  if (blockedActionBusy.value) return
+  blockedActionBusy.value = true
+  try {
+    const l = getUserLimit(user)
+    setUserLimit(user, {
+      disabled: false,
+      // Reset usage baseline so traffic limits stop re-blocking immediately.
+      resetAt: Date.now(),
+      // Keep enabled as-is.
+      enabled: l.enabled,
+    })
+    await applyUserEnforcementNow()
+  } finally {
+    blockedActionBusy.value = false
+  }
+}
+
+const disableLimitsQuick = async (user: string) => {
+  if (!user) return
+  if (blockedActionBusy.value) return
+  blockedActionBusy.value = true
+  try {
+    setUserLimit(user, { enabled: false, disabled: false })
+    await applyUserEnforcementNow()
+  } finally {
+    blockedActionBusy.value = false
+  }
+}
+
 
 type ShaperBadge = { icon: any; cls: string; title: string; showReapply: boolean }
 

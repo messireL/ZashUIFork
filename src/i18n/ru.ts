@@ -423,6 +423,13 @@ const ru: LANG_MESSAGE = {
   totalProviders: 'Всего провайдеров',
   totalRules: 'Всего правил',
 
+  blockedUsers: 'Заблокированные',
+  noBlockedUsers: 'Заблокированных пользователей нет',
+  unblockAndReset: 'Разблокировать + сброс',
+  disableLimits: 'Отключить лимиты',
+  manualBlock: 'Ручной',
+  trafficExceeded: 'Лимит трафика',
+  bandwidthExceeded: 'Лимит скорости',
 }
 
 export default ru

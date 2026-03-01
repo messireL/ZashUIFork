@@ -420,6 +420,13 @@ const zh: LANG_MESSAGE = {
   totalProviders: '提供商总数',
   totalRules: '规则总数',
 
+  blockedUsers: '已封禁用户',
+  noBlockedUsers: '没有被封禁的用户',
+  unblockAndReset: '解封 + 重置',
+  disableLimits: '停用限制',
+  manualBlock: '手动',
+  trafficExceeded: '流量超限',
+  bandwidthExceeded: '带宽超限',
 }
 
 export default zh

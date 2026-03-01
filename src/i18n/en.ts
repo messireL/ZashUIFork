@@ -421,6 +421,13 @@ const en = {
   totalProviders: 'Total Providers',
   totalRules: 'Total Rules',
 
+  blockedUsers: 'Blocked users',
+  noBlockedUsers: 'No blocked users',
+  unblockAndReset: 'Unblock + reset',
+  disableLimits: 'Disable limits',
+  manualBlock: 'Manual',
+  trafficExceeded: 'Traffic limit',
+  bandwidthExceeded: 'Bandwidth limit',
 }
 
 export type LANG_MESSAGE = typeof en

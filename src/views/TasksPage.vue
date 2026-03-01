@@ -26,6 +26,7 @@
         <div class="flex items-center gap-2">
           <select class="select select-bordered select-sm" v-model="logSource">
             <option value="mihomo">{{ $t('mihomoLog') }}</option>
+            <option value="config">{{ $t('mihomoConfig') }}</option>
             <option value="agent">{{ $t('agentLog') }}</option>
           </select>
           <select class="select select-bordered select-sm" v-model.number="logLines">
@@ -134,7 +135,7 @@ const busy = ref(false)
 const jobs = computed(() => jobHistory.value || [])
 
 // --- Live logs (router-agent) ---
-const logSource = ref<'mihomo' | 'agent'>('mihomo')
+const logSource = ref<'mihomo' | 'config' | 'agent'>('mihomo')
 const logLines = ref<number>(200)
 const logsAuto = ref(true)
 const logsBusy = ref(false)

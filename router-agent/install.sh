@@ -46,6 +46,9 @@ BLOCKS_FILE="$AGENT_DIR/var/blocks.db"
 # Path to Mihomo YAML config on the router
 MIHOMO_CONFIG="/opt/etc/mihomo/config.yaml"
 
+# Optional: explicit path to Mihomo log file (if log-file is not set in config)
+MIHOMO_LOG=""
+
 # Optional: set a token to require Authorization: Bearer <token>
 TOKEN=""
 
@@ -71,6 +74,7 @@ STATE_FILE="${STATE_FILE:-/opt/zash-agent/var/shapers.db}"
 BLOCKS_FILE="${BLOCKS_FILE:-/opt/zash-agent/var/blocks.db}"
 TOKEN="${TOKEN:-}"
 MIHOMO_CONFIG="${MIHOMO_CONFIG:-/opt/etc/mihomo/config.yaml}"
+MIHOMO_LOG="${MIHOMO_LOG:-}"
 WAN_RATE="${WAN_RATE:-1000}"
 LAN_RATE="${LAN_RATE:-1000}"
 
@@ -633,7 +637,7 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.1","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.2","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -649,7 +653,13 @@ agent_log() {
 }
 
 find_mihomo_log() {
-  # Try to discover Mihomo/Clash log file from config.
+  # Try to discover Mihomo/Clash log file.
+  # Priority: explicit MIHOMO_LOG env -> config log-file -> common paths.
+  if [ -n "$MIHOMO_LOG" ] && [ -f "$MIHOMO_LOG" ]; then
+    echo "$MIHOMO_LOG"
+    return 0
+  fi
+
   cfg="$MIHOMO_CONFIG"
   if [ -f "$cfg" ]; then
     lf="$(awk -F: 'BEGIN{IGNORECASE=1} $1 ~ /^[[:space:]]*log[-_]?file[[:space:]]*$/ {sub(/^[[:space:]]+/,"",$2); sub(/[[:space:]]+$/,"",$2); gsub(/^"|"$/,"",$2); gsub(/^\x27|\x27$/,"",$2); print $2; exit}' "$cfg" 2>/dev/null)"
@@ -664,16 +674,34 @@ find_mihomo_log() {
     /opt/var/log/mihomo/mihomo.log \
     /opt/var/log/clash.log \
     /opt/var/log/clash/clash.log \
+    /opt/etc/mihomo/mihomo.log \
+    /opt/etc/mihomo/clash.log \
     /tmp/mihomo.log \
     /tmp/clash.log \
+    /tmp/syslog.log \
     /var/log/mihomo.log \
-    /var/log/clash.log
+    /var/log/clash.log \
+    /var/log/messages \
+    /var/log/syslog
   do
     [ -f "$p" ] && { echo "$p"; return 0; }
   done
 
   echo ""
   return 0
+}
+
+config_b64() {
+  # Return Mihomo YAML config (best-effort).
+  path="$MIHOMO_CONFIG"
+  txt=""
+  if [ -f "$path" ]; then
+    txt="$(cat "$path" 2>/dev/null)"
+  fi
+  txt="$(printf '%s' "$txt" | tail -c 204800 2>/dev/null || printf '%s' "$txt")"
+  b64="$(printf '%s' "$txt" | b64enc)"
+  esc_path="$(printf '%s' "$path" | sed 's/"/\\\"/g')"
+  reply_ok "$(printf '{"ok":true,"kind":"config","path":"%s","contentB64":"%s"}' "$esc_path" "$b64")"
 }
 
 tail_b64() {
@@ -696,6 +724,11 @@ tail_b64() {
       txt="$(logread 2>/dev/null | tail -n "$n" 2>/dev/null)"
       path="logread"
     fi
+  fi
+
+  if [ "$kind" != "agent" ] && [ -z "$path" ] && [ -z "$txt" ]; then
+    txt="No Mihomo log found. Set 'log-file:' in $MIHOMO_CONFIG, or set MIHOMO_LOG in /opt/zash-agent/agent.env. You can also view the config via cmd=logs&type=config."
+    path="$MIHOMO_CONFIG"
   fi
 
   # cap to ~200KB
@@ -733,6 +766,8 @@ case "$cmd" in
     [ -n "$lines" ] || lines="200"
     if [ "$type" = "agent" ]; then
       tail_b64 agent "$lines"
+    elif [ "$type" = "config" ]; then
+      config_b64
     else
       tail_b64 mihomo "$lines"
     fi
