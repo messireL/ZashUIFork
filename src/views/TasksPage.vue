@@ -149,6 +149,57 @@
         </div>
       </details>
 
+      <details v-if="lastRuleProvidersUpdate?.at" class="rounded-lg border border-base-content/10 bg-base-200/40 p-2">
+        <summary class="cursor-pointer text-xs font-semibold opacity-80">
+          {{ $t('lastRuleProvidersUpdateResult') }}
+          <span class="ml-2 font-mono opacity-70">{{ fmtTs(lastRuleProvidersUpdate.at) }}</span>
+          <span v-if="lastRuleProvidersUpdate.ok" class="ml-2 badge badge-success badge-xs">OK</span>
+          <span v-else class="ml-2 badge badge-error badge-xs">ERR</span>
+        </summary>
+
+        <div class="mt-2 flex flex-col gap-2 text-xs">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 opacity-70">
+            <div>
+              <span class="opacity-60">{{ $t('total') }}:</span>
+              <span class="ml-1 font-mono">{{ lastRuleProvidersUpdate.total }}</span>
+            </div>
+            <div>
+              <span class="opacity-60">OK:</span>
+              <span class="ml-1 font-mono">{{ lastRuleProvidersUpdate.okCount }}</span>
+            </div>
+            <div>
+              <span class="opacity-60">ERR:</span>
+              <span class="ml-1 font-mono">{{ lastRuleProvidersUpdate.failCount }}</span>
+            </div>
+          </div>
+
+          <div v-for="it in (lastRuleProvidersUpdate.items || [])" :key="it.name" class="flex flex-col gap-1 rounded-md border border-base-content/10 bg-base-100/40 p-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <span class="min-w-0 truncate font-mono" :title="it.name">{{ it.name }}</span>
+                <span v-if="it.changed" class="ml-2 badge badge-info badge-xs">{{ $t('changed') }}</span>
+                <span v-if="it.ok" class="ml-2 badge badge-success badge-xs">OK</span>
+                <span v-else class="ml-2 badge badge-error badge-xs">ERR</span>
+              </div>
+              <div class="shrink-0 font-mono opacity-70">{{ it.durationMs != null ? fmtMs(it.durationMs) : '—' }}</div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 opacity-70">
+              <div>
+                <span class="opacity-60">{{ $t('before') }}:</span>
+                <span class="ml-1 font-mono">{{ fmtUpdatedAt(it.beforeUpdatedAt) }}</span>
+              </div>
+              <div>
+                <span class="opacity-60">{{ $t('after') }}:</span>
+                <span class="ml-1 font-mono">{{ fmtUpdatedAt(it.afterUpdatedAt) }}</span>
+              </div>
+            </div>
+
+            <div v-if="it.error" class="text-error">{{ it.error }}</div>
+          </div>
+        </div>
+      </details>
+
       <div class="grid gap-2 md:grid-cols-2">
         <div class="rounded-lg border border-base-content/10 bg-base-200/40 p-2">
           <div class="mb-1 text-sm font-semibold">{{ $t('geoFiles') }}</div>
@@ -499,6 +550,31 @@ const lastGeoUpdate = useStorage<GeoUpdateResult>('runtime/tasks-last-geo-update
   note: '',
 })
 
+type RuleProvidersUpdateResult = {
+  at: number
+  ok: boolean
+  total: number
+  okCount: number
+  failCount: number
+  items: Array<{
+    name: string
+    ok: boolean
+    changed: boolean
+    beforeUpdatedAt?: string
+    afterUpdatedAt?: string
+    durationMs?: number
+    error?: string
+  }>
+}
+
+const lastRuleProvidersUpdate = useStorage<RuleProvidersUpdateResult>('runtime/tasks-last-rule-providers-update-v1', {
+  at: 0,
+  ok: true,
+  total: 0,
+  okCount: 0,
+  failCount: 0,
+  items: [],
+})
 type GeoInfoItem = {
   kind: string
   path: string
@@ -894,22 +970,77 @@ const updateRuleProvidersNow = async () => {
   providersUpdateBusy.value = true
   const id = startJob(t('updateRuleProvidersNow'))
   try {
-    // Ensure we have the list
-    if (!ruleProviders.value.length) await refreshRuleProviders()
+    await refreshRuleProviders()
+    const beforeMap = new Map<string, string>()
+    for (const p of ruleProviders.value || []) {
+      if (p?.name) beforeMap.set(p.name, p.updatedAt || '')
+    }
+
     const names = (ruleProviders.value || []).map((p) => p.name).filter(Boolean) as string[]
+    const items: any[] = []
     let ok = 0
     let fail = 0
+
     for (const name of names) {
+      const started = Date.now()
       try {
         await updateRuleProviderSilentAPI(name)
         ok += 1
-      } catch {
+        items.push({
+          name,
+          ok: true,
+          changed: false,
+          beforeUpdatedAt: beforeMap.get(name) || '',
+          durationMs: Date.now() - started,
+          error: '',
+        })
+      } catch (e: any) {
         fail += 1
+        const d = e?.response?.data
+        const msg = (() => {
+          if (typeof d === 'string') return d
+          if (d && typeof d === 'object') return JSON.stringify(d)
+          return String(e?.message || 'failed')
+        })()
+        items.push({
+          name,
+          ok: false,
+          changed: false,
+          beforeUpdatedAt: beforeMap.get(name) || '',
+          durationMs: Date.now() - started,
+          error: msg,
+        })
       }
     }
+
     await refreshRuleProviders()
-    finishJob(id, { ok: fail === 0, meta: { total: names.length, ok, fail } })
-    showNotification({ content: fail === 0 ? 'operationDone' : 'operationFailed', type: fail === 0 ? 'alert-success' : 'alert-warning', timeout: 2200 })
+    const afterMap = new Map<string, string>()
+    for (const p of ruleProviders.value || []) {
+      if (p?.name) afterMap.set(p.name, p.updatedAt || '')
+    }
+
+    let changed = 0
+    for (const it of items) {
+      const after = afterMap.get(it.name) || ''
+      it.afterUpdatedAt = after
+      const before = it.beforeUpdatedAt || ''
+      const ch = !!after && !!before && after !== before
+      it.changed = ch
+      if (ch) changed += 1
+    }
+
+    const okAll = fail === 0
+    lastRuleProvidersUpdate.value = {
+      at: Date.now(),
+      ok: okAll,
+      total: names.length,
+      okCount: ok,
+      failCount: fail,
+      items,
+    }
+
+    finishJob(id, { ok: okAll, meta: { total: names.length, ok, fail, changed } })
+    showNotification({ content: okAll ? 'operationDone' : 'operationFailed', type: okAll ? 'alert-success' : 'alert-warning', timeout: 2200 })
     await refreshFreshness()
   } catch (e: any) {
     finishJob(id, { ok: false, error: e?.message || 'failed' })
