@@ -416,13 +416,13 @@ const geoKindLabel = (kind: string) => {
 
 const fmtMtime = (mtimeSec?: number) => {
   if (!mtimeSec || !Number.isFinite(mtimeSec)) return '—'
-  return dayjs.unix(mtimeSec).format('YYYY-MM-DD HH:mm:ss')
+  return dayjs.unix(mtimeSec).format('DD-MM-YYYY HH:mm:ss')
 }
 
 const fmtUpdatedAt = (s?: string) => {
   const d = dayjs(s || '')
   if (!d.isValid()) return '—'
-  return d.format('YYYY-MM-DD HH:mm:ss')
+  return d.format('DD-MM-YYYY HH:mm:ss')
 }
 
 const shortPath = (p?: string) => {
