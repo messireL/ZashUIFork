@@ -120,6 +120,43 @@
                 </div>
               </details>
             </div>
+
+            <div v-if="agentEnabled" class="mt-2 border-t border-base-content/10 pt-2">
+              <div class="mb-1 text-xs font-semibold opacity-80">{{ $t('localRulesDir') }}</div>
+              <div v-if="rulesBusy" class="text-sm opacity-70">…</div>
+              <div v-else>
+                <div v-if="rulesError" class="text-xs text-error">{{ rulesError }}</div>
+                <div v-else-if="!rulesDir" class="text-sm opacity-70">—</div>
+                <div v-else class="flex flex-col gap-1 text-xs">
+                  <div>
+                    <span class="opacity-70">{{ $t('path') }}:</span>
+                    <span class="ml-1 font-mono" :title="rulesDir">{{ shortPath(rulesDir) }}</span>
+                  </div>
+                  <div>
+                    <span class="opacity-70">{{ $t('filesCount') }}:</span>
+                    <span class="ml-1 font-mono">{{ rulesCount }}</span>
+                  </div>
+                  <div>
+                    <span class="opacity-70">{{ $t('newestUpdate') }}:</span>
+                    <span class="ml-1 font-mono">{{ fmtMtime(rulesNewest) }}</span>
+                  </div>
+                  <div>
+                    <span class="opacity-70">{{ $t('oldestUpdate') }}:</span>
+                    <span class="ml-1 font-mono">{{ fmtMtime(rulesOldest) }}</span>
+                  </div>
+
+                  <details v-if="rulesItems.length" class="mt-1">
+                    <summary class="cursor-pointer opacity-80">{{ $t('showList') }}</summary>
+                    <div class="mt-2 flex flex-col gap-1">
+                      <div v-for="f in rulesItems" :key="f.path" class="flex items-center justify-between gap-2">
+                        <span class="min-w-0 truncate font-mono" :title="f.path">{{ f.name || shortPath(f.path) }}</span>
+                        <span class="shrink-0 font-mono opacity-70">{{ fmtMtime(f.mtimeSec) }}</span>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -209,7 +246,7 @@
 
 <script setup lang="ts">
 import { fetchRuleProvidersAPI, zashboardVersion, version as coreVersion } from '@/api'
-import { agentGeoInfoAPI, agentLogsAPI, agentLogsFollowAPI, agentMihomoProvidersAPI, agentStatusAPI } from '@/api/agent'
+import { agentGeoInfoAPI, agentLogsAPI, agentLogsFollowAPI, agentMihomoProvidersAPI, agentRulesInfoAPI, agentStatusAPI } from '@/api/agent'
 import BackendVersion from '@/components/common/BackendVersion.vue'
 import { getLabelFromBackend, prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
@@ -372,6 +409,7 @@ const geoKindLabel = (kind: string) => {
   const k = (kind || '').toLowerCase()
   if (k === 'geoip') return t('geoipFile')
   if (k === 'geosite') return t('geositeFile')
+  if (k === 'asn') return t('asnMmdbFile')
   if (k === 'mmdb') return t('mmdbFile')
   return kind || '—'
 }
@@ -439,9 +477,55 @@ const refreshRuleProviders = async () => {
   }
 }
 
-const freshnessBusy = computed(() => geoBusy.value || providersBusy.value)
+// Local rules directory (XKeen/mihomo rules folder)
+const rulesBusy = ref(false)
+const rulesError = ref('')
+const rulesDir = ref('')
+const rulesCount = ref(0)
+const rulesNewest = ref<number | undefined>(undefined)
+const rulesOldest = ref<number | undefined>(undefined)
+const rulesItems = ref<Array<{ name: string; path: string; mtimeSec?: number; sizeBytes?: number }>>([])
+
+const refreshRulesInfo = async () => {
+  rulesError.value = ''
+  rulesDir.value = ''
+  rulesCount.value = 0
+  rulesNewest.value = undefined
+  rulesOldest.value = undefined
+  rulesItems.value = []
+  if (!agentEnabled.value) return
+  rulesBusy.value = true
+  try {
+    const r: any = await agentRulesInfoAPI()
+    if (!r?.ok) {
+      rulesError.value = r?.error || 'failed'
+      return
+    }
+    rulesDir.value = String(r?.dir || '')
+    rulesCount.value = Number(r?.count || 0) || 0
+    const newest = typeof r?.newestMtimeSec === 'number' ? r.newestMtimeSec : Number(r?.newestMtimeSec || 0) || 0
+    const oldest = typeof r?.oldestMtimeSec === 'number' ? r.oldestMtimeSec : Number(r?.oldestMtimeSec || 0) || 0
+    rulesNewest.value = newest > 0 ? newest : undefined
+    rulesOldest.value = oldest > 0 ? oldest : undefined
+    const items = Array.isArray(r?.items) ? r.items : []
+    rulesItems.value = items
+      .filter((x: any) => x && x.path)
+      .map((x: any) => ({
+        name: String(x.name || ''),
+        path: String(x.path || ''),
+        mtimeSec: typeof x.mtimeSec === 'number' ? x.mtimeSec : Number(x.mtimeSec || 0) || undefined,
+        sizeBytes: typeof x.sizeBytes === 'number' ? x.sizeBytes : Number(x.sizeBytes || 0) || undefined,
+      }))
+  } catch (e: any) {
+    rulesError.value = e?.message || 'failed'
+  } finally {
+    rulesBusy.value = false
+  }
+}
+
+const freshnessBusy = computed(() => geoBusy.value || providersBusy.value || rulesBusy.value)
 const refreshFreshness = async () => {
-  await Promise.all([refreshGeoInfo(), refreshRuleProviders()])
+  await Promise.all([refreshGeoInfo(), refreshRuleProviders(), refreshRulesInfo()])
 }
 
 // --- Diagnostics report ---

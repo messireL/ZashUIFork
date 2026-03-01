@@ -213,7 +213,23 @@ jesc() {
 
 stat_mtime_sec() {
   p="$1"
-  stat -c %Y "$p" 2>/dev/null || stat -f %m "$p" 2>/dev/null || echo 0
+
+  out="$(stat -c %Y "$p" 2>/dev/null || true)"
+  echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+
+  # Some Keenetic builds expose BusyBox applets separately.
+  out="$(busybox stat -c %Y "$p" 2>/dev/null || true)"
+  echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+
+  # BusyBox date often supports -r <file>
+  out="$(date -r "$p" +%s 2>/dev/null || true)"
+  echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+
+  # BSD stat fallback (rare on routers)
+  out="$(stat -f %m "$p" 2>/dev/null || true)"
+  echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+
+  echo 0
 }
 
 stat_size_bytes() {
@@ -234,6 +250,7 @@ geo_info_json() {
 
   geoip_path=""
   geosite_path=""
+  asn_path=""
   mmdb_path=""
 
   for d in "$cfg_dir" /opt/etc/mihomo /opt/share/mihomo /opt/var/lib/mihomo /opt/var/mihomo /opt/etc/mihomo/geodata /opt/var/mihomo/geodata; do
@@ -250,6 +267,12 @@ geo_info_json() {
     [ -n "$mmdb_path" ] || {
       for f in Country.mmdb country.mmdb GeoLite2-Country.mmdb; do
         [ -f "$d/$f" ] && mmdb_path="$d/$f" && break
+      done
+    }
+
+    [ -n "$asn_path" ] || {
+      for f in ASN.mmdb asn.mmdb GeoLite2-ASN.mmdb; do
+        [ -f "$d/$f" ] && asn_path="$d/$f" && break
       done
     }
   done
@@ -274,7 +297,58 @@ geo_info_json() {
   }
   add_item geoip "$geoip_path"
   add_item geosite "$geosite_path"
+  add_item asn "$asn_path"
   add_item mmdb "$mmdb_path"
+  printf ']}'
+}
+
+rules_info_json() {
+  echo "Content-Type: application/json"
+  echo "Access-Control-Allow-Origin: *"
+  echo "Access-Control-Allow-Methods: GET, POST, OPTIONS"
+  echo "Access-Control-Allow-Headers: Content-Type, Authorization"
+  echo "Access-Control-Allow-Private-Network: true"
+  echo "Cache-Control: no-store"
+  echo
+
+  cfg_dir="$(dirname "$MIHOMO_CONFIG" 2>/dev/null || echo /opt/etc/mihomo)"
+  rules_dir=""
+  for d in "$cfg_dir/rules" /opt/etc/mihomo/rules /opt/var/mihomo/rules /opt/share/mihomo/rules; do
+    [ -d "$d" ] && rules_dir="$d" && break
+  done
+
+  if [ -z "$rules_dir" ]; then
+    printf '{"ok":true,"dir":"","count":0,"newestMtimeSec":0,"oldestMtimeSec":0,"items":[]}'
+    return
+  fi
+
+  count=0
+  newest=0
+  oldest=0
+  for f in "$rules_dir"/*; do
+    [ -f "$f" ] || continue
+    count=$((count + 1))
+    m="$(stat_mtime_sec "$f")"
+    echo "$m" | grep -qE '^[0-9]+$' || m=0
+    [ "$m" -gt "$newest" ] && newest="$m"
+    if [ "$oldest" -eq 0 ] || [ "$m" -lt "$oldest" ]; then
+      oldest="$m"
+    fi
+  done
+
+  # Build a short list (top 30 by mtime) to avoid large payloads.
+  printf '{"ok":true,"dir":"%s","count":%s,"newestMtimeSec":%s,"oldestMtimeSec":%s,"items":[' "$(jesc "$rules_dir")" "$count" "$newest" "$oldest"
+  first=1
+  ls -1t "$rules_dir" 2>/dev/null | head -n 30 | while read -r name; do
+    [ -n "$name" ] || continue
+    path="$rules_dir/$name"
+    [ -f "$path" ] || continue
+    m="$(stat_mtime_sec "$path")"
+    s="$(stat_size_bytes "$path")"
+    [ "$first" -eq 0 ] && printf ','
+    first=0
+    printf '{"name":"%s","path":"%s","mtimeSec":%s,"sizeBytes":%s}' "$(jesc "$name")" "$(jesc "$path")" "$m" "$s"
+  done
   printf ']}'
 }
 
@@ -710,7 +784,7 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.5","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.6","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -955,6 +1029,9 @@ case "$cmd" in
     ;;
   geo_info)
     geo_info_json
+    ;;
+  rules_info)
+    rules_info_json
     ;;
   *) reply_ok '{"ok":false,"error":"unknown-cmd"}' ;;
 esac

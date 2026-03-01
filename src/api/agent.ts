@@ -208,6 +208,31 @@ export const agentGeoInfoAPI = async (): Promise<{
 }
 
 
+export const agentRulesInfoAPI = async (): Promise<{
+  ok: boolean
+  dir?: string
+  count?: number
+  newestMtimeSec?: number | string
+  oldestMtimeSec?: number | string
+  items?: Array<{
+    name?: string
+    path?: string
+    mtimeSec?: number | string
+    sizeBytes?: number | string
+  }>
+  error?: string
+}> => {
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'rules_info' },
+    })
+    return (data || {}) as any
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'failed' }
+  }
+}
+
+
 export const agentUnblockMacAPI = async (mac: string): Promise<{ ok: boolean; error?: string }> => {
   try {
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
