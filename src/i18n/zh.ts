@@ -427,6 +427,9 @@ const zh: LANG_MESSAGE = {
   manualBlock: '手动',
   trafficExceeded: '流量超限',
   bandwidthExceeded: '带宽超限',
+  blockedUnblockDone: '已解封 {user} 并重置计数',
+  blockedDisableDone: '已为 {user} 关闭限制',
+  blockedActionFailed: '无法对 {user} 执行动作',
 }
 
 export default zh

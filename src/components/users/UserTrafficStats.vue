@@ -95,36 +95,45 @@
                   </span>
                   <span v-else class="opacity-60">—</span>
                 </td>
-                <td class="text-right">
-                  <div class="flex justify-end gap-1">
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-circle btn-xs"
-                      @click.stop.prevent="openLimits(b.user)"
-                      :title="$t('limits')"
-                    >
-                      <AdjustmentsHorizontalIcon class="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      @click="unblockAndReset(b.user)"
-                      :disabled="blockedActionBusy"
-                      :title="$t('unblockAndReset')"
-                    >
-                      {{ $t('unblockAndReset') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      @click="disableLimitsQuick(b.user)"
-                      :disabled="blockedActionBusy"
-                      :title="$t('disableLimits')"
-                    >
-                      {{ $t('disableLimits') }}
-                    </button>
-                  </div>
-                </td>
+                <td class="text-right relative z-40 pointer-events-auto">
+  <div class="flex justify-end gap-1 pointer-events-auto">
+    <button
+      type="button"
+      class="btn btn-ghost btn-circle btn-xs relative z-20"
+      @click.stop.prevent="openLimits(b.user)"
+      @pointerdown.stop.prevent
+      @mousedown.stop.prevent
+      @touchstart.stop.prevent
+      :title="$t('limits')"
+    >
+      <AdjustmentsHorizontalIcon class="h-4 w-4" />
+    </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-xs relative z-20"
+      @click.stop.prevent="unblockAndReset(b.user)"
+      @pointerdown.stop.prevent
+      @mousedown.stop.prevent
+      @touchstart.stop.prevent
+      :disabled="blockedActionBusy"
+      :title="$t('unblockAndReset')"
+    >
+      {{ $t('unblockAndReset') }}
+    </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-xs relative z-20"
+      @click.stop.prevent="disableLimitsQuick(b.user)"
+      @pointerdown.stop.prevent
+      @mousedown.stop.prevent
+      @touchstart.stop.prevent
+      :disabled="blockedActionBusy"
+      :title="$t('disableLimits')"
+    >
+      {{ $t('disableLimits') }}
+    </button>
+  </div>
+</td>
               </tr>
             </tbody>
           </table>
@@ -546,6 +555,7 @@
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { getIPLabelFromMap } from '@/helper/sourceip'
 import { prettyBytesHelper } from '@/helper/utils'
+import { showNotification } from '@/helper/notification'
 import { activeConnections } from '@/store/connections'
 import { sourceIPLabelList } from '@/store/settings'
 import { autoDisconnectLimitedUsers, hardBlockLimitedUsers, userLimits, type UserLimitPeriod } from '@/store/userLimits'
@@ -888,6 +898,10 @@ const unblockAndReset = async (user: string) => {
       enabled: l.enabled,
     })
     await applyUserEnforcementNow()
+    showNotification({ content: 'blockedUnblockDone', params: { user }, type: 'alert-success', timeout: 2200 })
+  } catch (e) {
+    console.error(e)
+    showNotification({ content: 'blockedActionFailed', params: { user }, type: 'alert-error', timeout: 4500 })
   } finally {
     blockedActionBusy.value = false
   }
@@ -898,8 +912,12 @@ const disableLimitsQuick = async (user: string) => {
   if (blockedActionBusy.value) return
   blockedActionBusy.value = true
   try {
-    setUserLimit(user, { enabled: false, disabled: false })
+    setUserLimit(user, { enabled: false, disabled: false, resetAt: Date.now() })
     await applyUserEnforcementNow()
+    showNotification({ content: 'blockedDisableDone', params: { user }, type: 'alert-success', timeout: 2200 })
+  } catch (e) {
+    console.error(e)
+    showNotification({ content: 'blockedActionFailed', params: { user }, type: 'alert-error', timeout: 4500 })
   } finally {
     blockedActionBusy.value = false
   }

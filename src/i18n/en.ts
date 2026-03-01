@@ -428,6 +428,9 @@ const en = {
   manualBlock: 'Manual',
   trafficExceeded: 'Traffic limit',
   bandwidthExceeded: 'Bandwidth limit',
+  blockedUnblockDone: 'User {user} unblocked and counter reset',
+  blockedDisableDone: 'Limits disabled for {user}',
+  blockedActionFailed: 'Failed to perform action for {user}',
 }
 
 export type LANG_MESSAGE = typeof en

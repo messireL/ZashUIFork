@@ -430,6 +430,9 @@ const ru: LANG_MESSAGE = {
   manualBlock: 'Ручной',
   trafficExceeded: 'Лимит трафика',
   bandwidthExceeded: 'Лимит скорости',
+  blockedUnblockDone: 'Пользователь {user} разблокирован и счётчик сброшен',
+  blockedDisableDone: 'Лимиты для {user} отключены',
+  blockedActionFailed: 'Не удалось выполнить действие для {user}',
 }
 
 export default ru
