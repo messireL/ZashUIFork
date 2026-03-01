@@ -88,7 +88,62 @@
       </div>
     </template>
     <template v-slot:preview>
-      <ProxyPreview :nodes="renderProxies" :now="activeProxy" />
+      <div class="flex flex-col gap-2">
+        <ProxyPreview
+          :nodes="renderProxies"
+          :now="activeProxy"
+          :group-name="proxyProvider.name"
+        />
+
+        <div
+          v-if="activeProxy"
+          class="flex flex-wrap items-center gap-1.5 text-xs"
+        >
+          <span class="opacity-70">{{ $t('activeProxy') }}:</span>
+          <span
+            class="font-mono truncate max-w-[18rem]"
+            :title="activeProxy"
+          >
+            {{ activeProxy }}
+          </span>
+
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle"
+            @click.stop="copyActiveName"
+            :title="$t('copyProxyName')"
+          >
+            <ClipboardDocumentIcon class="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle"
+            @click.stop="testActiveNode"
+            :disabled="isActiveTesting"
+            :title="$t('testProxyLatency')"
+          >
+            <span
+              v-if="isActiveTesting"
+              class="loading loading-spinner loading-xs"
+            ></span>
+            <BoltIcon
+              v-else
+              class="h-4 w-4"
+            />
+          </button>
+
+          <button
+            v-if="activeProxyUri"
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle"
+            @click.stop="copyActiveUri"
+            :title="$t('copyProxyUri')"
+          >
+            <LinkIcon class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
     </template>
     <template v-slot:content="{ showFullContent }">
       <ProxyNodeGrid>
@@ -112,10 +167,11 @@ import { agentProviderByName, fetchAgentProviders } from '@/store/providerHealth
 import { useBounceOnVisible } from '@/composables/bouncein'
 import { useRenderProxies } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
-import { fetchProxies, proxyProviederList } from '@/store/proxies'
+import { showNotification } from '@/helper/notification'
+import { fetchProxies, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
 import { twoColumnProxyGroup } from '@/store/settings'
-import { ArrowPathIcon, BoltIcon } from '@heroicons/vue/24/outline'
+import { ArrowPathIcon, BoltIcon, ClipboardDocumentIcon, LinkIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
 import { twMerge } from 'tailwind-merge'
 import { computed, ref } from 'vue'
@@ -470,6 +526,61 @@ const updateProviderClickHandler = async () => {
     isUpdating.value = false
   } catch {
     isUpdating.value = false
+  }
+}
+
+
+
+// --- Quick actions for the currently used proxy inside this provider ---
+const isActiveTesting = ref(false)
+
+const activeProxyNode = computed(() => {
+  const name = activeProxy.value
+  return name ? (proxyMap.value as any)?.[name] : null
+})
+
+const activeProxyUri = computed(() => {
+  const node: any = activeProxyNode.value
+  if (!node) return ''
+
+  const candidates = ['uri', 'url', 'link', 'share', 'subscription', 'subscribe', 'proxyUrl']
+  const v1 = getAnyFromObj(node, candidates)
+  if (typeof v1 === 'string' && v1.includes('://')) return v1.trim()
+
+  const v2 = getAnyFromObj(node?.extra, candidates)
+  if (typeof v2 === 'string' && v2.includes('://')) return v2.trim()
+
+  return ''
+})
+
+const copyText = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    showNotification({ content: 'copySuccess', type: 'alert-success', timeout: 1400 })
+  } catch {
+    showNotification({ content: 'operationFailed', type: 'alert-error', timeout: 2200 })
+  }
+}
+
+const copyActiveName = async () => {
+  if (!activeProxy.value) return
+  await copyText(activeProxy.value)
+}
+
+const copyActiveUri = async () => {
+  if (!activeProxyUri.value) return
+  await copyText(activeProxyUri.value)
+}
+
+const testActiveNode = async () => {
+  if (!activeProxy.value) return
+  if (isActiveTesting.value) return
+
+  isActiveTesting.value = true
+  try {
+    await proxyLatencyTest(activeProxy.value, getTestUrl(proxyProvider.value?.name))
+  } finally {
+    isActiveTesting.value = false
   }
 }
 
