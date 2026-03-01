@@ -1,6 +1,31 @@
 import axios from 'axios'
 import { agentToken, agentUrl } from '@/store/agent'
 
+/**
+ * Some router setups return CGI-style headers inside the response body,
+ * e.g. "Content-Type: application/json\n...\n\n{...}".
+ * Axios will then keep it as a string and JSON parsing downstream breaks.
+ */
+const parseMaybeCgiJson = (data: any) => {
+  if (typeof data !== 'string') return data
+  // Fast path: valid JSON.
+  try {
+    return JSON.parse(data)
+  } catch {
+    /* noop */
+  }
+  // Fallback: strip everything before the first '{'.
+  const i = data.indexOf('{')
+  if (i < 0) return data
+  const j = data.lastIndexOf('}')
+  const jsonStr = j >= i ? data.slice(i, j + 1) : data.slice(i)
+  try {
+    return JSON.parse(jsonStr)
+  } catch {
+    return data
+  }
+}
+
 type AgentStatus = {
   ok: boolean
   version?: string
@@ -23,6 +48,12 @@ const agentAxios = () => {
   const instance = axios.create({
     baseURL: agentUrl.value || '',
     timeout: 4000,
+    transformResponse: [
+      (data) => {
+        // Keep default behaviour for already-parsed objects.
+        return parseMaybeCgiJson(data)
+      },
+    ],
   })
 
   instance.interceptors.request.use((cfg) => {
