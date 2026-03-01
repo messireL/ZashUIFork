@@ -214,16 +214,35 @@ jesc() {
 stat_mtime_sec() {
   p="$1"
 
+  # GNU/coreutils stat (Entware coreutils)
   out="$(stat -c %Y "$p" 2>/dev/null || true)"
   echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
 
-  # Some Keenetic builds expose BusyBox applets separately.
-  out="$(busybox stat -c %Y "$p" 2>/dev/null || true)"
-  echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+  # BusyBox stat may exist but not support all flags depending on build
+  if command -v busybox >/dev/null 2>&1; then
+    out="$(busybox stat -c %Y "$p" 2>/dev/null || true)"
+    echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+  fi
 
-  # BusyBox date often supports -r <file>
+  # date -r (some BusyBox builds)
   out="$(date -r "$p" +%s 2>/dev/null || true)"
   echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+  if command -v busybox >/dev/null 2>&1; then
+    out="$(busybox date -r "$p" +%s 2>/dev/null || true)"
+    echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+  fi
+
+  # Parse "Modify:" from BusyBox stat output and convert via date -d
+  if command -v busybox >/dev/null 2>&1; then
+    line="$(busybox stat "$p" 2>/dev/null | grep -E '^[[:space:]]*Modify:' | head -n1 || true)"
+    if [ -n "$line" ]; then
+      ts="$(echo "$line" | sed 's/^[[:space:]]*Modify:[[:space:]]*//')"
+      out="$(date -d "$ts" +%s 2>/dev/null || true)"
+      echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+      out="$(busybox date -d "$ts" +%s 2>/dev/null || true)"
+      echo "$out" | grep -qE '^[0-9]+$' && { echo "$out"; return; }
+    fi
+  fi
 
   # BSD stat fallback (rare on routers)
   out="$(stat -f %m "$p" 2>/dev/null || true)"
@@ -784,7 +803,7 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.6","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.7","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
