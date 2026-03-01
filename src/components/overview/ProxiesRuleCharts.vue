@@ -30,6 +30,11 @@
           {{ activePreset.name }}
         </span>
       </button>
+
+      <button class="btn btn-ghost btn-xs" @click.stop="exportPng" :title="$t('exportPng')">
+        <ArrowDownTrayIcon class="h-4 w-4" />
+        <span class="max-sm:hidden">PNG</span>
+      </button>
     </div>
 
     <button
@@ -65,7 +70,15 @@
       :style="backgroundImage"
     >
       <div ref="fullScreenChart" class="bg-base-100 h-full w-full" :style="fullChartStyle" />
-      <button
+            <button
+        class="btn btn-ghost btn-circle btn-sm fixed left-4 bottom-4 mb-[env(safe-area-inset-bottom)]"
+        @click.stop="exportPng"
+        :title="$t('exportPng')"
+      >
+        <ArrowDownTrayIcon class="h-4 w-4" />
+      </button>
+
+<button
         class="btn btn-ghost btn-circle btn-sm fixed right-4 bottom-4 mb-[env(safe-area-inset-bottom)]"
         @click="isFullScreen = false"
       >
@@ -297,7 +310,7 @@ import {
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
-import { ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon} from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon} from '@heroicons/vue/24/outline'
 import { useElementSize, useStorage } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -1255,6 +1268,23 @@ const render = (force = false) => {
   if (!mainChart) return
   mainChart.setOption(options.value as any, { notMerge: force, lazyUpdate: true })
   if (isFullScreen.value && fsChart) fsChart.setOption(options.value as any, { notMerge: force, lazyUpdate: true })
+}
+
+
+const exportPng = () => {
+  const ch = isFullScreen.value ? fsChart : mainChart
+  if (!ch) return
+  try {
+    const url = ch.getDataURL({ type: 'png', pixelRatio: 2 })
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `topology-${dayjs().format('YYYYMMDD-HHmmss')}.png`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  } catch (e: any) {
+    showNotification('error', `${t('export')} PNG: ${e?.message || e}`)
+  }
 }
 
 onMounted(() => {

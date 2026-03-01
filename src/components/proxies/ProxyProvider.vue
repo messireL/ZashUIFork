@@ -84,7 +84,53 @@
             </template>
           </div>
         </div>
-        <div>{{ $t('updated') }} {{ fromNow(proxyProvider.updatedAt) }}</div>
+        <div class="flex flex-col items-end gap-1 max-sm:items-start">
+          <div v-if="open" class="flex flex-wrap items-center gap-1.5 text-xs">
+            <span class="opacity-70">{{ activeProxy ? $t('activeProxy') : $t('bestLatencyProxy') }}:</span>
+            <span
+              class="font-mono truncate max-w-[18rem]"
+              :class="activeProxy ? '' : 'opacity-70'"
+              :title="displayProxyName || ''"
+            >
+              {{ displayProxyName || '—' }}
+            </span>
+
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-circle"
+              @click.stop="copyActiveName"
+              :disabled="!displayProxyName"
+              :title="$t('copyProxyName')"
+            >
+              <ClipboardDocumentIcon class="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-circle"
+              @click.stop="testActiveNode"
+              :disabled="isActiveTesting || !displayProxyName"
+              :title="$t('testProxyLatency')"
+            >
+              <span
+                v-if="isActiveTesting"
+                class="loading loading-spinner loading-xs"
+              ></span>
+              <BoltIcon v-else class="h-4 w-4" />
+            </button>
+
+            <button
+              v-if="activeProxyUri"
+              type="button"
+              class="btn btn-ghost btn-xs btn-circle"
+              @click.stop="copyActiveUri"
+              :title="$t('copyProxyUri')"
+            >
+              <LinkIcon class="h-4 w-4" />
+            </button>
+          </div>
+          <div>{{ $t('updated') }} {{ fromNow(proxyProvider.updatedAt) }}</div>
+        </div>
       </div>
     </template>
     <template v-slot:preview>

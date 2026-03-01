@@ -480,6 +480,7 @@ const zh: LANG_MESSAGE = {
   restore: '恢复',
   exportImport: '导出 / 导入',
   export: '导出',
+  exportPng: '下载 PNG',
   importMerge: '导入（合并）',
   importReplace: '导入（替换）',
   exportImportTip: '仅导入/导出用户限额与模板。导入前会自动创建快照。',
