@@ -321,6 +321,7 @@ geo_info_json() {
   printf ']}'
 }
 
+
 rules_info_json() {
   echo "Content-Type: application/json"
   echo "Access-Control-Allow-Origin: *"
@@ -341,14 +342,23 @@ rules_info_json() {
     return
   fi
 
+  tmp="/tmp/zash_rules.$$"
+  : > "$tmp" 2>/dev/null || tmp="/tmp/zash_rules"
+
   count=0
   newest=0
   oldest=0
-  for f in "$rules_dir"/*; do
+
+  # Scan up to 2 levels deep (rules/* and rules/*/*), including dotfiles.
+  for f in "$rules_dir"/* "$rules_dir"/.[!.]* "$rules_dir"/..?* "$rules_dir"/*/* "$rules_dir"/*/.[!.]* "$rules_dir"/*/..?*; do
     [ -f "$f" ] || continue
     count=$((count + 1))
     m="$(stat_mtime_sec "$f")"
     echo "$m" | grep -qE '^[0-9]+$' || m=0
+    s="$(stat_size_bytes "$f")"
+    echo "$s" | grep -qE '^[0-9]+$' || s=0
+    printf '%s|%s|%s
+' "$m" "$s" "$f" >> "$tmp"
     [ "$m" -gt "$newest" ] && newest="$m"
     if [ "$oldest" -eq 0 ] || [ "$m" -lt "$oldest" ]; then
       oldest="$m"
@@ -358,17 +368,15 @@ rules_info_json() {
   # Build a short list (top 30 by mtime) to avoid large payloads.
   printf '{"ok":true,"dir":"%s","count":%s,"newestMtimeSec":%s,"oldestMtimeSec":%s,"items":[' "$(jesc "$rules_dir")" "$count" "$newest" "$oldest"
   first=1
-  ls -1t "$rules_dir" 2>/dev/null | head -n 30 | while read -r name; do
-    [ -n "$name" ] || continue
-    path="$rules_dir/$name"
-    [ -f "$path" ] || continue
-    m="$(stat_mtime_sec "$path")"
-    s="$(stat_size_bytes "$path")"
+  sort -t'|' -k1,1nr "$tmp" 2>/dev/null | head -n 30 | while IFS='|' read -r m s path; do
+    [ -n "$path" ] || continue
+    name="$(basename "$path")"
     [ "$first" -eq 0 ] && printf ','
     first=0
     printf '{"name":"%s","path":"%s","mtimeSec":%s,"sizeBytes":%s}' "$(jesc "$name")" "$(jesc "$path")" "$m" "$s"
   done
   printf ']}'
+  rm -f "$tmp" 2>/dev/null
 }
 
 if [ "$REQUEST_METHOD" = "OPTIONS" ]; then
@@ -803,7 +811,7 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.7","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.8","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
