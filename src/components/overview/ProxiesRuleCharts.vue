@@ -71,7 +71,7 @@
     >
       <div ref="fullScreenChart" class="bg-base-100 h-full w-full" :style="fullChartStyle" />
             <button
-        class="btn btn-ghost btn-circle btn-sm fixed left-4 bottom-4 mb-[env(safe-area-inset-bottom)]"
+        class="btn btn-ghost btn-circle btn-sm fixed left-4 bottom-4 z-[10020] mb-[env(safe-area-inset-bottom)]"
         @click.stop="exportPng"
         :title="$t('exportPng')"
       >
@@ -79,7 +79,7 @@
       </button>
 
 <button
-        class="btn btn-ghost btn-circle btn-sm fixed right-4 bottom-4 mb-[env(safe-area-inset-bottom)]"
+        class="btn btn-ghost btn-circle btn-sm fixed right-4 bottom-4 z-[10020] mb-[env(safe-area-inset-bottom)]"
         @click="isFullScreen = false"
       >
         <ArrowsPointingInIcon class="h-4 w-4" />
@@ -316,6 +316,7 @@ import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
+import dayjs from 'dayjs'
 import { debounce } from 'lodash'
 import { twMerge } from 'tailwind-merge'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -1282,8 +1283,14 @@ const exportPng = () => {
     document.body.appendChild(a)
     a.click()
     a.remove()
+    showNotification({ content: 'exportPngDone', type: 'alert-success', timeout: 1800 })
   } catch (e: any) {
-    showNotification('error', `${t('export')} PNG: ${e?.message || e}`)
+    showNotification({
+      content: 'exportPngFailed',
+      type: 'alert-error',
+      timeout: 6000,
+      params: { error: String(e?.message || e) },
+    })
   }
 }
 

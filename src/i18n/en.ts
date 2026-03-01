@@ -482,6 +482,8 @@ const en = {
   exportImport: 'Export / Import',
   export: 'Export',
   exportPng: 'Download PNG',
+  exportPngDone: 'PNG exported',
+  exportPngFailed: 'PNG export failed: {error}',
   importMerge: 'Import (merge)',
   importReplace: 'Import (replace)',
   exportImportTip: 'Exports/imports only user limits and limit profiles. A snapshot is created before import.',

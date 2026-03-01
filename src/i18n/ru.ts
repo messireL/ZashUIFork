@@ -484,6 +484,8 @@ const ru: LANG_MESSAGE = {
   exportImport: 'Экспорт / импорт',
   export: 'Экспорт',
   exportPng: 'Скачать PNG',
+  exportPngDone: 'PNG сохранён',
+  exportPngFailed: 'Ошибка экспорта PNG: {error}',
   importMerge: 'Импорт (объединить)',
   importReplace: 'Импорт (заменить)',
   exportImportTip: 'Экспортирует/импортирует только лимиты пользователей и профили. Перед импортом автоматически создаётся снапшот.',
