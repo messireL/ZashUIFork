@@ -1,0 +1,33 @@
+<template>
+  <div class="grid grid-cols-1 gap-2 overflow-x-hidden p-2">
+    <ZashboardSettings />
+    <BackendSettings />
+    <MihomoConfigEditor />
+    <GeneralSettings />
+    <ProxiesSettings />
+
+    <template v-if="isMounted">
+      <ConnectionsSettings />
+      <OverviewSettings />
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import BackendSettings from '@/components/settings/BackendSettings.vue'
+import ConnectionsSettings from '@/components/settings/ConnectionsSettings.vue'
+import GeneralSettings from '@/components/settings/GeneralSettings.vue'
+import MihomoConfigEditor from '@/components/settings/MihomoConfigEditor.vue'
+import OverviewSettings from '@/components/settings/OverviewSettings.vue'
+import ProxiesSettings from '@/components/settings/ProxiesSettings.vue'
+import ZashboardSettings from '@/components/settings/ZashboardSettings.vue'
+import { onMounted, ref } from 'vue'
+
+const isMounted = ref(false)
+
+onMounted(() => {
+  requestAnimationFrame(() => {
+    isMounted.value = true
+  })
+})
+</script>
