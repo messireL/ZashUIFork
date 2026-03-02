@@ -901,11 +901,22 @@ const knownKeysByUser = computed(() => {
 
 const rows = computed<Row[]>(() => {
   const { start, end } = range.value
-  const agg = getTrafficRange(start, end)
+  // Traffic history is stored by stable keys (IP). Display names are derived from the SourceIP map.
+  const aggByKey = getTrafficRange(start, end)
+
+  const displayUserForKey = (k: string) => {
+    const key = (k || '').toString().trim()
+    if (!key) return ''
+    if (looksLikeIP(key)) return (getIPLabelFromMap(key) || key).toString()
+    return key
+  }
 
   const allUsers = new Set<string>()
   for (const k of knownKeysByUser.value.keys()) allUsers.add(k)
-  for (const k of agg.keys()) allUsers.add(k)
+  for (const k of aggByKey.keys()) {
+    const u = displayUserForKey(k)
+    if (u) allUsers.add(u)
+  }
 
   // Also include users with saved limits (after applying profiles)
   for (const u of Object.keys(userLimits.value || {})) allUsers.add(u)
@@ -918,9 +929,23 @@ const rows = computed<Row[]>(() => {
   }
 
   const list: Row[] = Array.from(allUsers).map((user) => {
-    const t = agg.get(user) || { dl: 0, ul: 0 }
-    const keys = (knownKeysByUser.value.get(user) || []).join(', ')
-    return { user, keys, dl: t.dl, ul: t.ul }
+    const keysSet = new Set<string>(knownKeysByUser.value.get(user) || [])
+    if (looksLikeIP(user)) keysSet.add(user)
+    // legacy: some buckets could still be stored under a label/synthetic key
+    if (!looksLikeIP(user)) keysSet.add(user)
+
+    let dl = 0
+    let ul = 0
+    for (const k of keysSet) {
+      const t = aggByKey.get(k)
+      dl += t?.dl || 0
+      ul += t?.ul || 0
+    }
+
+    const ipKeys = Array.from(keysSet).filter((k) => looksLikeIP(k))
+    const keys = ipKeys.join(', ')
+
+    return { user, keys, dl, ul }
   })
 
   const sorted = list.sort((a, b) => {

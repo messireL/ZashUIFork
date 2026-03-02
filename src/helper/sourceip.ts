@@ -127,3 +127,29 @@ export const getIPLabelFromMap = (ip: string) => {
 
   return cacheResult(ip, ip)
 }
+
+// Best-effort reverse lookup: map a saved "label" back to the original IP key.
+// Used to merge legacy traffic history that was recorded under labels.
+// Only supports exact IP keys (not CIDR / regex).
+export const getIPKeyFromLabel = (label: string) => {
+  const l = (label || '').trim()
+  if (!l) return ''
+
+  const backendId = activeBackend.value?.uuid as string | undefined
+
+  for (const it of sourceIPLabelList.value || []) {
+    const lb = (it.label || '').trim()
+    if (lb !== l) continue
+
+    if (it.scope?.length && backendId && !it.scope.includes(backendId)) continue
+
+    const k = (it.key || '').trim()
+    if (!k) continue
+    if (k.startsWith('/')) continue // regex
+    if (k.includes('/')) continue // CIDR
+
+    return k
+  }
+
+  return ''
+}
