@@ -10,14 +10,23 @@
 
 
     <div class="absolute left-2 top-2 z-10 flex flex-wrap items-center gap-2">
-      <button
-        v-if="filterMode !== 'none'"
-        class="badge badge-outline cursor-pointer hover:opacity-80"
-        @click.stop="clearFilter"
-        :title="$t('clear')"
-      >
-        {{ filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude') }}
-      </button>
+      <div v-if="filterMode !== 'none'" class="flex items-center gap-1">
+        <button
+          class="badge badge-outline cursor-pointer hover:opacity-80 max-w-[280px] truncate"
+          @click.stop="clearFilter"
+          :title="activeFilterChip?.title || $t('clear')"
+        >
+          {{ activeFilterChip?.text || (filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude')) }}
+        </button>
+
+        <button
+          class="btn btn-ghost btn-xs btn-square"
+          @click.stop="toggleFilterLock"
+          :title="filterLocked ? $t('topologyUnpinFilter') : $t('topologyPinFilter')"
+        >
+          <component :is="filterLocked ? LockClosedIcon : LockOpenIcon" class="h-4 w-4" />
+        </button>
+      </div>
 
       <button class="btn btn-ghost btn-xs" @click.stop="presetDialogShow = true" :title="$t('presets')">
         <BookmarkIcon class="h-4 w-4" />
@@ -108,14 +117,24 @@
 
 	      <!-- fullscreen controls: same unified control + presets/filter -->
 	      <div class="fixed left-4 top-4 z-[10020] flex flex-wrap items-center gap-2" @click.stop>
-	        <button
-	          v-if="filterMode !== 'none'"
-	          class="badge badge-outline cursor-pointer hover:opacity-80"
-	          @click.stop="clearFilter"
-	          :title="$t('clear')"
-	        >
-	          {{ filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude') }}
-	        </button>
+        <div v-if="filterMode !== 'none'" class="flex items-center gap-1">
+          <button
+            class="badge badge-outline cursor-pointer hover:opacity-80 max-w-[280px] truncate"
+            @click.stop="clearFilter"
+            :title="activeFilterChip?.title || $t('clear')"
+          >
+            {{ activeFilterChip?.text || (filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude')) }}
+          </button>
+
+          <button
+            class="btn btn-ghost btn-xs btn-square"
+            @click.stop="toggleFilterLock"
+            :title="filterLocked ? $t('topologyUnpinFilter') : $t('topologyPinFilter')"
+          >
+            <component :is="filterLocked ? LockClosedIcon : LockOpenIcon" class="h-4 w-4" />
+          </button>
+        </div>
+
 
 	        <button class="btn btn-ghost btn-xs" @click.stop="presetDialogShow = true" :title="$t('presets')">
 	          <BookmarkIcon class="h-4 w-4" />
@@ -229,6 +248,16 @@
             </button>
             <button class="btn btn-xs btn-ghost" :disabled="filterMode === 'none'" @click="clearFilter">
               {{ $t('clear') }}
+            </button>
+
+            <button
+              class="btn btn-xs"
+              :class="filterLocked ? 'btn-active' : 'btn-outline'"
+              :disabled="filterMode === 'none'"
+              @click="toggleFilterLock"
+              :title="filterLocked ? $t('topologyUnpinFilter') : $t('topologyPinFilter')"
+            >
+              <component :is="filterLocked ? LockClosedIcon : LockOpenIcon" class="h-4 w-4" />
             </button>
           </div>
 
@@ -403,7 +432,7 @@ import {
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
-import { ArrowDownTrayIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon} from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, LockClosedIcon, LockOpenIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useElementSize, useStorage } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -547,6 +576,7 @@ type FilterMode = 'none' | 'only' | 'exclude'
 const focus = ref<Focus | null>(null)
 const filterMode = ref<FilterMode>('none')
 const filterFocus = ref<Focus | null>(null)
+const filterLocked = useStorage<boolean>('config/topology-filter-locked', false)
 
 
 type TopologyPreset = {
@@ -576,6 +606,38 @@ const stageLabel = (st: FocusStage) =>
       : st === 'G'
         ? t('proxyGroup')
         : t('proxies')
+
+const toggleFilterLock = () => {
+  filterLocked.value = !filterLocked.value
+}
+
+const shortText = (s: string, maxLen = 60) => {
+  const v = (s || '').trim()
+  if (v.length <= maxLen) return v
+  return v.slice(0, Math.max(0, maxLen - 1)) + '…'
+}
+
+const filterValueLabel = (f: Focus) => {
+  if (f.kind !== 'value') return ''
+  const v = String(f.value || '').trim()
+  if (!v) return ''
+  if (f.stage === 'C') {
+    const ip = v
+    const lbl = labelForIp(ip)
+    return lbl ? `${lbl} (${ip})` : ip
+  }
+  return v
+}
+
+const activeFilterChip = computed(() => {
+  if (filterMode.value === 'none' || !filterFocus.value || filterFocus.value.kind !== 'value') return null
+  const modeText = filterMode.value === 'only' ? t('topologyOnlyThis') : t('topologyExcludeThis')
+  const stage = stageLabel(filterFocus.value.stage)
+  const fullValue = filterValueLabel(filterFocus.value)
+  const text = `${modeText} · ${stage}: ${shortText(fullValue, 64)}`
+  const title = `${modeText} · ${stage}: ${fullValue}`
+  return { text, title }
+})
 
 const normalizeSavedFilter = () => {
   if (filterMode.value === 'none' || !filterFocus.value || filterFocus.value.kind !== 'value') {
@@ -665,15 +727,21 @@ const applyPreset = (p: TopologyPreset) => {
   proxiesRelationshipTopN.value = p.topN
   proxiesRelationshipColorMode.value = p.colorMode
 
-  if (p.filterMode === 'none' || !p.filterFocus) {
-    clearFilter()
-  } else {
-    filterMode.value = p.filterMode
-    filterFocus.value = { ...p.filterFocus }
+  if (!filterLocked.value) {
+    if (p.filterMode === 'none' || !p.filterFocus) {
+      clearFilter()
+    } else {
+      filterMode.value = p.filterMode
+      filterFocus.value = { ...p.filterFocus }
+    }
   }
 
   activePresetId.value = p.id
-  showNotification({ content: 'presetApplied', type: 'alert-success', timeout: 1800 })
+  showNotification({
+    content: filterLocked.value ? 'presetAppliedFiltersLocked' : 'presetApplied',
+    type: 'alert-success',
+    timeout: 1800,
+  })
 }
 
 	const isSameSceneAsPreset = (p: TopologyPreset) => {
@@ -765,6 +833,7 @@ const isSameFocus = (a: Focus | null, b: Focus | null) => {
 const clearFilter = () => {
   filterMode.value = 'none'
   filterFocus.value = null
+  filterLocked.value = false
 }
 
 const applyOnly = () => {
