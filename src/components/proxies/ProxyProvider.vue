@@ -67,6 +67,27 @@
             {{ $t('sslExpire') }}: {{ sslExpireInfo.label }}
           </div>
 
+          <!-- Shared management panel URL (synced via router-agent users DB) -->
+          <div v-if="open" class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span class="opacity-70">{{ $t('providerPanelUrl') }}:</span>
+            <input
+              class="input input-bordered input-xs w-72 max-w-full"
+              v-model="panelUrlDraft"
+              :placeholder="$t('providerPanelUrlPlaceholder')"
+              @keydown.enter.stop.prevent="savePanelUrl"
+              @blur="savePanelUrl"
+            />
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              :disabled="!panelUrl"
+              @click.stop="openPanelUrl"
+              :title="$t('openPanel')"
+            >
+              <ArrowTopRightOnSquareIcon class="h-4 w-4" />
+            </button>
+          </div>
+
           <pre
             v-if="subscriptionInfo.totalLabel === '—' && showRawSub"
             class="mt-2 text-xs opacity-70 whitespace-pre-wrap break-all"
@@ -128,6 +149,25 @@
             >
               <LinkIcon class="h-4 w-4" />
             </button>
+
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-circle"
+              @click.stop="openTopologyWithProvider"
+              :title="$t('showInTopology')"
+            >
+              <PresentationChartLineIcon class="h-4 w-4" />
+            </button>
+
+            <button
+              v-if="panelUrl"
+              type="button"
+              class="btn btn-ghost btn-xs btn-circle"
+              @click.stop="openPanelUrl"
+              :title="$t('openPanel')"
+            >
+              <ArrowTopRightOnSquareIcon class="h-4 w-4" />
+            </button>
           </div>
           <div>{{ $t('updated') }} {{ fromNow(proxyProvider.updatedAt) }}</div>
         </div>
@@ -139,6 +179,8 @@
           :nodes="renderProxies"
           :now="displayProxyName"
           :group-name="proxyProvider.name"
+          :enable-topology-filter="true"
+          @nodefilter="openTopologyWithProxy"
         />
 
         <div class="flex flex-wrap items-center gap-1.5 text-xs">
@@ -187,6 +229,25 @@
           >
             <LinkIcon class="h-4 w-4" />
           </button>
+
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle"
+            @click.stop="openTopologyWithProvider"
+            :title="$t('showInTopology')"
+          >
+            <PresentationChartLineIcon class="h-4 w-4" />
+          </button>
+
+          <button
+            v-if="panelUrl"
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle"
+            @click.stop="openPanelUrl"
+            :title="$t('openPanel')"
+          >
+            <ArrowTopRightOnSquareIcon class="h-4 w-4" />
+          </button>
         </div>
       </div>
     </template>
@@ -215,13 +276,14 @@ import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
 import { fetchProxies, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
-import { NOT_CONNECTED } from '@/constant'
-import { twoColumnProxyGroup } from '@/store/settings'
-import { ArrowPathIcon, BoltIcon, ClipboardDocumentIcon, LinkIcon } from '@heroicons/vue/24/outline'
+import { NOT_CONNECTED, ROUTE_NAME } from '@/constant'
+import { proxyProviderPanelUrlMap, twoColumnProxyGroup } from '@/store/settings'
+import { ArrowPathIcon, ArrowTopRightOnSquareIcon, BoltIcon, ClipboardDocumentIcon, LinkIcon, PresentationChartLineIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
 import { twMerge } from 'tailwind-merge'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import CollapseCard from '../common/CollapseCard.vue'
 import ProxyNodeCard from './ProxyNodeCard.vue'
 import ProxyNodeGrid from './ProxyNodeGrid.vue'
@@ -230,6 +292,8 @@ import ProxyPreview from './ProxyPreview.vue'
 const props = defineProps<{
   name: string
 }>()
+
+const router = useRouter()
 
 const proxyProvider = computed(
   () => proxyProviederList.value.find((group) => group.name === props.name)!,
@@ -306,6 +370,78 @@ const bestLatencyProxy = computed(() => {
 const displayProxyName = computed(() => {
   return activeProxy.value || bestLatencyProxy.value || ''
 })
+
+// ---- shared provider management panel URL ----
+
+const panelUrl = computed(() => {
+  const m = proxyProviderPanelUrlMap.value || {}
+  return String((m as any)[props.name] || '').trim()
+})
+
+const panelUrlDraft = ref(panelUrl.value)
+watch(panelUrl, (v) => {
+  // keep draft in sync when updated by sync engine
+  if (panelUrlDraft.value !== v) panelUrlDraft.value = v
+})
+
+const savePanelUrl = () => {
+  const raw = String(panelUrlDraft.value || '').trim()
+  const normalized = raw && !/^https?:\/\//i.test(raw) ? `https://${raw}` : raw
+
+  const cur = { ...(proxyProviderPanelUrlMap.value || {}) }
+  if (!normalized) {
+    delete (cur as any)[props.name]
+  } else {
+    ;(cur as any)[props.name] = normalized
+  }
+  proxyProviderPanelUrlMap.value = cur
+}
+
+const openPanelUrl = () => {
+  const url = panelUrl.value
+  if (!url) return
+  try {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  } catch {
+    // ignore
+  }
+}
+
+const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
+
+const openTopologyWithProxy = async (p: { name: string; mode: 'only' | 'exclude' }) => {
+  const payload = {
+    ts: Date.now(),
+    mode: p.mode,
+    focus: { stage: 'S', kind: 'value', value: p.name },
+  }
+
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+
+  await router.push({ name: ROUTE_NAME.overview })
+}
+
+const openTopologyWithProvider = async () => {
+  const payload = {
+    ts: Date.now(),
+    mode: 'only',
+    focus: { stage: 'P', kind: 'value', value: proxyProvider.value?.name || props.name },
+    // Fallback to a concrete proxy name if provider map is not yet ready on the Topology page.
+    fallbackProxyName: displayProxyName.value || '',
+  }
+
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+
+  await router.push({ name: ROUTE_NAME.overview })
+}
 
 const getAnyFromObj = (obj: any, candidates: string[]): any => {
   if (!obj || typeof obj !== 'object') return undefined
@@ -396,12 +532,12 @@ const sslExpireInfo = computed(() => {
   if (!d) return null
 
   const days = d.diff(dayjs(), 'day')
-  const date = d.format('YYYY-MM-DD')
+  const dateTime = d.format('DD-MM-YYYY HH:mm:ss')
 
   const cls = days < 0 ? 'text-error' : days <= 14 ? 'text-warning' : 'text-success'
-  const label = days < 0 ? `${date} (expired)` : `${date} (${days}d)`
+  const label = days < 0 ? `${dateTime} (expired)` : `${dateTime} (${days}d)`
 
-  return { date, days, cls, label }
+  return { dateTime, days, cls, label }
 })
 
 const subscriptionInfo = computed(() => {

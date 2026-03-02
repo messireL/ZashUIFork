@@ -8,7 +8,7 @@
       <div
         v-for="node in nodesLatency"
         :key="node.name"
-        class="relative flex h-5 w-5 items-center justify-center transition hover:scale-110"
+        class="relative group flex h-5 w-5 items-center justify-center transition hover:scale-110"
         :class="[
           showSquares ? 'rounded-md' : 'rounded-full',
           getBgColor(node.latency),
@@ -21,6 +21,32 @@
         @click.stop="$emit('nodeclick', node.name)"
       >
         <component :is="iconForLatency(node.latency)" class="h-3.5 w-3.5 text-white/90" />
+
+        <!-- Topology filter quick actions (Only / Exclude) -->
+        <div
+          v-if="enableTopologyFilter"
+          class="absolute left-1/2 top-full z-50 hidden -translate-x-1/2 pt-1 group-hover:block"
+        >
+          <div class="flex items-center gap-0.5 rounded-md bg-base-200/95 p-0.5 ring-1 ring-base-300 shadow">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs h-5 min-h-0 w-5 px-0"
+              :title="t('topologyOnlyThis')"
+              @click.stop.prevent="$emit('nodefilter', { name: node.name, mode: 'only' })"
+            >
+              <FunnelIcon class="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs h-5 min-h-0 w-5 px-0"
+              :title="t('topologyExcludeThis')"
+              @click.stop.prevent="$emit('nodefilter', { name: node.name, mode: 'exclude' })"
+            >
+              <NoSymbolIcon class="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
         <span
           v-if="highlightNodeName === node.name"
           class="pointer-events-none absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-warning ring-2 ring-base-100 shadow"
@@ -67,14 +93,23 @@ import { activeConnections } from '@/store/connections'
 import { getLatencyByName, getNowProxyNodeName } from '@/store/proxies'
 import { lowLatency, mediumLatency, proxyPreviewType } from '@/store/settings'
 import { useElementSize } from '@vueuse/core'
-import { BoltIcon, PauseCircleIcon, PlayCircleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { BoltIcon, FunnelIcon, NoSymbolIcon, PauseCircleIcon, PlayCircleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+defineEmits<{
+  (e: 'nodeclick', name: string): void
+  (e: 'nodefilter', payload: { name: string; mode: 'only' | 'exclude' }): void
+}>()
 
 const props = defineProps<{
   nodes: string[]
   now?: string
   groupName?: string
+  enableTopologyFilter?: boolean
 }>()
+
+const { t } = useI18n()
 
 const { showTip } = useTooltip()
 const previewRef = ref<HTMLElement | null>(null)
@@ -113,6 +148,8 @@ const showDots = computed(() => {
     (proxyPreviewType.value === PROXY_PREVIEW_TYPE.AUTO && widthEnough.value)
   )
 })
+
+const enableTopologyFilter = computed(() => !!props.enableTopologyFilter)
 
 const nodesLatency = computed(() =>
   props.nodes.map((name) => {

@@ -1,4 +1,4 @@
-import { getIPLabelFromMap } from '@/helper/sourceip'
+import { getIPKeyFromLabel, getIPLabelFromMap } from '@/helper/sourceip'
 import { activeConnections } from '@/store/connections'
 import { prettyBytesHelper } from '@/helper/utils'
 import dayjs from 'dayjs'
@@ -37,12 +37,43 @@ const save = debounce(() => {
 
 const bucketKey = (ts: number) => dayjs(ts).format('YYYY-MM-DDTHH')
 
+const looksLikeIP = (s: string) => {
+  const v = (s || '').trim()
+  if (!v) return false
+  const v4 = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(v)
+  const v6 = v.includes(':')
+  return v4 || v6
+}
+
+// Traffic history used to be keyed by "label" (hostname) which caused double-counting when
+// a label was added later. Canonicalize legacy keys back to their IP when possible.
+const canonicalUserKey = (k: string) => {
+  const key = (k || '').toString().trim()
+  if (!key) return ''
+  if (looksLikeIP(key)) return key
+  const ip = getIPKeyFromLabel(key)
+  return ip || key
+}
+
 export const getUserHourBucket = (user: string, ts = Date.now()): UserTrafficBucket => {
-  const u = (user || '').toString()
+  const u = (user || '').toString().trim()
   if (!u) return { dl: 0, ul: 0 }
   const k = bucketKey(ts)
-  const b = store.value?.[k]?.[u]
-  return { dl: b?.dl || 0, ul: b?.ul || 0 }
+  const bucket = store.value?.[k] || {}
+
+  const keys = new Set<string>()
+  keys.add(canonicalUserKey(u))
+  // also include legacy label key (if it exists)
+  if (!looksLikeIP(u)) keys.add(u)
+
+  let dl = 0
+  let ul = 0
+  for (const kk of keys) {
+    const b = (bucket as any)?.[kk]
+    dl += b?.dl || 0
+    ul += b?.ul || 0
+  }
+  return { dl, ul }
 }
 
 const trimOld = () => {
@@ -104,10 +135,10 @@ export const initUserTrafficRecorder = () => {
         if (!id) continue
         seen.add(id)
 
-        const ip = c?.metadata?.sourceIP || ''
-        // Some configs can have empty labels; never drop traffic because of that.
-        const mapped = getIPLabelFromMap(ip)
-        const user = (mapped || ip || '').toString()
+        const ip = (c?.metadata?.sourceIP || '').toString()
+        // Store traffic by stable key (IP) to avoid double counting when labels change.
+        // Fallback for empty IP (some local/internal entries): keep a stable synthetic label.
+        const userKey = (ip || getIPLabelFromMap(ip) || '').toString()
 
         const curDl = Number((c as any)?.download ?? 0) || 0
         const curUl = Number((c as any)?.upload ?? 0) || 0
@@ -132,7 +163,7 @@ export const initUserTrafficRecorder = () => {
           }
         }
 
-        add(user, d, u, now)
+        add(userKey, d, u, now)
 
         connTotals.set(id, { dl: curDl, ul: curUl })
       }
@@ -157,10 +188,11 @@ export const getTrafficRange = (startTs: number, endTs: number) => {
     const bucket = store.value[k]
     if (!bucket) continue
     for (const [user, v] of Object.entries(bucket)) {
-      const cur = out.get(user) || { dl: 0, ul: 0 }
+      const key = canonicalUserKey(user)
+      const cur = out.get(key) || { dl: 0, ul: 0 }
       cur.dl += v.dl || 0
       cur.ul += v.ul || 0
-      out.set(user, cur)
+      out.set(key, cur)
     }
   }
 
@@ -201,10 +233,11 @@ export const getTrafficGrouped = (startTs: number, endTs: number, groupBy: Traff
     const g = out.get(gk) || new Map<string, UserTrafficBucket>()
 
     for (const [user, v] of Object.entries(bucket)) {
-      const cur = g.get(user) || { dl: 0, ul: 0 }
+      const key = canonicalUserKey(user)
+      const cur = g.get(key) || { dl: 0, ul: 0 }
       cur.dl += v.dl || 0
       cur.ul += v.ul || 0
-      g.set(user, cur)
+      g.set(key, cur)
     }
 
     out.set(gk, g)

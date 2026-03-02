@@ -36,6 +36,24 @@
           :group-name="proxyGroup.name"
           @click.stop="handlerLatencyTest"
         />
+
+        <!-- Topology filters for the whole group (stage: G) -->
+        <div class="z-10 flex items-center gap-1">
+          <button
+            class="btn btn-ghost btn-circle btn-xs"
+            title="Топология: только этот прокси"
+            @click.stop="openTopologyWithGroup('only')"
+          >
+            <FunnelIcon class="h-3 w-3" />
+          </button>
+          <button
+            class="btn btn-ghost btn-circle btn-xs"
+            title="Топология: исключить этот прокси"
+            @click.stop="openTopologyWithGroup('exclude')"
+          >
+            <NoSymbolIcon class="h-3 w-3" />
+          </button>
+        </div>
       </div>
       <div
         class="text-base-content/80 mt-1.5 flex items-center gap-2"
@@ -55,7 +73,9 @@
         :nodes="renderProxies"
         :now="proxyGroup.now"
         :groupName="proxyGroup.name"
+        :enable-topology-filter="true"
         @nodeclick="handlerProxySelect(name, $event)"
+        @nodefilter="openTopologyWithProxy"
       />
     </template>
     <template v-slot:content="{ showFullContent }">
@@ -82,13 +102,15 @@ import {
   proxyGroupLatencyTest,
   proxyMap,
 } from '@/store/proxies'
+import { ROUTE_NAME } from '@/constant'
+import { useRouter } from 'vue-router'
 import {
   groupProxiesByProvider,
   manageHiddenGroup,
   proxyGroupIconMargin,
   proxyGroupIconSize,
 } from '@/store/settings'
-import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
+import { EyeIcon, EyeSlashIcon, FunnelIcon, NoSymbolIcon } from '@heroicons/vue/24/outline'
 import { twMerge } from 'tailwind-merge'
 import { computed, ref } from 'vue'
 import CollapseCard from '../common/CollapseCard.vue'
@@ -102,6 +124,42 @@ import ProxyPreview from './ProxyPreview.vue'
 const props = defineProps<{
   name: string
 }>()
+
+const router = useRouter()
+
+const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
+
+const openTopologyWithGroup = async (mode: 'only' | 'exclude') => {
+  const payload = {
+    ts: Date.now(),
+    mode,
+    focus: { stage: 'G', kind: 'value', value: props.name },
+  }
+
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+
+  await router.push({ name: ROUTE_NAME.overview })
+}
+
+const openTopologyWithProxy = async (p: { name: string; mode: 'only' | 'exclude' }) => {
+  const payload = {
+    ts: Date.now(),
+    mode: p.mode,
+    focus: { stage: 'S', kind: 'value', value: p.name },
+  }
+
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+
+  await router.push({ name: ROUTE_NAME.overview })
+}
 const proxyGroup = computed(() => proxyMap.value[props.name])
 const allProxies = computed(() => proxyGroup.value.all ?? [])
 const { proxiesCount, renderProxies } = useRenderProxies(allProxies, props.name)

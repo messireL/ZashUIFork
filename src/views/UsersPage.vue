@@ -33,6 +33,11 @@
                     class="no-drag h-4 w-4 text-error"
                     :title="$t('userBlockedTip')"
                   />
+                  <CloudIcon
+                    v-if="usersDbSyncActive && usersDbSyncedIdSet.has(sourceIP.id)"
+                    class="no-drag h-4 w-4 text-success"
+                    :title="$t('usersDbSyncedUserTip')"
+                  />
                 </template>
                 <template #default>
                   <button
@@ -90,8 +95,9 @@ import UserTrafficStats from '@/components/users/UserTrafficStats.vue'
 import SourceIPInput from '@/components/settings/SourceIPInput.vue'
 import { disableSwipe } from '@/composables/swipe'
 import { sourceIPLabelList } from '@/store/settings'
+import { usersDbSyncActive, usersDbSyncedIdSet } from '@/store/usersDbSync'
 import type { SourceIPLabel } from '@/types'
-import { ChevronUpDownIcon, LockClosedIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import { ChevronUpDownIcon, CloudIcon, LockClosedIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { v4 as uuid } from 'uuid'
 import { ref } from 'vue'
 import Draggable from 'vuedraggable'

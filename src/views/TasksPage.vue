@@ -37,6 +37,64 @@
     </div>
 
     <div class="card gap-2 p-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="font-semibold">{{ $t('providersPanelTitle') }}</div>
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn btn-sm btn-ghost" @click="loadProvidersPanel(true)" :disabled="providersPanelBusy || !agentEnabled">
+            {{ $t('refresh') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="text-xs opacity-70">{{ $t('providersPanelTip') }}</div>
+
+      <div v-if="!agentEnabled" class="text-sm opacity-70">
+        {{ $t('agentDisabled') }}
+      </div>
+      <div v-else-if="providersPanelBusy" class="text-sm opacity-70">…</div>
+      <div v-else>
+        <div v-if="providersPanelError" class="text-xs text-error">{{ providersPanelError }}</div>
+        <div v-else-if="!providersPanelList.length" class="text-sm opacity-70">—</div>
+        <div v-else class="flex flex-col gap-2">
+          <div
+            v-for="p in providersPanelList"
+            :key="p.name"
+            class="rounded-lg border border-base-content/10 bg-base-200/40 p-2"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="truncate font-mono text-xs" :title="p.name">{{ p.name }}</div>
+                <div v-if="p.url" class="mt-0.5 truncate text-[11px] opacity-60" :title="p.url">{{ p.url }}</div>
+              </div>
+              <div class="shrink-0 text-[11px] font-mono opacity-70" :title="$t('sslExpire')">
+                {{ fmtSslPanel(p.sslNotAfter) }}
+              </div>
+            </div>
+
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                class="input input-bordered input-sm flex-1 min-w-[260px]"
+                :placeholder="$t('providerPanelUrlPlaceholder')"
+                :value="proxyProviderPanelUrlMap[p.name] || ''"
+                @input="(e) => setProviderPanelUrl(p.name, (e && e.target && e.target.value) || '')"
+              />
+              <a
+                v-if="proxyProviderPanelUrlMap[p.name]"
+                class="btn btn-sm"
+                :href="proxyProviderPanelUrlMap[p.name]"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {{ $t('open') }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card gap-2 p-3">
       <div class="flex items-center justify-between gap-2">
         <div class="font-semibold">{{ $t('liveLogs') }}</div>
         <div class="flex items-center gap-2">
@@ -251,6 +309,28 @@
                   </div>
                 </div>
               </details>
+
+              <div class="mt-2 border-t border-base-content/10 pt-2">
+                <div class="mb-1 text-xs font-semibold opacity-80">{{ $t('topRulesTitle') }}</div>
+                <div v-if="!topHitRules.length" class="text-sm opacity-70">—</div>
+                <details v-else class="mt-1">
+                  <summary class="cursor-pointer opacity-80">{{ $t('showList') }}</summary>
+                  <div class="mt-2 flex flex-col gap-1">
+                    <div v-for="r in topHitRules" :key="r.key" class="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        class="link min-w-0 truncate text-left font-mono"
+                        :title="$t('openInTopology')"
+                        @click="openTopologyWithRule(r.ruleText)"
+                      >
+                        {{ r.ruleText }}
+                      </button>
+                      <span class="shrink-0 font-mono opacity-70">{{ r.hits }}</span>
+                    </div>
+                  </div>
+                </details>
+                <div class="mt-1 text-[11px] opacity-60">{{ $t('topRulesTip') }}</div>
+              </div>
             </div>
 
             <div v-if="agentEnabled" class="mt-2 border-t border-base-content/10 pt-2">
@@ -318,6 +398,139 @@
       </div>
     </div>
 
+
+    <div class="card gap-2 p-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="font-semibold">{{ $t('upstreamTracking') }}</div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn btn-sm btn-ghost" @click="checkUpstream" :disabled="upstreamBusy">
+            {{ $t('refresh') }}
+          </button>
+          <button type="button" class="btn btn-sm" @click="markUpstreamReviewed" :disabled="!upstreamLatest.releaseTag && !upstreamLatest.commitSha">
+            {{ $t('markReviewed') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 text-xs opacity-70">
+        <div>
+          <span class="opacity-60">{{ $t('repo') }}:</span>
+          <a class="link ml-1 font-mono" :href="upstreamRepoUrl" target="_blank" rel="noreferrer">{{ upstreamRepo }}</a>
+        </div>
+        <span v-if="upstreamHasNew" class="badge badge-warning badge-xs">{{ $t('new') }}</span>
+        <div class="ml-auto">
+          <span class="opacity-60">{{ $t('lastChecked') }}:</span>
+          <span class="ml-1 font-mono">{{ fmtTs(upstreamCheckedAt) }}</span>
+        </div>
+      </div>
+
+      <div v-if="upstreamError" class="text-xs text-error">{{ upstreamError }}</div>
+
+      <div v-else class="grid gap-2 md:grid-cols-2">
+        <div class="rounded-lg border border-base-content/10 bg-base-200/40 p-2">
+          <div class="mb-1 text-sm font-semibold">{{ $t('latestRelease') }}</div>
+          <div class="flex flex-col gap-1 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <span class="opacity-70">{{ $t('tag') }}:</span>
+                <a
+                  v-if="upstreamLatest.releaseUrl"
+                  class="link ml-1 font-mono"
+                  :href="upstreamLatest.releaseUrl"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {{ upstreamLatest.releaseTag || '—' }}
+                </a>
+                <span v-else class="ml-1 font-mono">{{ upstreamLatest.releaseTag || '—' }}</span>
+              </div>
+              <div class="shrink-0 font-mono opacity-80">{{ fmtIso(upstreamLatest.releasePublishedAt) }}</div>
+            </div>
+
+            <div v-if="upstreamCompareReleaseUrl" class="opacity-70">
+              <a class="link" :href="upstreamCompareReleaseUrl" target="_blank" rel="noreferrer">
+                {{ $t('compareSinceLastReview') }}
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-base-content/10 bg-base-200/40 p-2">
+          <div class="mb-1 text-sm font-semibold">{{ $t('latestCommit') }}</div>
+          <div class="flex flex-col gap-1 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <span class="opacity-70">SHA:</span>
+                <a
+                  v-if="upstreamLatest.commitUrl"
+                  class="link ml-1 font-mono"
+                  :href="upstreamLatest.commitUrl"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {{ shortSha(upstreamLatest.commitSha) || '—' }}
+                </a>
+                <span v-else class="ml-1 font-mono">{{ shortSha(upstreamLatest.commitSha) || '—' }}</span>
+              </div>
+              <div class="shrink-0 font-mono opacity-80">{{ fmtIso(upstreamLatest.commitDate) }}</div>
+            </div>
+            <div v-if="upstreamLatest.commitMessage" class="max-h-[32px] overflow-hidden break-words opacity-80" :title="upstreamLatest.commitMessage">
+              {{ upstreamLatest.commitMessage }}
+            </div>
+            <div v-if="upstreamCompareCommitUrl" class="opacity-70">
+              <a class="link" :href="upstreamCompareCommitUrl" target="_blank" rel="noreferrer">
+                {{ $t('compareCommits') }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-[11px] opacity-60">
+        {{ $t('upstreamTrackingTip') }}
+      </div>
+    </div>
+
+
+    <div class="card gap-2 p-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="font-semibold">{{ $t('usersDbSyncTitle') }}</div>
+        <span class="badge badge-sm" :class="usersDbBadge.cls">{{ usersDbBadge.text }}</span>
+      </div>
+
+      <div class="text-sm opacity-80">
+        {{ $t('usersDbSyncDesc') }}
+      </div>
+
+      <div class="text-xs opacity-70">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <div><span class="opacity-60">rev:</span> <span class="font-mono">{{ usersDbRemoteRev }}</span></div>
+          <div class="min-w-0"><span class="opacity-60">{{ $t('updated') }}:</span> <span class="font-mono">{{ usersDbRemoteUpdatedAt || '—' }}</span></div>
+        </div>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+          <div><span class="opacity-60">{{ $t('lastPull') }}:</span> <span class="font-mono">{{ usersDbLastPullAt ? fmtTs(usersDbLastPullAt) : '—' }}</span></div>
+          <div><span class="opacity-60">{{ $t('lastPush') }}:</span> <span class="font-mono">{{ usersDbLastPushAt ? fmtTs(usersDbLastPushAt) : '—' }}</span></div>
+          <div><span class="opacity-60">{{ $t('conflicts') }}:</span> <span class="font-mono">{{ usersDbConflictCount || 0 }}</span></div>
+          <div v-if="usersDbLocalDirty"><span class="badge badge-warning badge-xs">{{ $t('pendingChanges') }}</span></div>
+        </div>
+      </div>
+
+      <div v-if="usersDbLastError" class="text-xs text-error">{{ usersDbLastError }}</div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="btn btn-sm" @click="usersDbPullNow" :disabled="!usersDbSyncEnabled || !agentEnabled || usersDbBusy">
+          {{ $t('pull') }}
+        </button>
+        <button type="button" class="btn btn-sm" @click="usersDbPushNow" :disabled="!usersDbSyncEnabled || !agentEnabled || usersDbBusy">
+          {{ $t('push') }}
+        </button>
+      </div>
+
+      <div class="text-[11px] opacity-60">
+        {{ $t('usersDbSyncCurrent') }}
+      </div>
+    </div>
+
     <div class="card gap-2 p-3">
       <div class="flex items-center justify-between gap-2">
         <div class="font-semibold">{{ $t('operationsHistory') }}</div>
@@ -382,20 +595,38 @@ import { agentGeoInfoAPI, agentGeoUpdateAPI, agentLogsAPI, agentLogsFollowAPI, a
 import BackendVersion from '@/components/common/BackendVersion.vue'
 import { useStorage } from '@vueuse/core'
 import { getLabelFromBackend, prettyBytesHelper } from '@/helper/utils'
+import { parseDateMaybe } from '@/helper/providerHealth'
 import { showNotification } from '@/helper/notification'
 import { decodeB64Utf8 } from '@/helper/b64'
 import { activeBackend } from '@/store/setup'
 import { agentEnabled, agentUrl } from '@/store/agent'
+import { proxyProviderPanelUrlMap } from '@/store/settings'
 import { userLimitProfiles } from '@/store/userLimitProfiles'
 import { userLimitSnapshots } from '@/store/userLimitSnapshots'
 import { autoDisconnectLimitedUsers, hardBlockLimitedUsers, managedLanDisallowedCidrs, userLimits } from '@/store/userLimits'
 import { activeConnections } from '@/store/connections'
+import { ruleHitMap } from '@/store/rules'
 import { clearJobs, finishJob, jobHistory, startJob } from '@/store/jobs'
 import { applyUserEnforcementNow, getUserLimitState } from '@/composables/userLimits'
 import dayjs from 'dayjs'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RuleProvider } from '@/types'
 import { useI18n } from 'vue-i18n'
+import router from '@/router'
+import { ROUTE_NAME } from '@/constant'
+import {
+  usersDbConflictCount,
+  usersDbLastError,
+  usersDbLastPullAt,
+  usersDbLastPushAt,
+  usersDbLocalDirty,
+  usersDbPhase,
+  usersDbRemoteRev,
+  usersDbRemoteUpdatedAt,
+  usersDbSyncEnabled,
+  usersDbPullNow,
+  usersDbPushNow,
+} from '@/store/usersDbSync'
 
 const busy = ref(false)
 const jobs = computed(() => jobHistory.value || [])
@@ -416,6 +647,52 @@ const copyRouterUiUrl = async (asYaml: boolean) => {
   }
 }
 
+
+
+// --- Proxy providers: shared management panel URLs (synced via users DB) ---
+const providersPanelBusy = ref(false)
+const providersPanelError = ref('')
+const providersPanelList = ref<Array<{ name: string; url?: string; host?: string; port?: string; sslNotAfter?: string }>>([])
+
+const fmtSslPanel = (v: any) => {
+  const d = parseDateMaybe(v)
+  return d ? d.format('DD-MM-YYYY HH:mm:ss') : '—'
+}
+
+const setProviderPanelUrl = (name: string, url: string) => {
+  const k = String(name || '').trim()
+  if (!k) return
+  const v = String(url || '').trim()
+  const cur = { ...(proxyProviderPanelUrlMap.value || {}) }
+  if (!v) delete cur[k]
+  else cur[k] = v
+  proxyProviderPanelUrlMap.value = cur
+}
+
+const loadProvidersPanel = async (force = false) => {
+  if (!agentEnabled.value) {
+    providersPanelList.value = []
+    providersPanelError.value = ''
+    return
+  }
+  if (providersPanelBusy.value) return
+  providersPanelBusy.value = true
+  providersPanelError.value = ''
+  try {
+    const r: any = await agentMihomoProvidersAPI(force)
+    if (!r?.ok) {
+      providersPanelError.value = r?.error || 'failed'
+      providersPanelList.value = []
+      return
+    }
+    providersPanelList.value = Array.isArray(r?.providers) ? r.providers : []
+  } catch (e: any) {
+    providersPanelError.value = e?.message || 'failed'
+    providersPanelList.value = []
+  } finally {
+    providersPanelBusy.value = false
+  }
+}
 
 // --- Live logs (router-agent) ---
 const logSource = ref<'mihomo' | 'config' | 'agent'>('mihomo')
@@ -508,10 +785,14 @@ onMounted(() => {
   refreshLogs()
   startTimer()
   refreshFreshness()
+  loadProvidersPanel(false)
+  checkUpstream()
+  startUpstreamTimer()
 })
 
 onBeforeUnmount(() => {
   stopTimer()
+  stopUpstreamTimer()
 })
 
 watch([logsAuto, logSource, logLines, agentEnabled], () => {
@@ -523,6 +804,53 @@ watch([logsAuto, logSource, logLines, agentEnabled], () => {
 
 // --- Data freshness (GEO files + filter policy files) ---
 const { t } = useI18n()
+
+
+// --- Shared users DB sync status (Source IP mapping) ---
+const usersDbBusy = computed(() => usersDbPhase.value === 'pulling' || usersDbPhase.value === 'pushing')
+
+const usersDbBadge = computed(() => {
+  if (!usersDbSyncEnabled.value) return { text: 'OFF', cls: 'badge-ghost' }
+  if (!agentEnabled.value) return { text: t('localOnly'), cls: 'badge-ghost' }
+
+  if (usersDbPhase.value === 'idle' && !usersDbLocalDirty.value) return { text: t('synced'), cls: 'badge-success' }
+  if (usersDbPhase.value === 'pulling' || usersDbPhase.value === 'pushing') return { text: t('running'), cls: 'badge-warning' }
+  if (usersDbPhase.value === 'conflict') return { text: t('conflict'), cls: 'badge-warning' }
+  if (usersDbPhase.value === 'offline') return { text: t('offline'), cls: 'badge-warning' }
+  return { text: t('pendingChanges'), cls: 'badge-warning' }
+})
+
+// --- Top rules -> open Topology with filter (stage R) ---
+const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
+const normalizeRulePart = (s: string) => (s || '').trim() || '-'
+
+const topHitRules = computed(() => {
+  const entries = Array.from(ruleHitMap.value.entries() || [])
+    .map(([key, hits]) => {
+      const parts = String(key).split('\0')
+      const type = normalizeRulePart(parts[0] || '')
+      const payloadRaw = String(parts[1] || '').trim()
+      const ruleText = payloadRaw ? `${type}: ${normalizeRulePart(payloadRaw)}` : type
+      return { key: String(key), ruleText, hits: Number(hits) || 0 }
+    })
+    .filter((x) => x.ruleText && x.ruleText !== '-')
+    .sort((a, b) => b.hits - a.hits)
+  return entries.slice(0, 20)
+})
+
+const openTopologyWithRule = async (ruleText: string) => {
+  const payload = {
+    ts: Date.now(),
+    mode: 'only',
+    focus: { stage: 'R', kind: 'value', value: String(ruleText || '').trim() },
+  }
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+  await router.push({ name: ROUTE_NAME.overview })
+}
 
 const lastFreshnessOkAt = useStorage<number>('runtime/tasks-last-freshness-ok-at-v1', 0)
 
@@ -744,6 +1072,168 @@ const refreshFreshness = async () => {
   }
 }
 
+
+// --- Upstream tracking (GitHub: Zephyruso/zashboard) ---
+const upstreamRepo = 'Zephyruso/zashboard'
+const upstreamRepoUrl = 'https://github.com/Zephyruso/zashboard'
+const upstreamApiBase = 'https://api.github.com/repos/Zephyruso/zashboard'
+
+type UpstreamLatest = {
+  releaseTag: string
+  releasePublishedAt: string
+  releaseUrl: string
+  commitSha: string
+  commitDate: string
+  commitMessage: string
+  commitUrl: string
+}
+
+const upstreamLatest = useStorage<UpstreamLatest>('runtime/tasks-upstream-latest-v1', {
+  releaseTag: '',
+  releasePublishedAt: '',
+  releaseUrl: '',
+  commitSha: '',
+  commitDate: '',
+  commitMessage: '',
+  commitUrl: '',
+})
+
+const upstreamReviewed = useStorage<{ releaseTag: string; commitSha: string; reviewedAt: number }>(
+  'runtime/tasks-upstream-reviewed-v1',
+  { releaseTag: '', commitSha: '', reviewedAt: 0 },
+)
+
+const upstreamCheckedAt = useStorage<number>('runtime/tasks-upstream-checked-at-v1', 0)
+const upstreamLastNotifiedKey = useStorage<string>('runtime/tasks-upstream-last-notified-v1', '')
+const upstreamBusy = ref(false)
+const upstreamError = ref('')
+
+const upstreamHasNew = computed(() => {
+  const newRelease =
+    !!upstreamLatest.value.releaseTag &&
+    !!upstreamReviewed.value.releaseTag &&
+    upstreamLatest.value.releaseTag !== upstreamReviewed.value.releaseTag
+  const newCommit =
+    !!upstreamLatest.value.commitSha &&
+    !!upstreamReviewed.value.commitSha &&
+    upstreamLatest.value.commitSha !== upstreamReviewed.value.commitSha
+  // If user hasn't marked reviewed yet, still show NEW when we have data.
+  const neverReviewed = !upstreamReviewed.value.releaseTag && !upstreamReviewed.value.commitSha
+  return neverReviewed ? !!(upstreamLatest.value.releaseTag || upstreamLatest.value.commitSha) : newRelease || newCommit
+})
+
+const shortSha = (sha?: string) => (sha || '').trim().slice(0, 7)
+
+const fmtIso = (iso?: string) => {
+  const d = dayjs(iso || '')
+  if (!d.isValid()) return '—'
+  return d.format('DD-MM-YYYY HH:mm:ss')
+}
+
+const upstreamCompareReleaseUrl = computed(() => {
+  const a = (upstreamReviewed.value.releaseTag || '').trim()
+  const b = (upstreamLatest.value.releaseTag || '').trim()
+  if (!a || !b || a === b) return ''
+  return `https://github.com/Zephyruso/zashboard/compare/${encodeURIComponent(a)}...${encodeURIComponent(b)}`
+})
+
+const upstreamCompareCommitUrl = computed(() => {
+  const a = (upstreamReviewed.value.commitSha || '').trim()
+  const b = (upstreamLatest.value.commitSha || '').trim()
+  if (!a || !b || a === b) return ''
+  return `https://github.com/Zephyruso/zashboard/compare/${encodeURIComponent(a)}...${encodeURIComponent(b)}`
+})
+
+const checkUpstream = async () => {
+  if (upstreamBusy.value) return
+  upstreamBusy.value = true
+  upstreamError.value = ''
+  try {
+    const ghFetch = async (url: string) => {
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+        },
+        cache: 'no-store',
+      })
+
+      // Rate limit hint
+      const remaining = res.headers.get('x-ratelimit-remaining')
+      if (res.status === 403 && remaining === '0') {
+        throw new Error(t('githubRateLimited'))
+      }
+
+      if (!res.ok) {
+        throw new Error(`${t('operationFailed')}: ${res.status}`)
+      }
+      return res.json()
+    }
+
+    const [rel, commits] = await Promise.all([
+      ghFetch(`${upstreamApiBase}/releases/latest`),
+      ghFetch(`${upstreamApiBase}/commits?per_page=1`),
+    ])
+
+    const latestReleaseTag = String(rel?.tag_name || '')
+    const latestReleaseAt = String(rel?.published_at || rel?.created_at || '')
+    const latestReleaseUrl = String(rel?.html_url || '')
+
+    const c0 = Array.isArray(commits) ? commits[0] : commits
+    const latestCommitSha = String(c0?.sha || '')
+    const latestCommitDate = String(c0?.commit?.committer?.date || c0?.commit?.author?.date || '')
+    const latestCommitMessage = String(c0?.commit?.message || '').split('\n')[0]
+    const latestCommitUrl = String(c0?.html_url || '')
+
+    upstreamLatest.value = {
+      releaseTag: latestReleaseTag,
+      releasePublishedAt: latestReleaseAt,
+      releaseUrl: latestReleaseUrl,
+      commitSha: latestCommitSha,
+      commitDate: latestCommitDate,
+      commitMessage: latestCommitMessage,
+      commitUrl: latestCommitUrl,
+    }
+
+    upstreamCheckedAt.value = Date.now()
+
+    // Notify only once per new release tag (or commit if no tag)
+    const notifyKey = latestReleaseTag || latestCommitSha
+    if (upstreamHasNew.value && notifyKey && upstreamLastNotifiedKey.value !== notifyKey) {
+      upstreamLastNotifiedKey.value = notifyKey
+      showNotification({ content: 'upstreamUpdateAvailable', type: 'alert-warning', timeout: 2600 })
+    }
+  } catch (e: any) {
+    upstreamError.value = e?.message || 'failed'
+  } finally {
+    upstreamBusy.value = false
+  }
+}
+
+const markUpstreamReviewed = () => {
+  upstreamReviewed.value = {
+    releaseTag: upstreamLatest.value.releaseTag || upstreamReviewed.value.releaseTag || '',
+    commitSha: upstreamLatest.value.commitSha || upstreamReviewed.value.commitSha || '',
+    reviewedAt: Date.now(),
+  }
+  showNotification({ content: 'operationDone', type: 'alert-success', timeout: 1600 })
+}
+
+let upstreamTimer: any = null
+const startUpstreamTimer = () => {
+  stopUpstreamTimer()
+  // While Tasks page is open: check every 6 hours.
+  upstreamTimer = setInterval(() => {
+    checkUpstream()
+  }, 6 * 60 * 60 * 1000)
+}
+
+const stopUpstreamTimer = () => {
+  if (upstreamTimer) {
+    clearInterval(upstreamTimer)
+    upstreamTimer = null
+  }
+}
+
 // --- Diagnostics report ---
 const diagBusy = ref(false)
 
@@ -889,6 +1379,7 @@ const refreshSsl = async () => {
     const id = startJob('Refresh providers SSL')
     try {
       const r: any = await agentMihomoProvidersAPI(true)
+      await loadProvidersPanel(true)
       if (!r?.ok) {
         finishJob(id, { ok: false, error: r?.error || 'failed' })
         showNotification({ content: 'operationFailed', type: 'alert-error', timeout: 2200 })

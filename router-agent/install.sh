@@ -77,6 +77,8 @@ LAN_IF="${LAN_IF:-br0}"
 PORT="${PORT:-9099}"
 STATE_FILE="${STATE_FILE:-/opt/zash-agent/var/shapers.db}"
 BLOCKS_FILE="${BLOCKS_FILE:-/opt/zash-agent/var/blocks.db}"
+USERS_DB_FILE="${USERS_DB_FILE:-/opt/zash-agent/var/users-db.json}"
+USERS_DB_META="${USERS_DB_META:-/opt/zash-agent/var/users-db.meta.json}"
 TOKEN="${TOKEN:-}"
 MIHOMO_CONFIG="${MIHOMO_CONFIG:-/opt/etc/mihomo/config.yaml}"
 MIHOMO_LOG="${MIHOMO_LOG:-}"
@@ -132,6 +134,46 @@ ssl_not_after() {
     end="$(echo | openssl s_client -servername "$host" -connect "$host:$port" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | sed 's/^notAfter=//')"
   fi
   printf '%s' "$end"
+}
+
+remote_agent_version() {
+  # Best-effort: fetch current agent version from the upstream install script.
+  # Cached to avoid slowing down status calls.
+  cache_v="/opt/zash-agent/var/remote-version.txt"
+  cache_t="/opt/zash-agent/var/remote-version.ts"
+  ttl=21600 # 6 hours
+
+  now="$(date +%s 2>/dev/null || echo 0)"
+  if [ -f "$cache_v" ] && [ -f "$cache_t" ]; then
+    ts="$(cat "$cache_t" 2>/dev/null || echo 0)"
+    if echo "$ts" | grep -qE '^[0-9]+$' && [ "$now" -gt 0 ] && [ $((now-ts)) -lt "$ttl" ]; then
+      cat "$cache_v" 2>/dev/null || echo ""
+      return 0
+    fi
+  fi
+
+  url="https://raw.githubusercontent.com/messireL/ZashUIFork/main/router-agent/install.sh"
+  wb="/opt/bin/wget"
+  [ -x "$wb" ] || wb="wget"
+  v=""
+
+  if command -v timeout >/dev/null 2>&1; then
+    v="$(timeout 4 "$wb" -qO- "$url" 2>/dev/null | sed -n 's/.*"version":"\([0-9.]*\)".*/\1/p' | head -n1)"
+  else
+    v="$("$wb" -qO- "$url" 2>/dev/null | sed -n 's/.*"version":"\([0-9.]*\)".*/\1/p' | head -n1)"
+  fi
+
+  if [ -n "$v" ]; then
+    mkdir -p /opt/zash-agent/var >/dev/null 2>&1 || true
+    echo "$v" > "$cache_v" 2>/dev/null || true
+    echo "$now" > "$cache_t" 2>/dev/null || true
+    printf '%s' "$v"
+    return 0
+  fi
+
+  # fallback to cached value even if stale
+  [ -f "$cache_v" ] && cat "$cache_v" 2>/dev/null || echo ""
+  return 0
 }
 
 mihomo_config_json() {
@@ -569,13 +611,132 @@ rules_info_json() {
   rm -f "$tmp" 2>/dev/null
 }
 
+
+
+users_db_now_iso() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || echo ''
+}
+
+users_db_load_meta() {
+  udb_rev=0
+  udb_updatedAt=''
+  if [ -f "$USERS_DB_META" ]; then
+    udb_rev="$(sed -nE 's/.*"rev"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' "$USERS_DB_META" 2>/dev/null | head -n1)"
+    udb_updatedAt="$(sed -nE 's/.*"updatedAt"[[:space:]]*:[[:space:]]*"([^\"]*)".*/\1/p' "$USERS_DB_META" 2>/dev/null | head -n1)"
+  fi
+  echo "$udb_rev" | grep -qE '^[0-9]+$' || udb_rev=0
+}
+
+users_db_write_meta() {
+  mkdir -p "$(dirname "$USERS_DB_META")" >/dev/null 2>&1 || true
+  tmp="${USERS_DB_META}.tmp.$$"
+  printf '{"rev":%s,"updatedAt":"%s"}' "$udb_rev" "$(jesc "$udb_updatedAt")" > "$tmp" 2>/dev/null || return 1
+  mv -f "$tmp" "$USERS_DB_META" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+  return 0
+}
+
+users_db_init_if_missing() {
+  mkdir -p "$(dirname "$USERS_DB_FILE")" >/dev/null 2>&1 || true
+  if [ ! -f "$USERS_DB_FILE" ]; then
+    printf '[]' > "$USERS_DB_FILE" 2>/dev/null || true
+  fi
+  users_db_load_meta
+  if [ ! -f "$USERS_DB_META" ]; then
+    udb_rev=0
+    udb_updatedAt="$(users_db_now_iso)"
+    users_db_write_meta >/dev/null 2>&1 || true
+  fi
+}
+
+users_db_get_json() {
+  users_db_init_if_missing
+
+  content="$( (head -c 1048576 "$USERS_DB_FILE" 2>/dev/null || cat "$USERS_DB_FILE" 2>/dev/null || printf '[]') | b64enc )"
+
+  reply_ok "$(printf '{"ok":true,"rev":%s,"updatedAt":"%s","contentB64":"%s"}' "$udb_rev" "$(jesc "$udb_updatedAt")" "$content")"
+}
+
+users_db_put_json() {
+  expected_rev="$1"
+  [ -n "$expected_rev" ] || expected_rev='-1'
+
+  if [ "$REQUEST_METHOD" != "POST" ]; then
+    reply_ok '{"ok":false,"error":"method-not-allowed"}'
+    return
+  fi
+
+  users_db_init_if_missing
+
+  # Acquire lock (best effort)
+  lockdir="${USERS_DB_FILE}.lock"
+
+  # Cleanup stale lock (>120s) to avoid deadlocks after crashes/reboots.
+  if [ -d "$lockdir" ]; then
+    lm="$(stat_mtime_sec "$lockdir")"
+    now="$(date +%s 2>/dev/null || echo 0)"
+    echo "$lm" | grep -qE '^[0-9]+$' || lm=0
+    echo "$now" | grep -qE '^[0-9]+$' || now=0
+    if [ "$lm" -gt 0 ] && [ "$now" -gt 0 ] && [ $((now - lm)) -gt 120 ]; then
+      rmdir "$lockdir" 2>/dev/null || true
+    fi
+  fi
+
+  i=0
+  while ! mkdir "$lockdir" 2>/dev/null; do
+    i=$((i+1))
+    [ $i -ge 10 ] && { reply_ok '{"ok":false,"error":"busy"}'; return; }
+    sleep 1 2>/dev/null || true
+  done
+
+  # Reload meta under lock
+  users_db_load_meta
+
+  echo "$expected_rev" | grep -qE '^-?[0-9]+$' || expected_rev='-1'
+  if [ "$expected_rev" != "$udb_rev" ]; then
+    content="$( (head -c 1048576 "$USERS_DB_FILE" 2>/dev/null || cat "$USERS_DB_FILE" 2>/dev/null || printf '[]') | b64enc )"
+    rmdir "$lockdir" 2>/dev/null || true
+    reply_ok "$(printf '{"ok":false,"error":"conflict","rev":%s,"updatedAt":"%s","contentB64":"%s"}' "$udb_rev" "$(jesc "$udb_updatedAt")" "$content")"
+    return
+  fi
+
+  body=""
+  if [ -n "$CONTENT_LENGTH" ] && echo "$CONTENT_LENGTH" | grep -qE '^[0-9]+$'; then
+    # Read exactly Content-Length bytes to avoid blocking on CGI stdin.
+    body="$(head -c "$CONTENT_LENGTH" 2>/dev/null || dd bs=1 count="$CONTENT_LENGTH" 2>/dev/null || true)"
+  else
+    body="$(cat 2>/dev/null || true)"
+  fi
+  [ -n "$body" ] || body='[]'
+
+  # Basic size guard (~1 MiB)
+  sz="$(printf '%s' "$body" | wc -c 2>/dev/null || echo 0)"
+  echo "$sz" | grep -qE '^[0-9]+$' || sz=0
+  if [ "$sz" -gt 1048576 ]; then
+    rmdir "$lockdir" 2>/dev/null || true
+    reply_ok '{"ok":false,"error":"too-large"}'
+    return
+  fi
+
+  tmp="${USERS_DB_FILE}.tmp.$$"
+  printf '%s' "$body" > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; rmdir "$lockdir" 2>/dev/null || true; reply_ok '{"ok":false,"error":"write-failed"}'; return; }
+  mv -f "$tmp" "$USERS_DB_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; rmdir "$lockdir" 2>/dev/null || true; reply_ok '{"ok":false,"error":"write-failed"}'; return; }
+
+  udb_rev=$((udb_rev + 1))
+  udb_updatedAt="$(users_db_now_iso)"
+  users_db_write_meta >/dev/null 2>&1 || true
+
+  rmdir "$lockdir" 2>/dev/null || true
+
+  reply_ok "$(printf '{"ok":true,"rev":%s,"updatedAt":"%s"}' "$udb_rev" "$(jesc "$udb_updatedAt")")"
+}
+
 if [ "$REQUEST_METHOD" = "OPTIONS" ]; then
   reply_ok "{}"
   exit 0
 fi
 
 # Parse query string (key=value&...)
-cmd=""; ip=""; up=""; down=""; mac=""; ports=""; token_q=""; type=""; lines=""; offset=""
+cmd=""; ip=""; up=""; down=""; mac=""; ports=""; token_q=""; type=""; lines=""; offset=""; rev_q=""
 IFS='&'
 for kv in $QUERY_STRING; do
   key="${kv%%=*}"
@@ -592,6 +753,7 @@ for kv in $QUERY_STRING; do
     type) type="$val" ;;
     lines) lines="$val" ;;
     offset) offset="$val" ;;
+    rev) rev_q="$val" ;;
     token) token_q="$val" ;;
   esac
 done
@@ -1001,8 +1163,10 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.10","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
-    "$WAN_IF" "$LAN_IF" \
+  server_ver="$(remote_agent_version 2>/dev/null || true)"
+
+  reply_ok "$(printf '{"ok":true,"version":"0.5.13","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+    "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
     $( [ $have_hashlimit -eq 1 ] && echo true || echo false ) \
@@ -1252,6 +1416,12 @@ case "$cmd" in
     ;;
   rules_info)
     rules_info_json
+    ;;
+  users_db_get)
+    users_db_get_json
+    ;;
+  users_db_put)
+    users_db_put_json "$rev_q"
     ;;
   *) reply_ok '{"ok":false,"error":"unknown-cmd"}' ;;
 esac

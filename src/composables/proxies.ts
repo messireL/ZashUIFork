@@ -3,7 +3,7 @@ import { GLOBAL, PROXY_TAB_TYPE } from '@/constant'
 import { isHiddenGroup } from '@/helper'
 import { getProviderHealth } from '@/helper/providerHealth'
 import { configs } from '@/store/config'
-import { providerActivityByName } from '@/store/providerActivity'
+import { providerActivityByName, providerActivitySnapshot } from '@/store/providerActivity'
 import { proxiesTabShow, proxyGroupList, proxyMap, proxyProviederList } from '@/store/proxies'
 import { customGlobalNode, displayGlobalByMode, hideUnusedProxyProviders, manageHiddenGroup } from '@/store/settings'
 import {
@@ -14,7 +14,31 @@ import {
   showOnlyActiveProxyProviders,
 } from '@/store/providerHealth'
 import { isEmpty } from 'lodash'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+
+// Provider list ordering can become "jumpy" when health/activity changes trigger a re-sort.
+// To keep the UI stable, we keep the previous order and only append new providers.
+// The order resets only when the user changes sorting-related settings.
+const providerOrderMemo = ref<string[]>([])
+const providerOrderSig = ref('')
+
+const stableProviderOrder = (desired: string[], sig: string) => {
+  const set = new Set(desired)
+  const prev = providerOrderMemo.value || []
+
+  if (!prev.length || providerOrderSig.value !== sig) {
+    providerOrderSig.value = sig
+    providerOrderMemo.value = [...desired]
+    return providerOrderMemo.value
+  }
+
+  // Keep previous order for existing items; remove missing; append new ones in desired order.
+  const kept = prev.filter((n) => set.has(n))
+  const keptSet = new Set(kept)
+  const appended = desired.filter((n) => !keptSet.has(n))
+  providerOrderMemo.value = [...kept, ...appended]
+  return providerOrderMemo.value
+}
 
 const filterGroups = (all: string[]) => {
   if (manageHiddenGroup.value) {
@@ -59,11 +83,19 @@ export const renderGroups = computed(() => {
     }
 
     const mode = proxyProvidersSortMode.value || 'health'
+    const sig = [
+      `mode:${mode}`,
+      `autoHealth:${autoSortProxyProvidersByHealth.value ? 1 : 0}`,
+      `healthFilter:${providerHealthFilter.value || ''}`,
+      `onlyActive:${showOnlyActiveProxyProviders.value ? 1 : 0}`,
+      `hideUnused:${hideUnusedProxyProviders.value ? 1 : 0}`,
+    ].join('|')
 
     if (mode === 'activity') {
       list = [...list].sort((a: any, b: any) => {
-        const aa = (providerActivityByName.value as any)[a.name] || { bytes: 0, connections: 0 }
-        const bb = (providerActivityByName.value as any)[b.name] || { bytes: 0, connections: 0 }
+        // Use throttled snapshot to avoid constant UI re-ordering.
+        const aa = (providerActivitySnapshot.value as any)[a.name] || { bytes: 0, connections: 0 }
+        const bb = (providerActivitySnapshot.value as any)[b.name] || { bytes: 0, connections: 0 }
         if (bb.bytes !== aa.bytes) return bb.bytes - aa.bytes
         if (bb.connections !== aa.connections) return bb.connections - aa.connections
         return String(a.name).localeCompare(String(b.name))
@@ -84,7 +116,8 @@ export const renderGroups = computed(() => {
       }
     }
 
-    return list.map((p) => p.name)
+    const desired = list.map((p) => p.name)
+    return stableProviderOrder(desired, sig)
   }
 
   if (displayGlobalByMode.value) {

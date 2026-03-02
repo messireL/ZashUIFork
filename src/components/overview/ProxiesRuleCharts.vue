@@ -9,15 +9,24 @@
     <span class="border-base-content/30 text-base-content/10 bg-base-100/70 hidden" ref="colorRef" />
 
 
-    <div class="absolute left-2 top-2 z-10 flex flex-wrap items-center gap-2">
-      <button
-        v-if="filterMode !== 'none'"
-        class="badge badge-outline cursor-pointer hover:opacity-80"
-        @click.stop="clearFilter"
-        :title="$t('clear')"
-      >
-        {{ filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude') }}
-      </button>
+	    <div ref="controlsBar" class="absolute left-4 top-4 z-20 flex flex-wrap items-center gap-2">
+      <div v-if="filterMode !== 'none'" class="flex items-center gap-1">
+        <button
+          class="badge badge-outline cursor-pointer hover:opacity-80 max-w-[min(820px,calc(100vw-12rem))] truncate"
+          @click.stop="clearFilter"
+          :title="activeFilterChip?.title || $t('clear')"
+        >
+          {{ activeFilterChip?.text || (filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude')) }}
+        </button>
+
+        <button
+          class="btn btn-ghost btn-xs btn-square"
+          @click.stop="toggleFilterLock"
+          :title="filterLocked ? $t('topologyUnpinFilter') : $t('topologyPinFilter')"
+        >
+          <component :is="filterLocked ? LockClosedIcon : LockOpenIcon" class="h-4 w-4" />
+        </button>
+      </div>
 
       <button class="btn btn-ghost btn-xs" @click.stop="presetDialogShow = true" :title="$t('presets')">
         <BookmarkIcon class="h-4 w-4" />
@@ -30,6 +39,41 @@
           {{ activePreset.name }}
         </span>
       </button>
+
+	      <!-- unified control: weight mode + Top-N -->
+	      <div class="join" @click.stop>
+	        <button
+	          class="btn btn-xs join-item"
+	          :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
+	          @click.stop="proxiesRelationshipWeightMode = 'traffic'"
+	          :title="$t('traffic')"
+	        >
+	          {{ $t('traffic') }}
+	        </button>
+	        <button
+	          class="btn btn-xs join-item"
+	          :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
+	          @click.stop="proxiesRelationshipWeightMode = 'count'"
+	          :title="$t('count')"
+	        >
+	          {{ $t('count') }}
+	        </button>
+	        <select
+	          class="select select-xs join-item"
+	          v-model.number="proxiesRelationshipTopN"
+	          @click.stop
+	          @mousedown.stop
+	          title="Top N"
+	        >
+	          <option :value="10">Top 10</option>
+	          <option :value="20">Top 20</option>
+	          <option :value="30">Top 30</option>
+	          <option :value="40">Top 40</option>
+	          <option :value="60">Top 60</option>
+	          <option :value="70">Top 70</option>
+	          <option :value="100">Top 100</option>
+	        </select>
+	      </div>
 
       <button class="btn btn-ghost btn-xs" @click.stop="exportPng" :title="$t('exportPng')">
         <ArrowDownTrayIcon class="h-4 w-4" />
@@ -70,7 +114,75 @@
       :style="backgroundImage"
     >
       <div ref="fullScreenChart" class="bg-base-100 h-full w-full" :style="fullChartStyle" />
-            <button
+
+	      <!-- fullscreen controls: same unified control + presets/filter -->
+		      <div ref="fsControlsBar" class="fixed left-4 top-4 z-[10020] flex flex-wrap items-center gap-2" @click.stop>
+        <div v-if="filterMode !== 'none'" class="flex items-center gap-1">
+          <button
+            class="badge badge-outline cursor-pointer hover:opacity-80 max-w-[min(920px,calc(100vw-12rem))] truncate"
+            @click.stop="clearFilter"
+            :title="activeFilterChip?.title || $t('clear')"
+          >
+            {{ activeFilterChip?.text || (filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude')) }}
+          </button>
+
+          <button
+            class="btn btn-ghost btn-xs btn-square"
+            @click.stop="toggleFilterLock"
+            :title="filterLocked ? $t('topologyUnpinFilter') : $t('topologyPinFilter')"
+          >
+            <component :is="filterLocked ? LockClosedIcon : LockOpenIcon" class="h-4 w-4" />
+          </button>
+        </div>
+
+
+	        <button class="btn btn-ghost btn-xs" @click.stop="presetDialogShow = true" :title="$t('presets')">
+	          <BookmarkIcon class="h-4 w-4" />
+	          <span class="max-sm:hidden">{{ $t('presets') }}</span>
+	          <span
+	            v-if="activePreset"
+	            class="badge badge-outline badge-sm ml-1 max-w-[160px] truncate"
+	            :title="activePreset.name"
+	          >
+	            {{ activePreset.name }}
+	          </span>
+	        </button>
+
+	        <div class="join" @click.stop>
+	          <button
+	            class="btn btn-xs join-item"
+	            :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
+	            @click.stop="proxiesRelationshipWeightMode = 'traffic'"
+	            :title="$t('traffic')"
+	          >
+	            {{ $t('traffic') }}
+	          </button>
+	          <button
+	            class="btn btn-xs join-item"
+	            :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
+	            @click.stop="proxiesRelationshipWeightMode = 'count'"
+	            :title="$t('count')"
+	          >
+	            {{ $t('count') }}
+	          </button>
+	          <select
+	            class="select select-xs join-item"
+	            v-model.number="proxiesRelationshipTopN"
+	            @click.stop
+	            @mousedown.stop
+	            title="Top N"
+	          >
+	            <option :value="10">Top 10</option>
+	            <option :value="20">Top 20</option>
+	            <option :value="30">Top 30</option>
+	            <option :value="40">Top 40</option>
+	            <option :value="60">Top 60</option>
+	            <option :value="70">Top 70</option>
+	            <option :value="100">Top 100</option>
+	          </select>
+	        </div>
+	      </div>
+	            <button
         class="btn btn-ghost btn-circle btn-sm fixed left-4 bottom-4 z-[10020] mb-[env(safe-area-inset-bottom)]"
         @click.stop="exportPng"
         :title="$t('exportPng')"
@@ -137,6 +249,16 @@
             <button class="btn btn-xs btn-ghost" :disabled="filterMode === 'none'" @click="clearFilter">
               {{ $t('clear') }}
             </button>
+
+            <button
+              class="btn btn-xs"
+              :class="filterLocked ? 'btn-active' : 'btn-outline'"
+              :disabled="filterMode === 'none'"
+              @click="toggleFilterLock"
+              :title="filterLocked ? $t('topologyUnpinFilter') : $t('topologyPinFilter')"
+            >
+              <component :is="filterLocked ? LockClosedIcon : LockOpenIcon" class="h-4 w-4" />
+            </button>
           </div>
 
           <div class="stats stats-vertical lg:stats-horizontal shadow-sm">
@@ -176,16 +298,32 @@
                 <div class="font-semibold">{{ $t('topologyTopRules') }}</div>
                 <div class="divider my-1" />
                 <div class="space-y-1">
-                  <button
-                    v-for="it in topRules"
-                    :key="it.key"
-                    class="btn btn-ghost btn-sm w-full justify-between"
-                    @click="setFocus({ stage: 'R', kind: 'value', value: it.key })"
-                    :title="it.title"
-                  >
-                    <span class="truncate text-left">{{ it.label }}</span>
-                    <span class="ml-2 shrink-0 text-xs opacity-70">{{ it.metric }}</span>
-                  </button>
+                  <div v-for="it in topRules" :key="it.key" class="flex items-center gap-2">
+                    <button
+                      class="btn btn-ghost btn-sm flex-1 justify-between"
+                      @click="setFocus({ stage: 'R', kind: 'value', value: it.key })"
+                      :title="it.title"
+                    >
+                      <span class="truncate text-left">{{ it.label }}</span>
+                      <span class="ml-2 shrink-0 text-xs opacity-70">{{ it.metric }}</span>
+                    </button>
+                    <div class="join shrink-0">
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('only', 'R', it.key)"
+                        :title="$t('topologyOnlyThis')"
+                      >
+                        <FunnelIcon class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('exclude', 'R', it.key)"
+                        :title="$t('topologyExcludeThis')"
+                      >
+                        <NoSymbolIcon class="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                   <div v-if="!topRules.length" class="text-sm opacity-70">—</div>
                 </div>
               </div>
@@ -196,9 +334,25 @@
                 <div class="font-semibold">{{ $t('topologyTopProviders') }}</div>
                 <div class="divider my-1" />
                 <div class="space-y-1">
-                  <div v-for="it in topProviders" :key="it.key" class="flex items-center justify-between gap-2">
-                    <span class="truncate" :title="it.title">{{ it.label }}</span>
+                  <div v-for="it in topProviders" :key="it.key" class="flex items-center gap-2">
+                    <span class="min-w-0 flex-1 truncate" :title="it.title">{{ it.label }}</span>
                     <span class="shrink-0 text-xs opacity-70">{{ it.metric }}</span>
+                    <div class="join shrink-0">
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('only', 'P', it.key)"
+                        :title="$t('topologyOnlyThis')"
+                      >
+                        <FunnelIcon class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('exclude', 'P', it.key)"
+                        :title="$t('topologyExcludeThis')"
+                      >
+                        <NoSymbolIcon class="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                   <div v-if="!topProviders.length" class="text-sm opacity-70">—</div>
                 </div>
@@ -310,7 +464,7 @@ import {
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
-import { ArrowDownTrayIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon} from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, LockClosedIcon, LockOpenIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useElementSize, useStorage } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -332,6 +486,10 @@ const isFullScreen = ref(false)
 const chart = ref()
 const fullScreenChart = ref()
 const colorRef = ref()
+	const controlsBar = ref<HTMLElement | null>(null)
+	const fsControlsBar = ref<HTMLElement | null>(null)
+	const { height: controlsBarHeight } = useElementSize(controlsBar)
+	const { height: fsControlsBarHeight } = useElementSize(fsControlsBar)
 
 const fullChartStyle = computed(() => `backdrop-filter: blur(${blurIntensity.value}px);`)
 
@@ -447,13 +605,39 @@ const colorFromKey = (key: string) => {
   return `hsl(${h % 360} 70% 55%)`
 }
 
-type FocusStage = 'C' | 'R' | 'G' | 'S'
+type FocusStage = 'C' | 'R' | 'G' | 'S' | 'P'
 type Focus = { stage: FocusStage; kind: 'value' | 'other'; value?: string }
 type FilterMode = 'none' | 'only' | 'exclude'
 
 const focus = ref<Focus | null>(null)
 const filterMode = ref<FilterMode>('none')
 const filterFocus = ref<Focus | null>(null)
+const filterLocked = useStorage<boolean>('config/topology-filter-locked', false)
+
+type PendingTopologyNavFilter = {
+  ts: number
+  mode: FilterMode
+  focus: Focus
+  fallbackProxyName?: string
+}
+
+// Bridge: other pages can request a Topology filter via localStorage.
+const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
+const pendingNavFilter = useStorage<PendingTopologyNavFilter | null>(TOPOLOGY_NAV_FILTER_KEY, null)
+
+const readPendingNavFilter = (): PendingTopologyNavFilter | null => {
+  const pf = pendingNavFilter.value
+  if (pf && typeof pf === 'object') return pf as any
+  try {
+    const raw = localStorage.getItem(TOPOLOGY_NAV_FILTER_KEY)
+    if (!raw || raw === 'null') return null
+    const obj = JSON.parse(raw)
+    if (obj && typeof obj === 'object') return obj as any
+  } catch {
+    // ignore
+  }
+  return null
+}
 
 
 type TopologyPreset = {
@@ -482,7 +666,41 @@ const stageLabel = (st: FocusStage) =>
       ? t('rule')
       : st === 'G'
         ? t('proxyGroup')
-        : t('proxies')
+        : st === 'P'
+          ? t('proxyProvider')
+          : t('proxies')
+
+const toggleFilterLock = () => {
+  filterLocked.value = !filterLocked.value
+}
+
+const shortText = (s: string, maxLen = 60) => {
+  const v = (s || '').trim()
+  if (v.length <= maxLen) return v
+  return v.slice(0, Math.max(0, maxLen - 1)) + '…'
+}
+
+const filterValueLabel = (f: Focus) => {
+  if (f.kind !== 'value') return ''
+  const v = String(f.value || '').trim()
+  if (!v) return ''
+  if (f.stage === 'C') {
+    const ip = v
+    const lbl = labelForIp(ip)
+    return lbl ? `${lbl} (${ip})` : ip
+  }
+  return v
+}
+
+const activeFilterChip = computed(() => {
+  if (filterMode.value === 'none' || !filterFocus.value || filterFocus.value.kind !== 'value') return null
+  const modeText = filterMode.value === 'only' ? t('topologyOnlyThis') : t('topologyExcludeThis')
+  const stage = stageLabel(filterFocus.value.stage)
+  const fullValue = filterValueLabel(filterFocus.value)
+  const text = `${modeText} · ${stage}: ${shortText(fullValue, 64)}`
+  const title = `${modeText} · ${stage}: ${fullValue}`
+  return { text, title }
+})
 
 const normalizeSavedFilter = () => {
   if (filterMode.value === 'none' || !filterFocus.value || filterFocus.value.kind !== 'value') {
@@ -552,7 +770,7 @@ const resetPresets = () => {
   topologyPresets.value = []
   activePresetId.value = ''
   ensureDefaultPresets()
-  showNotification(t('presetResetDone'))
+  showNotification({ content: 'presetResetDone', type: 'alert-success', timeout: 1800 })
 }
 
 const presetSummary = (p: TopologyPreset) => {
@@ -572,16 +790,48 @@ const applyPreset = (p: TopologyPreset) => {
   proxiesRelationshipTopN.value = p.topN
   proxiesRelationshipColorMode.value = p.colorMode
 
-  if (p.filterMode === 'none' || !p.filterFocus) {
-    clearFilter()
-  } else {
-    filterMode.value = p.filterMode
-    filterFocus.value = { ...p.filterFocus }
+  if (!filterLocked.value) {
+    if (p.filterMode === 'none' || !p.filterFocus) {
+      clearFilter()
+    } else {
+      filterMode.value = p.filterMode
+      filterFocus.value = { ...p.filterFocus }
+    }
   }
 
   activePresetId.value = p.id
-  showNotification({ content: 'presetApplied', type: 'alert-success', timeout: 1800 })
+  showNotification({
+    content: filterLocked.value ? 'presetAppliedFiltersLocked' : 'presetApplied',
+    type: 'alert-success',
+    timeout: 1800,
+  })
 }
+
+	const isSameSceneAsPreset = (p: TopologyPreset) => {
+	  const s = captureScene()
+	  if (p.weightMode !== s.weightMode) return false
+	  if (Number(p.topN) !== Number(s.topN)) return false
+	  if (p.colorMode !== s.colorMode) return false
+	  if (p.filterMode !== s.filterMode) return false
+	  const a = p.filterFocus ? JSON.stringify(p.filterFocus) : ''
+	  const b = s.filterFocus ? JSON.stringify(s.filterFocus) : ''
+	  return a === b
+	}
+
+	// If user changes any controls after applying a preset, stop showing it as active.
+	watch(
+	  () => [
+	    proxiesRelationshipWeightMode.value,
+	    proxiesRelationshipTopN.value,
+	    proxiesRelationshipColorMode.value,
+	    filterMode.value,
+	    filterFocus.value ? JSON.stringify(filterFocus.value) : '',
+	  ],
+	  () => {
+	    if (!activePresetId.value || !activePreset.value) return
+	    if (!isSameSceneAsPreset(activePreset.value)) activePresetId.value = ''
+	  },
+	)
 
 const genId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -646,6 +896,7 @@ const isSameFocus = (a: Focus | null, b: Focus | null) => {
 const clearFilter = () => {
   filterMode.value = 'none'
   filterFocus.value = null
+  filterLocked.value = false
 }
 
 const applyOnly = () => {
@@ -658,6 +909,13 @@ const applyExclude = () => {
   if (!focus.value || focus.value.kind !== 'value') return
   filterMode.value = 'exclude'
   filterFocus.value = { ...focus.value }
+}
+
+const applyListFilter = (mode: 'only' | 'exclude', stage: any, value: string) => {
+  const v = String(value || '').trim()
+  if (!v) return
+  filterMode.value = mode
+  filterFocus.value = { stage, kind: 'value', value: v } as any
 }
 
 const otherLabels = computed(() => {
@@ -782,6 +1040,10 @@ const filteredSnapshot = computed(() => {
     if (f.stage === 'C') return ip === f.value
     if (f.stage === 'R') return rule === f.value
     if (f.stage === 'G') return group === f.value
+    if (f.stage === 'P') {
+      const p = providerOf(server) || providerOf(group) || ''
+      return p === f.value
+    }
     return server === f.value
   }
 
@@ -1148,7 +1410,15 @@ const tooltipFormatter = (p: any) => {
   `
 }
 
-const options = computed(() => ({
+const options = computed(() => {
+  // The chart has an overlay toolbar (filters/presets/topN). Reserve vertical space so it doesn't cover
+  // the column headers and the first nodes.
+  const overlayTop = 16 // left-4/top-4
+  const overlayH = Math.round((isFullScreen.value ? fsControlsBarHeight.value : controlsBarHeight.value) || 36)
+  const columnHeaderTop = overlayTop + overlayH + 6
+  const seriesTop = columnHeaderTop + 22
+
+  return {
   animation: true,
   animationDuration: 250,
   animationDurationUpdate: 550,
@@ -1167,7 +1437,7 @@ const options = computed(() => ({
     // небольшие заголовки колонок, чтобы диаграмма читалась "клиент → правило → группа → сервер"
     const w = (isFullScreen.value ? window.innerWidth : Number(width.value)) || 0
     if (!w) return []
-    const top = 6
+    const top = columnHeaderTop
     const leftPad = 18
     const rightPad = 22
     const col = Math.max(1, (w - leftPad - rightPad) / 4)
@@ -1197,7 +1467,7 @@ const options = computed(() => ({
       type: 'sankey',
       left: 18,
       right: 22,
-      top: 28,
+      top: seriesTop,
       bottom: 8,
       data: sankeyData.value.nodes,
       links: sankeyData.value.links,
@@ -1235,7 +1505,8 @@ const options = computed(() => ({
       },
     },
   ],
-}))
+  }
+})
 
 let mainChart: echarts.ECharts | null = null
 let fsChart: echarts.ECharts | null = null
@@ -1294,12 +1565,53 @@ const exportPng = () => {
   }
 }
 
+const applyPendingNavFilter = () => {
+  const pf = readPendingNavFilter()
+  if (!pf) return
+
+  // clear first to avoid re-applying on navigation back/forward
+  pendingNavFilter.value = null
+  try { localStorage.removeItem(TOPOLOGY_NAV_FILTER_KEY) } catch {}
+
+  const ts = Number((pf as any).ts) || 0
+  if (!ts || Date.now() - ts > 10 * 60 * 1000) return
+
+  if (filterLocked.value) {
+    showNotification({ content: 'topologyNavFilterLocked', type: 'alert-info', timeout: 2400 })
+    return
+  }
+
+  const mode = (pf as any).mode as FilterMode
+  const focus = (pf as any).focus as Focus
+
+  // Provider filter needs provider map; if it's not ready yet, fall back to a concrete proxy name.
+  if (focus?.stage === 'P' && (!providerMap.value?.size || !proxyProviederList.value?.length) && (pf as any).fallbackProxyName) {
+    filterMode.value = 'only'
+    filterFocus.value = { stage: 'S', kind: 'value', value: String((pf as any).fallbackProxyName || '').trim() } as any
+  } else {
+    filterMode.value = mode || 'only'
+    filterFocus.value = focus ? ({ ...focus } as any) : null
+  }
+
+  showNotification({ content: 'topologyNavFilterApplied', type: 'alert-success', timeout: 1800 })
+}
+
+watch(
+  pendingNavFilter,
+  (v) => {
+    if (v) applyPendingNavFilter()
+  },
+  { deep: true },
+)
+
 onMounted(() => {
   updateColorSet()
   updateFontFamily()
 
   refreshSnapshot()
   startTimer()
+
+  applyPendingNavFilter()
 
   watch(theme, updateColorSet)
   watch(font, updateFontFamily)

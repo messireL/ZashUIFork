@@ -117,7 +117,7 @@ export const getProviderHealth = (provider: any, agentProvider?: any): ProviderH
 
   const ssl = getProviderSslNotAfter(provider, agentProvider)
   const sslDays = ssl ? ssl.diff(now, 'day') : null
-  const sslDate = ssl ? ssl.format('YYYY-MM-DD') : null
+  const sslDate = ssl ? ssl.format('DD-MM-YYYY HH:mm:ss') : null
 
   // freshness / availability heuristics
   const updatedAt = parseDateMaybe(provider?.updatedAt)
