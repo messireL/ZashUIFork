@@ -37,6 +37,64 @@
     </div>
 
     <div class="card gap-2 p-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="font-semibold">{{ $t('providersPanelTitle') }}</div>
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn btn-sm btn-ghost" @click="loadProvidersPanel(true)" :disabled="providersPanelBusy || !agentEnabled">
+            {{ $t('refresh') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="text-xs opacity-70">{{ $t('providersPanelTip') }}</div>
+
+      <div v-if="!agentEnabled" class="text-sm opacity-70">
+        {{ $t('agentDisabled') }}
+      </div>
+      <div v-else-if="providersPanelBusy" class="text-sm opacity-70">…</div>
+      <div v-else>
+        <div v-if="providersPanelError" class="text-xs text-error">{{ providersPanelError }}</div>
+        <div v-else-if="!providersPanelList.length" class="text-sm opacity-70">—</div>
+        <div v-else class="flex flex-col gap-2">
+          <div
+            v-for="p in providersPanelList"
+            :key="p.name"
+            class="rounded-lg border border-base-content/10 bg-base-200/40 p-2"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="truncate font-mono text-xs" :title="p.name">{{ p.name }}</div>
+                <div v-if="p.url" class="mt-0.5 truncate text-[11px] opacity-60" :title="p.url">{{ p.url }}</div>
+              </div>
+              <div class="shrink-0 text-[11px] font-mono opacity-70" :title="$t('sslExpire')">
+                {{ fmtSslPanel(p.sslNotAfter) }}
+              </div>
+            </div>
+
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                class="input input-bordered input-sm flex-1 min-w-[260px]"
+                :placeholder="$t('providerPanelUrlPlaceholder')"
+                :value="proxyProviderPanelUrlMap[p.name] || ''"
+                @input="(e) => setProviderPanelUrl(p.name, (e && e.target && e.target.value) || '')"
+              />
+              <a
+                v-if="proxyProviderPanelUrlMap[p.name]"
+                class="btn btn-sm"
+                :href="proxyProviderPanelUrlMap[p.name]"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {{ $t('open') }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card gap-2 p-3">
       <div class="flex items-center justify-between gap-2">
         <div class="font-semibold">{{ $t('liveLogs') }}</div>
         <div class="flex items-center gap-2">
@@ -537,6 +595,7 @@ import { agentGeoInfoAPI, agentGeoUpdateAPI, agentLogsAPI, agentLogsFollowAPI, a
 import BackendVersion from '@/components/common/BackendVersion.vue'
 import { useStorage } from '@vueuse/core'
 import { getLabelFromBackend, prettyBytesHelper } from '@/helper/utils'
+import { parseDateMaybe } from '@/helper/providerHealth'
 import { showNotification } from '@/helper/notification'
 import { decodeB64Utf8 } from '@/helper/b64'
 import { activeBackend } from '@/store/setup'
@@ -587,6 +646,52 @@ const copyRouterUiUrl = async (asYaml: boolean) => {
   }
 }
 
+
+
+// --- Proxy providers: shared management panel URLs (synced via users DB) ---
+const providersPanelBusy = ref(false)
+const providersPanelError = ref('')
+const providersPanelList = ref<Array<{ name: string; url?: string; host?: string; port?: string; sslNotAfter?: string }>>([])
+
+const fmtSslPanel = (v: any) => {
+  const d = parseDateMaybe(v)
+  return d ? d.format('DD-MM-YYYY HH:mm:ss') : '—'
+}
+
+const setProviderPanelUrl = (name: string, url: string) => {
+  const k = String(name || '').trim()
+  if (!k) return
+  const v = String(url || '').trim()
+  const cur = { ...(proxyProviderPanelUrlMap.value || {}) }
+  if (!v) delete cur[k]
+  else cur[k] = v
+  proxyProviderPanelUrlMap.value = cur
+}
+
+const loadProvidersPanel = async (force = false) => {
+  if (!agentEnabled.value) {
+    providersPanelList.value = []
+    providersPanelError.value = ''
+    return
+  }
+  if (providersPanelBusy.value) return
+  providersPanelBusy.value = true
+  providersPanelError.value = ''
+  try {
+    const r: any = await agentMihomoProvidersAPI(force)
+    if (!r?.ok) {
+      providersPanelError.value = r?.error || 'failed'
+      providersPanelList.value = []
+      return
+    }
+    providersPanelList.value = Array.isArray(r?.providers) ? r.providers : []
+  } catch (e: any) {
+    providersPanelError.value = e?.message || 'failed'
+    providersPanelList.value = []
+  } finally {
+    providersPanelBusy.value = false
+  }
+}
 
 // --- Live logs (router-agent) ---
 const logSource = ref<'mihomo' | 'config' | 'agent'>('mihomo')
@@ -679,6 +784,7 @@ onMounted(() => {
   refreshLogs()
   startTimer()
   refreshFreshness()
+  loadProvidersPanel(false)
   checkUpstream()
   startUpstreamTimer()
 })
@@ -1272,6 +1378,7 @@ const refreshSsl = async () => {
     const id = startJob('Refresh providers SSL')
     try {
       const r: any = await agentMihomoProvidersAPI(true)
+      await loadProvidersPanel(true)
       if (!r?.ok) {
         finishJob(id, { ok: false, error: r?.error || 'failed' })
         showNotification({ content: 'operationFailed', type: 'alert-error', timeout: 2200 })

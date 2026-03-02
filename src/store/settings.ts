@@ -263,6 +263,9 @@ export const connectionCardLines = useStorage<CONNECTIONS_TABLE_ACCESSOR_KEY[][]
 
 export const sourceIPLabelList = useStorage<SourceIPLabel[]>('config/source-ip-label-list', [])
 
+// Shared (synced via router-agent users DB): optional management panel URL per proxy-provider
+export const proxyProviderPanelUrlMap = useStorage<Record<string, string>>('config/proxy-provider-panel-url-map', {})
+
 // rules
 export const displayNowNodeInRule = useStorage('config/display-now-node-in-rule', true)
 export const displayLatencyInRule = useStorage('config/display-latency-in-rule', true)

@@ -437,12 +437,12 @@ const sslExpireInfo = computed(() => {
   if (!d) return null
 
   const days = d.diff(dayjs(), 'day')
-  const date = d.format('YYYY-MM-DD')
+  const dateTime = d.format('DD-MM-YYYY HH:mm:ss')
 
   const cls = days < 0 ? 'text-error' : days <= 14 ? 'text-warning' : 'text-success'
-  const label = days < 0 ? `${date} (expired)` : `${date} (${days}d)`
+  const label = days < 0 ? `${dateTime} (expired)` : `${dateTime} (${days}d)`
 
-  return { date, days, cls, label }
+  return { dateTime, days, cls, label }
 })
 
 const subscriptionInfo = computed(() => {

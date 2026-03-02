@@ -298,16 +298,32 @@
                 <div class="font-semibold">{{ $t('topologyTopRules') }}</div>
                 <div class="divider my-1" />
                 <div class="space-y-1">
-                  <button
-                    v-for="it in topRules"
-                    :key="it.key"
-                    class="btn btn-ghost btn-sm w-full justify-between"
-                    @click="setFocus({ stage: 'R', kind: 'value', value: it.key })"
-                    :title="it.title"
-                  >
-                    <span class="truncate text-left">{{ it.label }}</span>
-                    <span class="ml-2 shrink-0 text-xs opacity-70">{{ it.metric }}</span>
-                  </button>
+                  <div v-for="it in topRules" :key="it.key" class="flex items-center gap-2">
+                    <button
+                      class="btn btn-ghost btn-sm flex-1 justify-between"
+                      @click="setFocus({ stage: 'R', kind: 'value', value: it.key })"
+                      :title="it.title"
+                    >
+                      <span class="truncate text-left">{{ it.label }}</span>
+                      <span class="ml-2 shrink-0 text-xs opacity-70">{{ it.metric }}</span>
+                    </button>
+                    <div class="join shrink-0">
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('only', 'R', it.key)"
+                        :title="$t('topologyOnlyThis')"
+                      >
+                        <FunnelIcon class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('exclude', 'R', it.key)"
+                        :title="$t('topologyExcludeThis')"
+                      >
+                        <NoSymbolIcon class="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                   <div v-if="!topRules.length" class="text-sm opacity-70">—</div>
                 </div>
               </div>
@@ -318,9 +334,25 @@
                 <div class="font-semibold">{{ $t('topologyTopProviders') }}</div>
                 <div class="divider my-1" />
                 <div class="space-y-1">
-                  <div v-for="it in topProviders" :key="it.key" class="flex items-center justify-between gap-2">
-                    <span class="truncate" :title="it.title">{{ it.label }}</span>
+                  <div v-for="it in topProviders" :key="it.key" class="flex items-center gap-2">
+                    <span class="min-w-0 flex-1 truncate" :title="it.title">{{ it.label }}</span>
                     <span class="shrink-0 text-xs opacity-70">{{ it.metric }}</span>
+                    <div class="join shrink-0">
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('only', 'P', it.key)"
+                        :title="$t('topologyOnlyThis')"
+                      >
+                        <FunnelIcon class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('exclude', 'P', it.key)"
+                        :title="$t('topologyExcludeThis')"
+                      >
+                        <NoSymbolIcon class="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                   <div v-if="!topProviders.length" class="text-sm opacity-70">—</div>
                 </div>
@@ -877,6 +909,13 @@ const applyExclude = () => {
   if (!focus.value || focus.value.kind !== 'value') return
   filterMode.value = 'exclude'
   filterFocus.value = { ...focus.value }
+}
+
+const applyListFilter = (mode: 'only' | 'exclude', stage: any, value: string) => {
+  const v = String(value || '').trim()
+  if (!v) return
+  filterMode.value = mode
+  filterFocus.value = { stage, kind: 'value', value: v } as any
 }
 
 const otherLabels = computed(() => {
