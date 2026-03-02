@@ -569,7 +569,7 @@ const colorFromKey = (key: string) => {
   return `hsl(${h % 360} 70% 55%)`
 }
 
-type FocusStage = 'C' | 'R' | 'G' | 'S'
+type FocusStage = 'C' | 'R' | 'G' | 'S' | 'P'
 type Focus = { stage: FocusStage; kind: 'value' | 'other'; value?: string }
 type FilterMode = 'none' | 'only' | 'exclude'
 
@@ -577,6 +577,16 @@ const focus = ref<Focus | null>(null)
 const filterMode = ref<FilterMode>('none')
 const filterFocus = ref<Focus | null>(null)
 const filterLocked = useStorage<boolean>('config/topology-filter-locked', false)
+
+type PendingTopologyNavFilter = {
+  ts: number
+  mode: FilterMode
+  focus: Focus
+  fallbackProxyName?: string
+}
+
+// Bridge: other pages can request a Topology filter via localStorage.
+const pendingNavFilter = useStorage<PendingTopologyNavFilter | null>('runtime/topology-pending-filter-v1', null)
 
 
 type TopologyPreset = {
@@ -605,7 +615,9 @@ const stageLabel = (st: FocusStage) =>
       ? t('rule')
       : st === 'G'
         ? t('proxyGroup')
-        : t('proxies')
+        : st === 'P'
+          ? t('proxyProvider')
+          : t('proxies')
 
 const toggleFilterLock = () => {
   filterLocked.value = !filterLocked.value
@@ -707,7 +719,7 @@ const resetPresets = () => {
   topologyPresets.value = []
   activePresetId.value = ''
   ensureDefaultPresets()
-  showNotification(t('presetResetDone'))
+  showNotification({ content: 'presetResetDone', type: 'alert-success', timeout: 1800 })
 }
 
 const presetSummary = (p: TopologyPreset) => {
@@ -970,6 +982,10 @@ const filteredSnapshot = computed(() => {
     if (f.stage === 'C') return ip === f.value
     if (f.stage === 'R') return rule === f.value
     if (f.stage === 'G') return group === f.value
+    if (f.stage === 'P') {
+      const p = providerOf(server) || providerOf(group) || ''
+      return p === f.value
+    }
     return server === f.value
   }
 
@@ -1482,12 +1498,44 @@ const exportPng = () => {
   }
 }
 
+const applyPendingNavFilter = () => {
+  const pf = pendingNavFilter.value
+  if (!pf) return
+
+  // clear first to avoid re-applying on navigation back/forward
+  pendingNavFilter.value = null
+
+  const ts = Number((pf as any).ts) || 0
+  if (!ts || Date.now() - ts > 10 * 60 * 1000) return
+
+  if (filterLocked.value) {
+    showNotification({ content: 'topologyNavFilterLocked', type: 'alert-info', timeout: 2400 })
+    return
+  }
+
+  const mode = (pf as any).mode as FilterMode
+  const focus = (pf as any).focus as Focus
+
+  // Provider filter needs provider map; if it's not ready yet, fall back to a concrete proxy name.
+  if (focus?.stage === 'P' && (!providerMap.value?.size || !proxyProviederList.value?.length) && (pf as any).fallbackProxyName) {
+    filterMode.value = 'only'
+    filterFocus.value = { stage: 'S', kind: 'value', value: String((pf as any).fallbackProxyName || '').trim() } as any
+  } else {
+    filterMode.value = mode || 'only'
+    filterFocus.value = focus ? ({ ...focus } as any) : null
+  }
+
+  showNotification({ content: 'topologyNavFilterApplied', type: 'alert-success', timeout: 1800 })
+}
+
 onMounted(() => {
   updateColorSet()
   updateFontFamily()
 
   refreshSnapshot()
   startTimer()
+
+  applyPendingNavFilter()
 
   watch(theme, updateColorSet)
   watch(font, updateFontFamily)

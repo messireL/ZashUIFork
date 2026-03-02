@@ -128,6 +128,15 @@
             >
               <LinkIcon class="h-4 w-4" />
             </button>
+
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-circle"
+              @click.stop="openTopologyWithProvider"
+              :title="$t('showInTopology')"
+            >
+              <PresentationChartLineIcon class="h-4 w-4" />
+            </button>
           </div>
           <div>{{ $t('updated') }} {{ fromNow(proxyProvider.updatedAt) }}</div>
         </div>
@@ -187,6 +196,15 @@
           >
             <LinkIcon class="h-4 w-4" />
           </button>
+
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle"
+            @click.stop="openTopologyWithProvider"
+            :title="$t('showInTopology')"
+          >
+            <PresentationChartLineIcon class="h-4 w-4" />
+          </button>
         </div>
       </div>
     </template>
@@ -215,13 +233,14 @@ import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
 import { fetchProxies, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
-import { NOT_CONNECTED } from '@/constant'
+import { NOT_CONNECTED, ROUTE_NAME } from '@/constant'
 import { twoColumnProxyGroup } from '@/store/settings'
-import { ArrowPathIcon, BoltIcon, ClipboardDocumentIcon, LinkIcon } from '@heroicons/vue/24/outline'
+import { ArrowPathIcon, BoltIcon, ClipboardDocumentIcon, LinkIcon, PresentationChartLineIcon } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
 import { twMerge } from 'tailwind-merge'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import CollapseCard from '../common/CollapseCard.vue'
 import ProxyNodeCard from './ProxyNodeCard.vue'
 import ProxyNodeGrid from './ProxyNodeGrid.vue'
@@ -230,6 +249,8 @@ import ProxyPreview from './ProxyPreview.vue'
 const props = defineProps<{
   name: string
 }>()
+
+const router = useRouter()
 
 const proxyProvider = computed(
   () => proxyProviederList.value.find((group) => group.name === props.name)!,
@@ -306,6 +327,26 @@ const bestLatencyProxy = computed(() => {
 const displayProxyName = computed(() => {
   return activeProxy.value || bestLatencyProxy.value || ''
 })
+
+const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
+
+const openTopologyWithProvider = async () => {
+  const payload = {
+    ts: Date.now(),
+    mode: 'only',
+    focus: { stage: 'P', kind: 'value', value: proxyProvider.value?.name || props.name },
+    // Fallback to a concrete proxy name if provider map is not yet ready on the Topology page.
+    fallbackProxyName: displayProxyName.value || '',
+  }
+
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+
+  await router.push({ name: ROUTE_NAME.overview })
+}
 
 const getAnyFromObj = (obj: any, candidates: string[]): any => {
   if (!obj || typeof obj !== 'object') return undefined
