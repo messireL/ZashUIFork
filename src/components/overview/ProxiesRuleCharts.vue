@@ -31,6 +31,41 @@
         </span>
       </button>
 
+	      <!-- unified control: weight mode + Top-N -->
+	      <div class="join" @click.stop>
+	        <button
+	          class="btn btn-xs join-item"
+	          :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
+	          @click.stop="proxiesRelationshipWeightMode = 'traffic'"
+	          :title="$t('traffic')"
+	        >
+	          {{ $t('traffic') }}
+	        </button>
+	        <button
+	          class="btn btn-xs join-item"
+	          :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
+	          @click.stop="proxiesRelationshipWeightMode = 'count'"
+	          :title="$t('count')"
+	        >
+	          {{ $t('count') }}
+	        </button>
+	        <select
+	          class="select select-xs join-item"
+	          v-model.number="proxiesRelationshipTopN"
+	          @click.stop
+	          @mousedown.stop
+	          title="Top N"
+	        >
+	          <option :value="10">Top 10</option>
+	          <option :value="20">Top 20</option>
+	          <option :value="30">Top 30</option>
+	          <option :value="40">Top 40</option>
+	          <option :value="60">Top 60</option>
+	          <option :value="70">Top 70</option>
+	          <option :value="100">Top 100</option>
+	        </select>
+	      </div>
+
       <button class="btn btn-ghost btn-xs" @click.stop="exportPng" :title="$t('exportPng')">
         <ArrowDownTrayIcon class="h-4 w-4" />
         <span class="max-sm:hidden">PNG</span>
@@ -70,7 +105,65 @@
       :style="backgroundImage"
     >
       <div ref="fullScreenChart" class="bg-base-100 h-full w-full" :style="fullChartStyle" />
-            <button
+
+	      <!-- fullscreen controls: same unified control + presets/filter -->
+	      <div class="fixed left-4 top-4 z-[10020] flex flex-wrap items-center gap-2" @click.stop>
+	        <button
+	          v-if="filterMode !== 'none'"
+	          class="badge badge-outline cursor-pointer hover:opacity-80"
+	          @click.stop="clearFilter"
+	          :title="$t('clear')"
+	        >
+	          {{ filterMode === 'only' ? $t('topologyFilterOnly') : $t('topologyFilterExclude') }}
+	        </button>
+
+	        <button class="btn btn-ghost btn-xs" @click.stop="presetDialogShow = true" :title="$t('presets')">
+	          <BookmarkIcon class="h-4 w-4" />
+	          <span class="max-sm:hidden">{{ $t('presets') }}</span>
+	          <span
+	            v-if="activePreset"
+	            class="badge badge-outline badge-sm ml-1 max-w-[160px] truncate"
+	            :title="activePreset.name"
+	          >
+	            {{ activePreset.name }}
+	          </span>
+	        </button>
+
+	        <div class="join" @click.stop>
+	          <button
+	            class="btn btn-xs join-item"
+	            :class="proxiesRelationshipWeightMode === 'traffic' ? 'btn-active' : ''"
+	            @click.stop="proxiesRelationshipWeightMode = 'traffic'"
+	            :title="$t('traffic')"
+	          >
+	            {{ $t('traffic') }}
+	          </button>
+	          <button
+	            class="btn btn-xs join-item"
+	            :class="proxiesRelationshipWeightMode === 'count' ? 'btn-active' : ''"
+	            @click.stop="proxiesRelationshipWeightMode = 'count'"
+	            :title="$t('count')"
+	          >
+	            {{ $t('count') }}
+	          </button>
+	          <select
+	            class="select select-xs join-item"
+	            v-model.number="proxiesRelationshipTopN"
+	            @click.stop
+	            @mousedown.stop
+	            title="Top N"
+	          >
+	            <option :value="10">Top 10</option>
+	            <option :value="20">Top 20</option>
+	            <option :value="30">Top 30</option>
+	            <option :value="40">Top 40</option>
+	            <option :value="60">Top 60</option>
+	            <option :value="70">Top 70</option>
+	            <option :value="100">Top 100</option>
+	          </select>
+	        </div>
+	      </div>
+	            <button
         class="btn btn-ghost btn-circle btn-sm fixed left-4 bottom-4 z-[10020] mb-[env(safe-area-inset-bottom)]"
         @click.stop="exportPng"
         :title="$t('exportPng')"
@@ -582,6 +675,32 @@ const applyPreset = (p: TopologyPreset) => {
   activePresetId.value = p.id
   showNotification({ content: 'presetApplied', type: 'alert-success', timeout: 1800 })
 }
+
+	const isSameSceneAsPreset = (p: TopologyPreset) => {
+	  const s = captureScene()
+	  if (p.weightMode !== s.weightMode) return false
+	  if (Number(p.topN) !== Number(s.topN)) return false
+	  if (p.colorMode !== s.colorMode) return false
+	  if (p.filterMode !== s.filterMode) return false
+	  const a = p.filterFocus ? JSON.stringify(p.filterFocus) : ''
+	  const b = s.filterFocus ? JSON.stringify(s.filterFocus) : ''
+	  return a === b
+	}
+
+	// If user changes any controls after applying a preset, stop showing it as active.
+	watch(
+	  () => [
+	    proxiesRelationshipWeightMode.value,
+	    proxiesRelationshipTopN.value,
+	    proxiesRelationshipColorMode.value,
+	    filterMode.value,
+	    filterFocus.value ? JSON.stringify(filterFocus.value) : '',
+	  ],
+	  () => {
+	    if (!activePresetId.value || !activePreset.value) return
+	    if (!isSameSceneAsPreset(activePreset.value)) activePresetId.value = ''
+	  },
+	)
 
 const genId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
