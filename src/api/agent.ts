@@ -383,7 +383,7 @@ export const agentUsersDbPutAPI = async (args: { rev: number; content: string })
       args.content,
       {
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
         },
         // Allow slower writes on embedded storage.
         timeout: 20000,

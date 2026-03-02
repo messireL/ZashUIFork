@@ -37,10 +37,18 @@
         <button
           type="button"
           class="btn btn-ghost btn-xs h-5 min-h-0 px-1"
-          :title="i18n.global.t('openInTopology')"
-          @click.stop="openTopologyWithProxy"
+          :title="i18n.global.t('topologyOnlyThis')"
+          @click.stop="() => openTopologyWithProxy('only')"
         >
           <FunnelIcon class="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs h-5 min-h-0 px-1"
+          :title="i18n.global.t('topologyExcludeThis')"
+          @click.stop="() => openTopologyWithProxy('exclude')"
+        >
+          <NoSymbolIcon class="h-3.5 w-3.5" />
         </button>
         <LatencyTag
           :class="[isSmallCard && 'h-4! w-8! rounded-md!', 'shrink-0', active && 'hover:bg-base-300']"
@@ -72,7 +80,7 @@ import { activeConnections } from '@/store/connections'
 import { getIPv6ByName, getTestUrl, proxyLatencyTest, proxyMap } from '@/store/proxies'
 import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
 import { smartWeightsMap } from '@/store/smart'
-import { FunnelIcon } from '@heroicons/vue/24/outline'
+import { FunnelIcon, NoSymbolIcon } from '@heroicons/vue/24/outline'
 import { twMerge } from 'tailwind-merge'
 import { computed, onMounted, ref } from 'vue'
 import LatencyTag from './LatencyTag.vue'
@@ -132,10 +140,10 @@ const latencyTipAnimationClass = ref<string[]>([])
 
 const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
 
-const openTopologyWithProxy = async () => {
+const openTopologyWithProxy = async (mode: 'only' | 'exclude' = 'only') => {
   const payload = {
     ts: Date.now(),
-    mode: 'only',
+    mode: mode,
     focus: { stage: 'S', kind: 'value', value: props.name },
   }
 

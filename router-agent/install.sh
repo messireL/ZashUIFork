@@ -629,11 +629,23 @@ users_db_put_json() {
 
   # Acquire lock (best effort)
   lockdir="${USERS_DB_FILE}.lock"
+
+  # Cleanup stale lock (>120s) to avoid deadlocks after crashes/reboots.
+  if [ -d "$lockdir" ]; then
+    lm="$(stat_mtime_sec "$lockdir")"
+    now="$(date +%s 2>/dev/null || echo 0)"
+    echo "$lm" | grep -qE '^[0-9]+$' || lm=0
+    echo "$now" | grep -qE '^[0-9]+$' || now=0
+    if [ "$lm" -gt 0 ] && [ "$now" -gt 0 ] && [ $((now - lm)) -gt 120 ]; then
+      rmdir "$lockdir" 2>/dev/null || true
+    fi
+  fi
+
   i=0
   while ! mkdir "$lockdir" 2>/dev/null; do
     i=$((i+1))
-    [ $i -ge 60 ] && { reply_ok '{"ok":false,"error":"busy"}'; return; }
-    usleep 50000 2>/dev/null || sleep 0.05 2>/dev/null || sleep 1 2>/dev/null || true
+    [ $i -ge 10 ] && { reply_ok '{"ok":false,"error":"busy"}'; return; }
+    sleep 1 2>/dev/null || true
   done
 
   # Reload meta under lock
@@ -647,7 +659,13 @@ users_db_put_json() {
     return
   fi
 
-  body="$(cat 2>/dev/null || true)"
+  body=""
+  if [ -n "$CONTENT_LENGTH" ] && echo "$CONTENT_LENGTH" | grep -qE '^[0-9]+$'; then
+    # Read exactly Content-Length bytes to avoid blocking on CGI stdin.
+    body="$(head -c "$CONTENT_LENGTH" 2>/dev/null || dd bs=1 count="$CONTENT_LENGTH" 2>/dev/null || true)"
+  else
+    body="$(cat 2>/dev/null || true)"
+  fi
   [ -n "$body" ] || body='[]'
 
   # Basic size guard (~1 MiB)
@@ -1105,7 +1123,7 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.11","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.12","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
