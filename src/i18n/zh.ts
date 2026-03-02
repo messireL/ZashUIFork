@@ -529,6 +529,22 @@ const zh: LANG_MESSAGE = {
   diagnosticsTip: '收集 UI/核心版本、agent 状态、限额/模板、封禁列表以及最近日志（agent/mihomo/config）。',
   copy: '复制',
 
+  // --- 共享用户数据库 ---
+  pull: '拉取',
+  push: '推送',
+  lastPull: '上次拉取',
+  lastPush: '上次推送',
+  conflicts: '冲突',
+  pendingChanges: '待同步',
+  localOnly: '仅本地',
+  synced: '已同步',
+  conflict: '冲突',
+
+  // --- Tasks → Topology ---
+  topRulesTitle: '热门规则（点击打开 Topology）',
+  topRulesTip: '基于最近连接（active + closed）。',
+  openInTopology: '在 Topology 打开',
+
 }
 
 export default zh

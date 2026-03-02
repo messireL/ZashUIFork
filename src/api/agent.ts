@@ -349,3 +349,44 @@ export const agentMihomoProvidersAPI = async (force = false): Promise<{
     return res as any
   }
 }
+
+// --- Shared users DB (Source IP mapping) ---
+
+export const agentUsersDbGetAPI = async (): Promise<{
+  ok: boolean
+  rev?: number
+  updatedAt?: string
+  contentB64?: string
+  error?: string
+}> => {
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'users_db_get' },
+    })
+    return (data || {}) as any
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'offline' }
+  }
+}
+
+export const agentUsersDbPutAPI = async (args: { rev: number; content: string }): Promise<{
+  ok: boolean
+  rev?: number
+  updatedAt?: string
+  error?: string
+  contentB64?: string
+}> => {
+  try {
+    const { data } = await agentAxios().post(`/cgi-bin/api.sh?cmd=users_db_put&rev=${encodeURIComponent(String(args.rev ?? 0))}`,
+      args.content,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+    return (data || {}) as any
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'offline' } as any
+  }
+}

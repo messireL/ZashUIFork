@@ -251,6 +251,28 @@
                   </div>
                 </div>
               </details>
+
+              <div class="mt-2 border-t border-base-content/10 pt-2">
+                <div class="mb-1 text-xs font-semibold opacity-80">{{ $t('topRulesTitle') }}</div>
+                <div v-if="!topHitRules.length" class="text-sm opacity-70">—</div>
+                <details v-else class="mt-1">
+                  <summary class="cursor-pointer opacity-80">{{ $t('showList') }}</summary>
+                  <div class="mt-2 flex flex-col gap-1">
+                    <div v-for="r in topHitRules" :key="r.key" class="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        class="link min-w-0 truncate text-left font-mono"
+                        :title="$t('openInTopology')"
+                        @click="openTopologyWithRule(r.ruleText)"
+                      >
+                        {{ r.ruleText }}
+                      </button>
+                      <span class="shrink-0 font-mono opacity-70">{{ r.hits }}</span>
+                    </div>
+                  </div>
+                </details>
+                <div class="mt-1 text-[11px] opacity-60">{{ $t('topRulesTip') }}</div>
+              </div>
             </div>
 
             <div v-if="agentEnabled" class="mt-2 border-t border-base-content/10 pt-2">
@@ -415,7 +437,7 @@
     <div class="card gap-2 p-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="font-semibold">{{ $t('usersDbSyncTitle') }}</div>
-        <span class="badge badge-ghost badge-sm">{{ $t('planned') }}</span>
+        <span class="badge badge-sm" :class="usersDbBadge.cls">{{ usersDbBadge.text }}</span>
       </div>
 
       <div class="text-sm opacity-80">
@@ -423,12 +445,31 @@
       </div>
 
       <div class="text-xs opacity-70">
-        <div>• {{ $t('usersDbSyncCurrent') }}</div>
-        <div>• {{ $t('usersDbSyncPlan') }}</div>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <div><span class="opacity-60">rev:</span> <span class="font-mono">{{ usersDbRemoteRev }}</span></div>
+          <div class="min-w-0"><span class="opacity-60">{{ $t('updated') }}:</span> <span class="font-mono">{{ usersDbRemoteUpdatedAt || '—' }}</span></div>
+        </div>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+          <div><span class="opacity-60">{{ $t('lastPull') }}:</span> <span class="font-mono">{{ usersDbLastPullAt ? fmtTs(usersDbLastPullAt) : '—' }}</span></div>
+          <div><span class="opacity-60">{{ $t('lastPush') }}:</span> <span class="font-mono">{{ usersDbLastPushAt ? fmtTs(usersDbLastPushAt) : '—' }}</span></div>
+          <div><span class="opacity-60">{{ $t('conflicts') }}:</span> <span class="font-mono">{{ usersDbConflictCount || 0 }}</span></div>
+          <div v-if="usersDbLocalDirty"><span class="badge badge-warning badge-xs">{{ $t('pendingChanges') }}</span></div>
+        </div>
+      </div>
+
+      <div v-if="usersDbLastError" class="text-xs text-error">{{ usersDbLastError }}</div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="btn btn-sm" @click="usersDbPullNow" :disabled="!usersDbSyncEnabled || !agentEnabled || usersDbBusy">
+          {{ $t('pull') }}
+        </button>
+        <button type="button" class="btn btn-sm" @click="usersDbPushNow" :disabled="!usersDbSyncEnabled || !agentEnabled || usersDbBusy">
+          {{ $t('push') }}
+        </button>
       </div>
 
       <div class="text-[11px] opacity-60">
-        {{ $t('usersDbSyncTip') }}
+        {{ $t('usersDbSyncCurrent') }}
       </div>
     </div>
 
@@ -504,12 +545,28 @@ import { userLimitProfiles } from '@/store/userLimitProfiles'
 import { userLimitSnapshots } from '@/store/userLimitSnapshots'
 import { autoDisconnectLimitedUsers, hardBlockLimitedUsers, managedLanDisallowedCidrs, userLimits } from '@/store/userLimits'
 import { activeConnections } from '@/store/connections'
+import { ruleHitMap } from '@/store/rules'
 import { clearJobs, finishJob, jobHistory, startJob } from '@/store/jobs'
 import { applyUserEnforcementNow, getUserLimitState } from '@/composables/userLimits'
 import dayjs from 'dayjs'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RuleProvider } from '@/types'
 import { useI18n } from 'vue-i18n'
+import router from '@/router'
+import { ROUTE_NAME } from '@/constant'
+import {
+  usersDbConflictCount,
+  usersDbLastError,
+  usersDbLastPullAt,
+  usersDbLastPushAt,
+  usersDbLocalDirty,
+  usersDbPhase,
+  usersDbRemoteRev,
+  usersDbRemoteUpdatedAt,
+  usersDbSyncEnabled,
+  usersDbPullNow,
+  usersDbPushNow,
+} from '@/store/usersDbSync'
 
 const busy = ref(false)
 const jobs = computed(() => jobHistory.value || [])
@@ -640,6 +697,53 @@ watch([logsAuto, logSource, logLines, agentEnabled], () => {
 
 // --- Data freshness (GEO files + filter policy files) ---
 const { t } = useI18n()
+
+
+// --- Shared users DB sync status (Source IP mapping) ---
+const usersDbBusy = computed(() => usersDbPhase.value === 'pulling' || usersDbPhase.value === 'pushing')
+
+const usersDbBadge = computed(() => {
+  if (!usersDbSyncEnabled.value) return { text: 'OFF', cls: 'badge-ghost' }
+  if (!agentEnabled.value) return { text: t('localOnly'), cls: 'badge-ghost' }
+
+  if (usersDbPhase.value === 'idle' && !usersDbLocalDirty.value) return { text: t('synced'), cls: 'badge-success' }
+  if (usersDbPhase.value === 'pulling' || usersDbPhase.value === 'pushing') return { text: t('running'), cls: 'badge-warning' }
+  if (usersDbPhase.value === 'conflict') return { text: t('conflict'), cls: 'badge-warning' }
+  if (usersDbPhase.value === 'offline') return { text: t('offline'), cls: 'badge-warning' }
+  return { text: t('pendingChanges'), cls: 'badge-warning' }
+})
+
+// --- Top rules -> open Topology with filter (stage R) ---
+const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
+const normalizeRulePart = (s: string) => (s || '').trim() || '-'
+
+const topHitRules = computed(() => {
+  const entries = Array.from(ruleHitMap.value.entries() || [])
+    .map(([key, hits]) => {
+      const parts = String(key).split(' ')
+      const type = normalizeRulePart(parts[0] || '')
+      const payloadRaw = String(parts[1] || '').trim()
+      const ruleText = payloadRaw ? `${type}: ${normalizeRulePart(payloadRaw)}` : type
+      return { key: String(key), ruleText, hits: Number(hits) || 0 }
+    })
+    .filter((x) => x.ruleText && x.ruleText !== '-')
+    .sort((a, b) => b.hits - a.hits)
+  return entries.slice(0, 20)
+})
+
+const openTopologyWithRule = async (ruleText: string) => {
+  const payload = {
+    ts: Date.now(),
+    mode: 'only',
+    focus: { stage: 'R', kind: 'value', value: String(ruleText || '').trim() },
+  }
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+  await router.push({ name: ROUTE_NAME.overview })
+}
 
 const lastFreshnessOkAt = useStorage<number>('runtime/tasks-last-freshness-ok-at-v1', 0)
 

@@ -15,6 +15,7 @@ import {
   font,
   theme,
 } from './store/settings'
+import { initUsersDbSync } from './store/usersDbSync'
 
 const app = ref<HTMLElement>()
 const toast = ref<HTMLElement>()
@@ -72,6 +73,7 @@ watch(
 )
 
 onMounted(() => {
+  initUsersDbSync()
   if (autoImportSettings.value) {
     importSettingsFromUrl()
   }

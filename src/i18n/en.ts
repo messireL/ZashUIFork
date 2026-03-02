@@ -530,6 +530,22 @@ const en = {
   diagnosticsTip: 'Collects UI/core versions, agent status, limits/profiles, blocked list, and recent logs (agent/mihomo/config).',
   copy: 'Copy',
 
+  // --- Shared users DB sync ---
+  pull: 'Pull',
+  push: 'Push',
+  lastPull: 'Last pull',
+  lastPush: 'Last push',
+  conflicts: 'Conflicts',
+  pendingChanges: 'Pending changes',
+  localOnly: 'Local only',
+  synced: 'Synced',
+  conflict: 'Conflict',
+
+  // --- Tasks -> Topology navigation ---
+  topRulesTitle: 'Top rules (click to open Topology)',
+  topRulesTip: 'Based on recent connections (active + closed).',
+  openInTopology: 'Open in Topology',
+
 }
 
 export type LANG_MESSAGE = typeof en

@@ -77,6 +77,8 @@ LAN_IF="${LAN_IF:-br0}"
 PORT="${PORT:-9099}"
 STATE_FILE="${STATE_FILE:-/opt/zash-agent/var/shapers.db}"
 BLOCKS_FILE="${BLOCKS_FILE:-/opt/zash-agent/var/blocks.db}"
+USERS_DB_FILE="${USERS_DB_FILE:-/opt/zash-agent/var/users-db.json}"
+USERS_DB_META="${USERS_DB_META:-/opt/zash-agent/var/users-db.meta.json}"
 TOKEN="${TOKEN:-}"
 MIHOMO_CONFIG="${MIHOMO_CONFIG:-/opt/etc/mihomo/config.yaml}"
 MIHOMO_LOG="${MIHOMO_LOG:-}"
@@ -569,13 +571,114 @@ rules_info_json() {
   rm -f "$tmp" 2>/dev/null
 }
 
+
+
+users_db_now_iso() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || echo ''
+}
+
+users_db_load_meta() {
+  udb_rev=0
+  udb_updatedAt=''
+  if [ -f "$USERS_DB_META" ]; then
+    udb_rev="$(sed -nE 's/.*"rev"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' "$USERS_DB_META" 2>/dev/null | head -n1)"
+    udb_updatedAt="$(sed -nE 's/.*"updatedAt"[[:space:]]*:[[:space:]]*"([^\"]*)".*/\1/p' "$USERS_DB_META" 2>/dev/null | head -n1)"
+  fi
+  echo "$udb_rev" | grep -qE '^[0-9]+$' || udb_rev=0
+}
+
+users_db_write_meta() {
+  mkdir -p "$(dirname "$USERS_DB_META")" >/dev/null 2>&1 || true
+  tmp="${USERS_DB_META}.tmp.$$"
+  printf '{"rev":%s,"updatedAt":"%s"}' "$udb_rev" "$(jesc "$udb_updatedAt")" > "$tmp" 2>/dev/null || return 1
+  mv -f "$tmp" "$USERS_DB_META" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+  return 0
+}
+
+users_db_init_if_missing() {
+  mkdir -p "$(dirname "$USERS_DB_FILE")" >/dev/null 2>&1 || true
+  if [ ! -f "$USERS_DB_FILE" ]; then
+    printf '[]' > "$USERS_DB_FILE" 2>/dev/null || true
+  fi
+  users_db_load_meta
+  if [ ! -f "$USERS_DB_META" ]; then
+    udb_rev=0
+    udb_updatedAt="$(users_db_now_iso)"
+    users_db_write_meta >/dev/null 2>&1 || true
+  fi
+}
+
+users_db_get_json() {
+  users_db_init_if_missing
+
+  content="$( (head -c 1048576 "$USERS_DB_FILE" 2>/dev/null || cat "$USERS_DB_FILE" 2>/dev/null || printf '[]') | b64enc )"
+
+  reply_ok "$(printf '{"ok":true,"rev":%s,"updatedAt":"%s","contentB64":"%s"}' "$udb_rev" "$(jesc "$udb_updatedAt")" "$content")"
+}
+
+users_db_put_json() {
+  expected_rev="$1"
+  [ -n "$expected_rev" ] || expected_rev='-1'
+
+  if [ "$REQUEST_METHOD" != "POST" ]; then
+    reply_ok '{"ok":false,"error":"method-not-allowed"}'
+    return
+  fi
+
+  users_db_init_if_missing
+
+  # Acquire lock (best effort)
+  lockdir="${USERS_DB_FILE}.lock"
+  i=0
+  while ! mkdir "$lockdir" 2>/dev/null; do
+    i=$((i+1))
+    [ $i -ge 60 ] && { reply_ok '{"ok":false,"error":"busy"}'; return; }
+    usleep 50000 2>/dev/null || sleep 0.05 2>/dev/null || sleep 1 2>/dev/null || true
+  done
+
+  # Reload meta under lock
+  users_db_load_meta
+
+  echo "$expected_rev" | grep -qE '^-?[0-9]+$' || expected_rev='-1'
+  if [ "$expected_rev" != "$udb_rev" ]; then
+    content="$( (head -c 1048576 "$USERS_DB_FILE" 2>/dev/null || cat "$USERS_DB_FILE" 2>/dev/null || printf '[]') | b64enc )"
+    rmdir "$lockdir" 2>/dev/null || true
+    reply_ok "$(printf '{"ok":false,"error":"conflict","rev":%s,"updatedAt":"%s","contentB64":"%s"}' "$udb_rev" "$(jesc "$udb_updatedAt")" "$content")"
+    return
+  fi
+
+  body="$(cat 2>/dev/null || true)"
+  [ -n "$body" ] || body='[]'
+
+  # Basic size guard (~1 MiB)
+  sz="$(printf '%s' "$body" | wc -c 2>/dev/null || echo 0)"
+  echo "$sz" | grep -qE '^[0-9]+$' || sz=0
+  if [ "$sz" -gt 1048576 ]; then
+    rmdir "$lockdir" 2>/dev/null || true
+    reply_ok '{"ok":false,"error":"too-large"}'
+    return
+  fi
+
+  tmp="${USERS_DB_FILE}.tmp.$$"
+  printf '%s' "$body" > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; rmdir "$lockdir" 2>/dev/null || true; reply_ok '{"ok":false,"error":"write-failed"}'; return; }
+  mv -f "$tmp" "$USERS_DB_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; rmdir "$lockdir" 2>/dev/null || true; reply_ok '{"ok":false,"error":"write-failed"}'; return; }
+
+  udb_rev=$((udb_rev + 1))
+  udb_updatedAt="$(users_db_now_iso)"
+  users_db_write_meta >/dev/null 2>&1 || true
+
+  rmdir "$lockdir" 2>/dev/null || true
+
+  reply_ok "$(printf '{"ok":true,"rev":%s,"updatedAt":"%s"}' "$udb_rev" "$(jesc "$udb_updatedAt")")"
+}
+
 if [ "$REQUEST_METHOD" = "OPTIONS" ]; then
   reply_ok "{}"
   exit 0
 fi
 
 # Parse query string (key=value&...)
-cmd=""; ip=""; up=""; down=""; mac=""; ports=""; token_q=""; type=""; lines=""; offset=""
+cmd=""; ip=""; up=""; down=""; mac=""; ports=""; token_q=""; type=""; lines=""; offset=""; rev_q=""
 IFS='&'
 for kv in $QUERY_STRING; do
   key="${kv%%=*}"
@@ -592,6 +695,7 @@ for kv in $QUERY_STRING; do
     type) type="$val" ;;
     lines) lines="$val" ;;
     offset) offset="$val" ;;
+    rev) rev_q="$val" ;;
     token) token_q="$val" ;;
   esac
 done
@@ -1001,7 +1105,7 @@ status() {
   mem_total_b=$((mem_total_kb*1024))
   mem_used_b=$((mem_used_kb*1024))
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.10","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.11","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -1252,6 +1356,12 @@ case "$cmd" in
     ;;
   rules_info)
     rules_info_json
+    ;;
+  users_db_get)
+    users_db_get_json
+    ;;
+  users_db_put)
+    users_db_put_json "$rev_q"
     ;;
   *) reply_ok '{"ok":false,"error":"unknown-cmd"}' ;;
 esac

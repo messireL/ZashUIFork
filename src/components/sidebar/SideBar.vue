@@ -49,7 +49,7 @@
         </div>
       </template>
       <div class="px-3 pb-1 text-[10px] opacity-60" :class="isSidebarCollapsed ? 'text-center' : ''">
-        UI {{ zashboardVersion }}
+        UI {{ zashboardVersion }} (Netcraze Ultra/Mihomo)
       </div>
     </div>
   </div>

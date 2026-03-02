@@ -532,6 +532,22 @@ const ru: LANG_MESSAGE = {
   diagnosticsTip: 'Собирает версию UI/ядра, статус агента, лимиты/профили, список заблокированных и последние логи (agent/mihomo/config).',
   copy: 'Копировать',
 
+  // --- Единая база пользователей ---
+  pull: 'Забрать',
+  push: 'Отправить',
+  lastPull: 'Последнее получение',
+  lastPush: 'Последняя отправка',
+  conflicts: 'Конфликты',
+  pendingChanges: 'Ожидают синхронизации',
+  localOnly: 'Только локально',
+  synced: 'Синхронизировано',
+  conflict: 'Конфликт',
+
+  // --- Задачи → Topology ---
+  topRulesTitle: 'Топ правил (клик → Topology)',
+  topRulesTip: 'По последним соединениям (active + closed).',
+  openInTopology: 'Открыть в Topology',
+
 }
 
 export default ru
