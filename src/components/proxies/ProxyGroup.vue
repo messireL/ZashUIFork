@@ -55,7 +55,9 @@
         :nodes="renderProxies"
         :now="proxyGroup.now"
         :groupName="proxyGroup.name"
+        :enable-topology-filter="true"
         @nodeclick="handlerProxySelect(name, $event)"
+        @nodefilter="openTopologyWithProxy"
       />
     </template>
     <template v-slot:content="{ showFullContent }">
@@ -82,6 +84,8 @@ import {
   proxyGroupLatencyTest,
   proxyMap,
 } from '@/store/proxies'
+import { ROUTE_NAME } from '@/constant'
+import { useRouter } from 'vue-router'
 import {
   groupProxiesByProvider,
   manageHiddenGroup,
@@ -102,6 +106,25 @@ import ProxyPreview from './ProxyPreview.vue'
 const props = defineProps<{
   name: string
 }>()
+
+const router = useRouter()
+
+const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
+const openTopologyWithProxy = async (p: { name: string; mode: 'only' | 'exclude' }) => {
+  const payload = {
+    ts: Date.now(),
+    mode: p.mode,
+    focus: { stage: 'S', kind: 'value', value: p.name },
+  }
+
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+
+  await router.push({ name: ROUTE_NAME.overview })
+}
 const proxyGroup = computed(() => proxyMap.value[props.name])
 const allProxies = computed(() => proxyGroup.value.all ?? [])
 const { proxiesCount, renderProxies } = useRenderProxies(allProxies, props.name)

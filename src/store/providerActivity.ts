@@ -1,6 +1,7 @@
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
+import { throttle } from 'lodash'
 
 export type ProviderActivity = {
   connections: number
@@ -77,3 +78,21 @@ export const providerActivityByName = computed<Record<string, ProviderActivity>>
 
   return out
 })
+
+/**
+ * Throttled snapshot used for sorting providers by activity.
+ * Without this, the Providers tab can constantly re-order on every connections tick.
+ */
+export const providerActivitySnapshot = ref<Record<string, ProviderActivity>>({})
+
+watch(
+  providerActivityByName,
+  throttle(
+    (v) => {
+      providerActivitySnapshot.value = v || {}
+    },
+    30_000,
+    { leading: true, trailing: true },
+  ),
+  { immediate: true, deep: true },
+)

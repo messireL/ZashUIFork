@@ -3,7 +3,7 @@ import { GLOBAL, PROXY_TAB_TYPE } from '@/constant'
 import { isHiddenGroup } from '@/helper'
 import { getProviderHealth } from '@/helper/providerHealth'
 import { configs } from '@/store/config'
-import { providerActivityByName } from '@/store/providerActivity'
+import { providerActivityByName, providerActivitySnapshot } from '@/store/providerActivity'
 import { proxiesTabShow, proxyGroupList, proxyMap, proxyProviederList } from '@/store/proxies'
 import { customGlobalNode, displayGlobalByMode, hideUnusedProxyProviders, manageHiddenGroup } from '@/store/settings'
 import {
@@ -62,8 +62,9 @@ export const renderGroups = computed(() => {
 
     if (mode === 'activity') {
       list = [...list].sort((a: any, b: any) => {
-        const aa = (providerActivityByName.value as any)[a.name] || { bytes: 0, connections: 0 }
-        const bb = (providerActivityByName.value as any)[b.name] || { bytes: 0, connections: 0 }
+        // Use throttled snapshot to avoid constant UI re-ordering.
+        const aa = (providerActivitySnapshot.value as any)[a.name] || { bytes: 0, connections: 0 }
+        const bb = (providerActivitySnapshot.value as any)[b.name] || { bytes: 0, connections: 0 }
         if (bb.bytes !== aa.bytes) return bb.bytes - aa.bytes
         if (bb.connections !== aa.connections) return bb.connections - aa.connections
         return String(a.name).localeCompare(String(b.name))
