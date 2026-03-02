@@ -57,22 +57,59 @@ type UsersDbPayload = {
   providerPanelUrls: Record<string, string>
 }
 
+// Deterministic small hash (djb2) to generate stable ids for legacy entries missing `id`.
+const djb2 = (s: string) => {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 33) ^ s.charCodeAt(i)
+  }
+  // force uint32
+  return (h >>> 0).toString(16)
+}
+
+const normalizeLabel = (x: any): SourceIPLabel | null => {
+  if (!x || typeof x !== 'object') return null
+  const key = String((x as any).key || '').trim()
+  const label = String((x as any).label || '').trim()
+  const scope = Array.isArray((x as any).scope) ? ((x as any).scope as any[]).map(String) : undefined
+  if (!key || !label) return null
+
+  let id = String((x as any).id || '').trim()
+  if (!id) {
+    const scopeSig = scope && scope.length ? [...scope].sort().join(',') : ''
+    id = `legacy_${djb2(`${key}|${label}|${scopeSig}`)}`
+  }
+
+  const o: SourceIPLabel = { key, label, id }
+  if (scope && scope.length) o.scope = scope
+  return o
+}
+
+const sortLabels = (labels: SourceIPLabel[]) => {
+  return [...(labels || [])].sort((a: any, b: any) => {
+    const ak = String(a?.key || '')
+    const bk = String(b?.key || '')
+    if (ak !== bk) return ak.localeCompare(bk)
+    const al = String(a?.label || '')
+    const bl = String(b?.label || '')
+    if (al !== bl) return al.localeCompare(bl)
+    return String(a?.id || '').localeCompare(String(b?.id || ''))
+  })
+}
+
 const sanitizeLabels = (raw: any): SourceIPLabel[] => {
   try {
     if (!Array.isArray(raw)) return []
-    return raw
-      .map((x) => {
-        if (!x || typeof x !== 'object') return null
-        const key = String((x as any).key || '').trim()
-        const label = String((x as any).label || '').trim()
-        const id = String((x as any).id || '').trim()
-        const scope = Array.isArray((x as any).scope) ? ((x as any).scope as any[]).map(String) : undefined
-        if (!key || !label || !id) return null
-        const o: SourceIPLabel = { key, label, id }
-        if (scope && scope.length) o.scope = scope
-        return o
-      })
-      .filter(Boolean) as SourceIPLabel[]
+    const out = raw.map(normalizeLabel).filter(Boolean) as SourceIPLabel[]
+
+    // Deduplicate by key (prefer last) and stabilize order.
+    const byKey = new Map<string, SourceIPLabel>()
+    for (const it of out) {
+      const k = String(it?.key || '').trim()
+      if (!k) continue
+      byKey.set(k, it)
+    }
+    return sortLabels(Array.from(byKey.values()))
   } catch {
     return []
   }
@@ -89,6 +126,12 @@ const sanitizeUrlMap = (raw: any): Record<string, string> => {
     out[kk] = vv
   }
   return out
+}
+
+const normalizePayload = (p: UsersDbPayload): UsersDbPayload => {
+  const labels = sortLabels(sanitizeLabels(p?.labels || []))
+  const urls = sanitizeUrlMap(p?.providerPanelUrls || {})
+  return { labels, providerPanelUrls: urls }
 }
 
 const safeParsePayload = (raw: string): UsersDbPayload => {
@@ -155,32 +198,37 @@ const mergeLabels = (remote: SourceIPLabel[], local: SourceIPLabel[]) => {
 }
 
 const mergePayload = (remote: UsersDbPayload, local: UsersDbPayload): UsersDbPayload => {
-  const labels = mergeLabels(remote.labels || [], local.labels || [])
-  const urls = { ...(remote.providerPanelUrls || {}) }
-  for (const [k, v] of Object.entries(local.providerPanelUrls || {})) {
+  const rN = normalizePayload(remote)
+  const lN = normalizePayload(local)
+  const labels = mergeLabels(rN.labels || [], lN.labels || [])
+  const urls = { ...(rN.providerPanelUrls || {}) }
+  for (const [k, v] of Object.entries(lN.providerPanelUrls || {})) {
     const kk = String(k || '').trim()
     if (!kk) continue
     const vv = String(v || '').trim()
     if (!vv) continue
     urls[kk] = vv
   }
-  return { labels, providerPanelUrls: urls }
+  return normalizePayload({ labels, providerPanelUrls: urls })
 }
 
 const payloadEqual = (a: UsersDbPayload, b: UsersDbPayload) => {
-  return isEqual(a.labels || [], b.labels || []) && isEqual(a.providerPanelUrls || {}, b.providerPanelUrls || {})
+  const an = normalizePayload(a)
+  const bn = normalizePayload(b)
+  return isEqual(an.labels || [], bn.labels || []) && isEqual(an.providerPanelUrls || {}, bn.providerPanelUrls || {})
 }
 
 const setLocalFromPayload = (p: UsersDbPayload) => {
-  sourceIPLabelList.value = (p.labels || []) as any
-  proxyProviderPanelUrlMap.value = (p.providerPanelUrls || {}) as any
+  const n = normalizePayload(p)
+  sourceIPLabelList.value = (n.labels || []) as any
+  proxyProviderPanelUrlMap.value = (n.providerPanelUrls || {}) as any
 }
 
 const getLocalPayload = (): UsersDbPayload => {
-  return {
+  return normalizePayload({
     labels: (sourceIPLabelList.value || []) as any,
     providerPanelUrls: (proxyProviderPanelUrlMap.value || {}) as any,
-  }
+  })
 }
 
 const markSynced = (p: UsersDbPayload) => {
@@ -248,7 +296,7 @@ export const usersDbPullNow = async () => {
     // If we had offline edits, merge them into the remote and push back.
     if (usersDbLocalDirty.value) {
       const merged = mergePayload(remotePayload, localPayload)
-      suppressPushCount = 2
+      suppressPushCount = 4
       setLocalFromPayload(merged)
       const put = await usersDbPushNow(remoteRev, merged)
       usersDbLocalDirty.value = !put.ok
@@ -262,7 +310,7 @@ export const usersDbPullNow = async () => {
         const put = await usersDbPushNow(remoteRev, localPayload)
         if (put.ok) markSynced(localPayload)
       } else if (!payloadEqual(remotePayload, localPayload)) {
-        suppressPushCount = 2
+        suppressPushCount = 4
         setLocalFromPayload(remotePayload)
         markSynced(remotePayload)
       } else {
@@ -320,7 +368,7 @@ export const usersDbPushNow = async (baseRev?: number, overridePayload?: UsersDb
       const remotePayload = safeParsePayload(remoteRaw)
       const merged = mergePayload(remotePayload, payload)
 
-      suppressPushCount = 2
+      suppressPushCount = 4
       setLocalFromPayload(merged)
 
       usersDbRemoteRev.value = remoteRev
@@ -407,4 +455,16 @@ export const initUsersDbSync = () => {
     if (usersDbPhase.value === 'pulling' || usersDbPhase.value === 'pushing') return
     usersDbPullNow()
   }, 45_000)
+
+  // Periodic pull to propagate updates from other devices (when we have no local edits).
+  window.setInterval(() => {
+    if (!usersDbSyncEnabled.value) return
+    if (!agentEnabled.value) return
+    if (usersDbLocalDirty.value) return
+    if (usersDbPhase.value === 'pulling' || usersDbPhase.value === 'pushing') return
+
+    const lastPull = Number(usersDbLastPullAt.value) || 0
+    if (Date.now() - lastPull < 55_000) return
+    usersDbPullNow()
+  }, 60_000)
 }

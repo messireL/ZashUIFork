@@ -106,11 +106,27 @@ export const fetchProxies = async () => {
     }
   }
 
-  proxyMap.value = {
+  // Update reactive stores in-place to avoid full-list re-creation that looks like a page reload.
+  const nextProxyMap: Record<string, Proxy> = {
     ...allProviderProxies,
     ...proxyData.proxies,
   }
-  proxyGroupList.value = Object.values(proxyData.proxies)
+
+  // proxyMap: mutate in-place to keep object identity stable for components.
+  const curMap = (proxyMap.value || {}) as Record<string, any>
+  for (const k of Object.keys(curMap)) {
+    if (!(k in nextProxyMap)) delete curMap[k]
+  }
+  for (const [k, v] of Object.entries(nextProxyMap)) {
+    if (curMap[k] && typeof curMap[k] === 'object') {
+      Object.assign(curMap[k], v as any)
+    } else {
+      curMap[k] = v as any
+    }
+  }
+  proxyMap.value = curMap as any
+
+  const nextProxyGroupList = Object.values(proxyData.proxies)
     .filter((proxy) => proxy.all?.length && proxy.name !== GLOBAL)
     .sort((prev, next) => {
       const prevIndex = sortIndex.indexOf(prev.name)
@@ -130,7 +146,21 @@ export const fetchProxies = async () => {
     })
     .map((proxy) => proxy.name)
 
-  proxyProviederList.value = providers
+  proxyGroupList.value.splice(0, proxyGroupList.value.length, ...nextProxyGroupList)
+
+  // proxyProviederList: keep array identity stable; reuse existing provider objects when possible.
+  const curProviders = proxyProviederList.value || []
+  const byName = new Map<string, any>()
+  for (const p of curProviders as any[]) byName.set(String((p as any)?.name || ''), p)
+  const nextProviders = providers.map((p: any) => {
+    const old = byName.get(String(p?.name || ''))
+    if (old && typeof old === 'object') {
+      Object.assign(old, p)
+      return old
+    }
+    return p
+  })
+  proxyProviederList.value.splice(0, proxyProviederList.value.length, ...nextProviders)
 
   Object.entries(proxyMap.value).forEach(([name, proxy]) => {
     const iconReflect = iconReflectList.value.find((icon) => icon.name === name)
