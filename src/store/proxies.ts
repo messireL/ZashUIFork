@@ -124,7 +124,10 @@ export const fetchProxies = async () => {
       curMap[k] = v as any
     }
   }
-  proxyMap.value = curMap as any
+  // Avoid re-assigning the ref when we mutated the existing object in-place.
+  if (proxyMap.value !== curMap) {
+    proxyMap.value = curMap as any
+  }
 
   const nextProxyGroupList = Object.values(proxyData.proxies)
     .filter((proxy) => proxy.all?.length && proxy.name !== GLOBAL)
@@ -248,7 +251,62 @@ export const fetchProxyProvidersOnly = async () => {
     }
   }
 
-  proxyMap.value = curMap as any
+  // Avoid re-assigning the ref when we mutated the existing object in-place.
+  // Re-assigning (even the same object) can trigger a large re-render that looks like a full page reload.
+  if (proxyMap.value !== curMap) {
+    proxyMap.value = curMap as any
+  }
+}
+
+/**
+ * Fetch providers list but patch ONLY a single provider (and its nodes) into the store.
+ * This minimizes reactive churn so updating one provider does not "reload" the whole Providers page.
+ */
+export const fetchProxyProviderByNameOnly = async (providerName: string) => {
+  const providerRes = await fetchProxyProviderAPI()
+  const providerData = providerRes.data
+
+  const all = Object.values(providerData.providers || {}) as any[]
+  const found = all.find((p: any) => String(p?.name || '') === providerName)
+  if (!found) return
+
+  // Ensure ref objects exist.
+  if (!proxyProviederList.value) proxyProviederList.value = [] as any
+  if (!proxyMap.value) proxyMap.value = {} as any
+
+  // Patch provider object in-place if it exists.
+  const list = proxyProviederList.value as any[]
+  const idx = list.findIndex((p: any) => String(p?.name || '') === providerName)
+  const oldProvider = idx >= 0 ? list[idx] : null
+  const oldNodes = new Set<string>()
+  if (oldProvider?.proxies?.length) {
+    for (const n of oldProvider.proxies) {
+      const nm = String(n?.name || '').trim()
+      if (nm) oldNodes.add(nm)
+    }
+  }
+
+  if (oldProvider && typeof oldProvider === 'object') {
+    Object.assign(oldProvider, found)
+  } else {
+    list.push(found)
+  }
+
+  // Patch provider nodes into proxyMap in-place.
+  const curMap = proxyMap.value as Record<string, any>
+  const newNodes = new Set<string>()
+  for (const node of (found.proxies || []) as any[]) {
+    const nm = String(node?.name || '').trim()
+    if (!nm) continue
+    newNodes.add(nm)
+    if (curMap[nm] && typeof curMap[nm] === 'object') Object.assign(curMap[nm], node)
+    else curMap[nm] = node
+  }
+
+  // Remove disappeared nodes for this provider only.
+  for (const nm of oldNodes) {
+    if (!newNodes.has(nm)) delete curMap[nm]
+  }
 }
 
 export const handlerProxySelect = async (proxyGroupName: string, proxyName: string) => {

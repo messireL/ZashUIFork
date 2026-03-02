@@ -16,8 +16,9 @@
         </div>
         <div class="flex gap-2">
           <button
+            type="button"
             :class="twMerge('btn btn-circle btn-sm z-30')"
-            @click.stop="healthCheckClickHandler"
+            @click.stop.prevent="healthCheckClickHandler"
           >
             <span
               v-if="isHealthChecking"
@@ -29,9 +30,10 @@
             />
           </button>
           <button
+            type="button"
             v-if="proxyProvider.vehicleType !== 'Inline'"
             :class="twMerge('btn btn-circle btn-sm z-30', isUpdating ? 'animate-spin' : '')"
-            @click.stop="updateProviderClickHandler"
+            @click.stop.prevent="updateProviderClickHandler"
           >
             <ArrowPathIcon class="h-4 w-4" />
           </button>
@@ -274,7 +276,7 @@ import { useBounceOnVisible } from '@/composables/bouncein'
 import { useRenderProxies } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
-import { fetchProxyProvidersOnly, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
+import { fetchProxyProviderByNameOnly, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
 import { NOT_CONNECTED, ROUTE_NAME } from '@/constant'
 import { proxyProviderPanelUrlMap, twoColumnProxyGroup } from '@/store/settings'
@@ -713,7 +715,7 @@ const healthCheckClickHandler = async () => {
   isHealthChecking.value = true
   try {
     await proxyProviderHealthCheckAPI(props.name)
-    await fetchProxyProvidersOnly()
+    await fetchProxyProviderByNameOnly(props.name)
     isHealthChecking.value = false
   } catch {
     isHealthChecking.value = false
@@ -726,7 +728,7 @@ const updateProviderClickHandler = async () => {
   isUpdating.value = true
   try {
     await updateProxyProviderAPI(props.name)
-    await fetchProxyProvidersOnly()
+    await fetchProxyProviderByNameOnly(props.name)
     isUpdating.value = false
   } catch {
     isUpdating.value = false

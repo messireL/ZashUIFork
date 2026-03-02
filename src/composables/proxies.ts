@@ -49,11 +49,12 @@ const filterGroups = (all: string[]) => {
 }
 
 export const renderGroups = computed(() => {
-  if (isEmpty(proxyMap.value)) {
-    return []
-  }
-
   if (proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER) {
+    // IMPORTANT:
+    // The Providers tab should not disappear when proxyMap is temporarily empty.
+    // Some core operations (e.g. provider update/healthcheck) may briefly clear /proxies,
+    // but providers list (/providers/proxies) remains available. Keeping Providers visible
+    // avoids a full-page "blink".
     const usedProxyNames = new Set<string>()
 
     // Собираем все реальные прокси, которые входят хотя бы в одну группу.
@@ -67,7 +68,13 @@ export const renderGroups = computed(() => {
       return (provider.proxies || []).some((p: any) => usedProxyNames.has(p.name))
     }
 
-    let list = proxyProviederList.value.filter((p) => !hideUnusedProxyProviders.value || isUsed(p))
+    // When proxyMap is temporarily empty, usedProxyNames becomes empty and the "hide unused" filter
+    // would incorrectly hide ALL providers, causing the whole tab to blink.
+    // Apply the filter only when we have at least some group membership info.
+    const canJudgeUsed = usedProxyNames.size > 0
+    let list = proxyProviederList.value.filter(
+      (p) => !hideUnusedProxyProviders.value || !canJudgeUsed || isUsed(p),
+    )
 
     if (providerHealthFilter.value) {
       const target = providerHealthFilter.value
@@ -118,6 +125,10 @@ export const renderGroups = computed(() => {
 
     const desired = list.map((p) => p.name)
     return stableProviderOrder(desired, sig)
+  }
+
+  if (isEmpty(proxyMap.value)) {
+    return []
   }
 
   if (displayGlobalByMode.value) {
