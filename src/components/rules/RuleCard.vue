@@ -1,37 +1,71 @@
 <template>
-  <div class="card hover:bg-base-200 gap-2 p-2 text-sm">
-    <div class="min-h-5 leading-5">
-      <span>{{ index }}.</span>
-      <span class="ml-2">{{ rule.type }}</span>
-      <span
-        class="text-main ml-2"
-        v-if="rule.payload"
-      >
-        {{ rule.payload }}
-      </span>
-      <span
-        v-if="typeof size === 'number' && size !== -1"
-        class="text-base-content/80 ml-1 text-xs"
-      >
-        ({{ size }})
-        <QuestionMarkCircleIcon
-          v-if="size === 0"
-          class="ml-1 h-4 w-4"
-          @mouseenter="showMMDBSizeTip"
-        />
-      </span>
-      <span class="badge badge-xs ml-2" :title="$t('ruleHitsTip')">
-        {{ $t('hits') }}: {{ hits }}
-      </span>
-      <button
-        v-if="isUpdateableRuleSet"
-        :class="
-          twMerge('btn btn-circle btn-ghost btn-xs -mb-1 ml-1', isUpdating ? 'animate-spin' : '')
-        "
-        @click="updateRuleProviderClickHandler"
-      >
-        <ArrowPathIcon class="h-4 w-4" />
-      </button>
+  <div
+    class="card hover:bg-base-200 gap-2 p-2 text-sm"
+    data-nav-kind="rule"
+    :data-rule-type="rule.type"
+    :data-rule-payload="String(rule.payload || '')"
+  >
+    <div class="flex items-start justify-between gap-2 min-h-5 leading-5">
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span class="opacity-70">{{ index }}.</span>
+          <span class="font-medium">{{ rule.type }}</span>
+          <span
+            v-if="rule.payload"
+            class="text-main min-w-0 truncate"
+            :title="String(rule.payload)"
+          >
+            {{ rule.payload }}
+          </span>
+
+          <span
+            v-if="typeof size === 'number' && size !== -1"
+            class="text-base-content/70 text-xs"
+          >
+            ({{ size }})
+            <QuestionMarkCircleIcon
+              v-if="size === 0"
+              class="ml-1 inline-block h-4 w-4"
+              @mouseenter="showMMDBSizeTip"
+            />
+          </span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1 shrink-0">
+        <span class="badge badge-xs" :title="$t('ruleHitsTip')">
+          {{ $t('hits') }}: {{ hits }}
+        </span>
+
+        <button
+          v-if="isUpdateableRuleSet"
+          :class="twMerge('btn btn-circle btn-ghost btn-xs', isUpdating ? 'animate-spin' : '')"
+          @click="updateRuleProviderClickHandler"
+          :title="$t('update')"
+        >
+          <ArrowPathIcon class="h-4 w-4" />
+        </button>
+
+        <!-- Topology: Only / Exclude this rule (stage: R) -->
+        <div class="join">
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs join-item"
+            :title="$t('topologyOnlyThis')"
+            @click.stop="openTopologyWithRule('only')"
+          >
+            <FunnelIcon class="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs join-item"
+            :title="$t('topologyExcludeThis')"
+            @click.stop="openTopologyWithRule('exclude')"
+          >
+            <NoSymbolIcon class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
     </div>
     <div class="flex items-center gap-1">
       <ProxyName
@@ -59,9 +93,10 @@
 <script setup lang="ts">
 import { updateRuleProviderAPI } from '@/api'
 import { useBounceOnVisible } from '@/composables/bouncein'
-import { NOT_CONNECTED } from '@/constant'
+import { NOT_CONNECTED, ROUTE_NAME } from '@/constant'
 import { getColorForLatency } from '@/helper'
 import { useTooltip } from '@/helper/tooltip'
+import router from '@/router'
 import { getLatencyByName, getNowProxyNodeName, proxyMap } from '@/store/proxies'
 import { fetchRules, getRuleHitCount, ruleProviderList } from '@/store/rules'
 import { displayLatencyInRule, displayNowNodeInRule } from '@/store/settings'
@@ -69,6 +104,8 @@ import type { Rule } from '@/types'
 import {
   ArrowPathIcon,
   ArrowRightCircleIcon,
+  FunnelIcon,
+  NoSymbolIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/vue/24/outline'
 import { twMerge } from 'tailwind-merge'
@@ -122,6 +159,32 @@ const updateRuleProviderClickHandler = async () => {
 
 const showMMDBSizeTip = (e: Event) => {
   showTip(e, t('mmdbSizeTip'))
+}
+
+const TOPOLOGY_NAV_FILTER_KEY = 'runtime/topology-pending-filter-v1'
+const ruleTextForTopology = computed(() => {
+  const type = String(props.rule.type || '').trim()
+  const payload = String(props.rule.payload || '').trim()
+  return payload ? `${type}: ${payload}` : type
+})
+
+const openTopologyWithRule = async (mode: 'only' | 'exclude' = 'only') => {
+  const value = String(ruleTextForTopology.value || '').trim()
+  if (!value) return
+
+  const payload = {
+    ts: Date.now(),
+    mode,
+    focus: { stage: 'R', kind: 'value', value },
+  }
+
+  try {
+    localStorage.setItem(TOPOLOGY_NAV_FILTER_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+
+  await router.push({ name: ROUTE_NAME.overview })
 }
 
 useBounceOnVisible()

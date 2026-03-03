@@ -1,6 +1,9 @@
 <template>
   <div
     ref="cardRef"
+    data-nav-kind="proxy-node"
+    :data-nav-value="name"
+    :data-nav-group="groupName || ''"
     :class="
       twMerge(
         'bg-base-200 flex cursor-pointer flex-col items-start rounded-md',

@@ -41,10 +41,11 @@ import ProxyGroupForMobile from '@/components/proxies/ProxyGroupForMobile.vue'
 import ProxyProvider from '@/components/proxies/ProxyProvider.vue'
 import ProxyProvidersHealthSummary from '@/components/proxies/ProxyProvidersHealthSummary.vue'
 import { renderGroups } from '@/composables/proxies'
-import { PROXY_TAB_TYPE } from '@/constant'
+import { PROXY_TAB_TYPE, ROUTE_NAME } from '@/constant'
+import { cleanupExpiredPendingPageFocus, clearPendingPageFocus, flashNavHighlight, getPendingPageFocusForRoute } from '@/helper/navFocus'
 import { isMiddleScreen } from '@/helper/utils'
-import { fetchProxies, proxiesTabShow } from '@/store/proxies'
-import { twoColumnProxyGroup } from '@/store/settings'
+import { fetchProxies, proxyGroupList, proxyMap, proxiesTabShow } from '@/store/proxies'
+import { collapseGroupMap, twoColumnProxyGroup } from '@/store/settings'
 import { useElementSize, useSessionStorage } from '@vueuse/core'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
@@ -115,4 +116,87 @@ const filterContent: <T>(all: T[], target: number) => T[] = (all, target) => {
 }
 
 fetchProxies()
+
+// --- Cross-page navigation focus (Topology -> Proxies) ---
+const findNavEl = (kind: string, value: string) => {
+  const items = Array.from(document.querySelectorAll(`[data-nav-kind="${kind}"]`)) as HTMLElement[]
+  return (
+    items.find((el) => String((el as any).dataset?.navValue || '').trim() === String(value || '').trim()) ||
+    null
+  )
+}
+
+const findGroupForProxy = (proxyName: string) => {
+  const name = String(proxyName || '').trim()
+  if (!name) return ''
+  for (const g of proxyGroupList.value || []) {
+    const all = (proxyMap.value as any)?.[g]?.all || []
+    if (Array.isArray(all) && all.includes(name)) return g
+  }
+  return ''
+}
+
+let focusApplied = false
+const tryApplyPendingFocus = async () => {
+  if (focusApplied) return
+  const pf = getPendingPageFocusForRoute(ROUTE_NAME.proxies)
+  if (!pf) return
+
+  const v = String(pf.value || '').trim()
+  if (!v) return
+
+  // Ensure correct tab and open the relevant card/group for better UX.
+  if (pf.kind === 'provider') {
+    if (proxiesTabShow.value !== PROXY_TAB_TYPE.PROVIDER) proxiesTabShow.value = PROXY_TAB_TYPE.PROVIDER
+    collapseGroupMap.value[v] = true
+  } else {
+    if (proxiesTabShow.value !== PROXY_TAB_TYPE.PROXIES) proxiesTabShow.value = PROXY_TAB_TYPE.PROXIES
+  }
+
+  // For a specific proxy node, open the group containing it (best-effort).
+  let groupForNode = ''
+  if (pf.kind === 'proxy') {
+    groupForNode = findGroupForProxy(v)
+    if (groupForNode) collapseGroupMap.value[groupForNode] = true
+  }
+  if (pf.kind === 'proxyGroup') {
+    collapseGroupMap.value[v] = true
+  }
+
+  const start = performance.now()
+  const loop = async () => {
+    await nextTick()
+
+    let el: HTMLElement | null = null
+    if (pf.kind === 'provider') el = findNavEl('proxy-provider', v)
+    else if (pf.kind === 'proxyGroup') el = findNavEl('proxy-group', v)
+    else if (pf.kind === 'proxy') {
+      el = findNavEl('proxy-node', v)
+      if (!el && groupForNode) el = findNavEl('proxy-group', groupForNode)
+    }
+
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      flashNavHighlight(el)
+      clearPendingPageFocus()
+      focusApplied = true
+      return
+    }
+
+    if (performance.now() - start < 2400) {
+      requestAnimationFrame(() => loop())
+    }
+  }
+
+  loop()
+}
+
+onMounted(() => {
+  cleanupExpiredPendingPageFocus()
+  tryApplyPendingFocus()
+})
+
+watch([renderGroups, proxiesTabShow], () => {
+  tryApplyPendingFocus()
+})
 </script>

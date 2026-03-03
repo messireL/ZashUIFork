@@ -180,37 +180,39 @@
                 @end="disableSwipe = false"
               >
                 <template #item="{ element: sourceIP }">
-                  <SourceIPInput
-                    :model-value="sourceIP"
-                    @update:model-value="handlerLabelUpdate"
-                  >
-                    <template #prefix>
-                      <ChevronUpDownIcon class="drag-handle h-4 w-4 shrink-0 cursor-grab" />
-                      <LockClosedIcon
-                        v-if="isBlockedUser(sourceIP)"
-                        class="no-drag h-4 w-4 text-error"
-                        :title="t('userBlockedTip')"
-                      />
-                      <CloudIcon
-                        v-if="usersDbSyncActive && usersDbSyncedIdSet.has(sourceIP.id)"
-                        class="no-drag h-4 w-4 text-success"
-                        :title="t('usersDbSyncedUserTip')"
-                      />
-                    </template>
-                    <template #default>
-                      <button
-                        type="button"
-                        class="no-drag btn btn-circle btn-ghost btn-sm"
-                        @click.stop.prevent="handlerLabelRemove(sourceIP.id)"
-                        @pointerdown.stop.prevent
-                        @mousedown.stop.prevent
-                        @touchstart.stop.prevent
-                        :title="t('delete')"
-                      >
-                        <TrashIcon class="h-4 w-4" />
-                      </button>
-                    </template>
-                  </SourceIPInput>
+                  <div data-nav-kind="user" :data-nav-value="String(sourceIP.key || '')">
+                    <SourceIPInput
+                      :model-value="sourceIP"
+                      @update:model-value="handlerLabelUpdate"
+                    >
+                      <template #prefix>
+                        <ChevronUpDownIcon class="drag-handle h-4 w-4 shrink-0 cursor-grab" />
+                        <LockClosedIcon
+                          v-if="isBlockedUser(sourceIP)"
+                          class="no-drag h-4 w-4 text-error"
+                          :title="t('userBlockedTip')"
+                        />
+                        <CloudIcon
+                          v-if="usersDbSyncActive && usersDbSyncedIdSet.has(sourceIP.id)"
+                          class="no-drag h-4 w-4 text-success"
+                          :title="t('usersDbSyncedUserTip')"
+                        />
+                      </template>
+                      <template #default>
+                        <button
+                          type="button"
+                          class="no-drag btn btn-circle btn-ghost btn-sm"
+                          @click.stop.prevent="handlerLabelRemove(sourceIP.id)"
+                          @pointerdown.stop.prevent
+                          @mousedown.stop.prevent
+                          @touchstart.stop.prevent
+                          :title="t('delete')"
+                        >
+                          <TrashIcon class="h-4 w-4" />
+                        </button>
+                      </template>
+                    </SourceIPInput>
+                  </div>
                 </template>
               </Draggable>
 
@@ -258,12 +260,14 @@ import { agentLanHostsAPI } from '@/api/agent'
 import { showNotification } from '@/helper/notification'
 import { i18n } from '@/i18n'
 import { disableSwipe } from '@/composables/swipe'
+import { ROUTE_NAME } from '@/constant'
+import { cleanupExpiredPendingPageFocus, clearPendingPageFocus, flashNavHighlight, getPendingPageFocusForRoute } from '@/helper/navFocus'
 import { collapseGroupMap, sourceIPLabelList } from '@/store/settings'
 import { usersDbSyncActive, usersDbSyncedIdSet } from '@/store/usersDbSync'
 import type { SourceIPLabel } from '@/types'
 import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpDownIcon, CloudIcon, LockClosedIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { v4 as uuid } from 'uuid'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import Draggable from 'vuedraggable'
 import { getUserLimitState } from '@/composables/userLimits'
 
@@ -333,6 +337,54 @@ if (collapseGroupMap.value[MAPPING_COLLAPSE_NAME] === undefined) {
   // while allowing users to collapse it when the list grows.
   collapseGroupMap.value[MAPPING_COLLAPSE_NAME] = true
 }
+
+// --- Cross-page navigation focus (Topology -> Users) ---
+const findUserEl = (ip: string) => {
+  const v = String(ip || '').trim()
+  if (!v) return null
+  const items = Array.from(document.querySelectorAll('[data-nav-kind="user"]')) as HTMLElement[]
+  return (
+    items.find((el) => String((el as any).dataset?.navValue || '').trim() === v) ||
+    null
+  )
+}
+
+let focusApplied = false
+const tryApplyPendingFocus = async () => {
+  if (focusApplied) return
+  const pf = getPendingPageFocusForRoute(ROUTE_NAME.users)
+  if (!pf || pf.kind !== 'user') return
+
+  const ip = String(pf.value || '').trim()
+  if (!ip) return
+
+  // Ensure mapping accordion is open.
+  collapseGroupMap.value[MAPPING_COLLAPSE_NAME] = true
+
+  const start = performance.now()
+  const loop = async () => {
+    await nextTick()
+    const el = findUserEl(ip)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      flashNavHighlight(el)
+      clearPendingPageFocus()
+      focusApplied = true
+      return
+    }
+    if (performance.now() - start < 2400) requestAnimationFrame(() => loop())
+  }
+  loop()
+}
+
+onMounted(() => {
+  cleanupExpiredPendingPageFocus()
+  tryApplyPendingFocus()
+})
+
+watch(sourceIPLabelList, () => {
+  tryApplyPendingFocus()
+})
 
 const fetchImportItems = async () => {
   // Avoid re-fetch spam when user quickly toggles the panel.

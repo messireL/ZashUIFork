@@ -1,5 +1,6 @@
 <template>
-  <CollapseCard :name="proxyProvider.name">
+  <div data-nav-kind="proxy-provider" :data-nav-value="proxyProvider.name">
+    <CollapseCard :name="proxyProvider.name">
     <template v-slot:title="{ open }">
       <div class="flex items-center justify-between gap-2 rounded-xl px-2 py-1" :class="open ? 'bg-base-200 ring-1 ring-base-300' : ''">
         <div class="text-xl font-medium">
@@ -295,7 +296,8 @@
         />
       </ProxyNodeGrid>
     </template>
-  </CollapseCard>
+    </CollapseCard>
+  </div>
 </template>
 
 <script setup lang="ts">

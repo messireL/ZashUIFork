@@ -33,7 +33,7 @@
 
 <script setup lang="ts">
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { computed, nextTick, ref } from 'vue'
+import { computed, defineExpose, nextTick, ref } from 'vue'
 
 const parentRef = ref<HTMLElement | null>(null)
 const props = withDefaults(
@@ -72,4 +72,14 @@ const measureElement = (el: Element | null) => {
 
   return undefined
 }
+
+const scrollToIndex = (index: number, align: 'start' | 'center' | 'end' = 'center') => {
+  try {
+    ;(rowVirtualizer.value as any)?.scrollToIndex?.(index, { align })
+  } catch {
+    // ignore
+  }
+}
+
+defineExpose({ scrollToIndex })
 </script>

@@ -261,6 +261,28 @@
             </button>
           </div>
 
+          <!-- Navigation: open the selected entity in its section (with highlight/scroll) -->
+          <div v-if="focus && focus.kind === 'value'" class="flex flex-wrap items-center gap-2">
+            <button
+              v-if="openMainLabel"
+              class="btn btn-xs btn-outline"
+              @click="openFocusedMain"
+              :title="$t('open')"
+            >
+              <ArrowTopRightOnSquareIcon class="h-4 w-4" />
+              {{ openMainLabel }}
+            </button>
+            <button
+              v-if="openProviderLabel"
+              class="btn btn-xs btn-outline"
+              @click="openFocusedProvider"
+              :title="$t('open')"
+            >
+              <ArrowTopRightOnSquareIcon class="h-4 w-4" />
+              {{ openProviderLabel }}
+            </button>
+          </div>
+
           <div class="stats stats-vertical lg:stats-horizontal shadow-sm">
             <div class="stat py-2">
               <div class="stat-title">{{ $t('traffic') }}</div>
@@ -450,6 +472,8 @@
 import { backgroundImage } from '@/helper/indexeddb'
 import { prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
+import { cleanupExpiredPendingPageFocus, setPendingPageFocus } from '@/helper/navFocus'
+import { ROUTE_NAME } from '@/constant'
 import { activeConnections } from '@/store/connections'
 import { proxyProviederList } from '@/store/proxies'
 import {
@@ -464,7 +488,7 @@ import {
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
-import { ArrowDownTrayIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, LockClosedIcon, LockOpenIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowTopRightOnSquareIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, LockClosedIcon, LockOpenIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useElementSize, useStorage } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -475,12 +499,14 @@ import { debounce } from 'lodash'
 import { twMerge } from 'tailwind-merge'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import TextInput from '@/components/common/TextInput.vue'
 
 echarts.use([SankeyChart, TooltipComponent, CanvasRenderer])
 
 const { t } = useI18n()
+const router = useRouter()
 
 const isFullScreen = ref(false)
 const chart = ref()
@@ -884,6 +910,68 @@ const setFocus = (v: Focus) => {
 
 const closeDetails = () => {
   focus.value = null
+}
+
+// --- Cross-page navigation (Topology -> Proxies/Rules/Users) ---
+const openMainLabel = computed(() => {
+  const f = focus.value
+  if (!f || f.kind !== 'value') return ''
+  if (f.stage === 'C') return t('users')
+  if (f.stage === 'R') return t('rules')
+  // G/S (and provider via secondary button) open Proxies.
+  return t('proxies')
+})
+
+const openProviderLabel = computed(() => {
+  const f = focus.value
+  if (!f || f.kind !== 'value') return ''
+  if (f.stage !== 'S') return ''
+  const p = providerOf(String(f.value || '').trim())
+  if (!p) return ''
+  return `${t('proxyProvider')}: ${p}`
+})
+
+const openFocusedMain = async () => {
+  const f = focus.value
+  if (!f || f.kind !== 'value') return
+  const v = String(f.value || '').trim()
+  if (!v) return
+
+  if (f.stage === 'C') {
+    setPendingPageFocus(ROUTE_NAME.users, 'user', v)
+    closeDetails()
+    await router.push({ name: ROUTE_NAME.users })
+    return
+  }
+  if (f.stage === 'R') {
+    setPendingPageFocus(ROUTE_NAME.rules, 'rule', v)
+    closeDetails()
+    await router.push({ name: ROUTE_NAME.rules })
+    return
+  }
+  if (f.stage === 'G') {
+    setPendingPageFocus(ROUTE_NAME.proxies, 'proxyGroup', v)
+    closeDetails()
+    await router.push({ name: ROUTE_NAME.proxies })
+    return
+  }
+  if (f.stage === 'S') {
+    setPendingPageFocus(ROUTE_NAME.proxies, 'proxy', v)
+    closeDetails()
+    await router.push({ name: ROUTE_NAME.proxies })
+  }
+}
+
+const openFocusedProvider = async () => {
+  const f = focus.value
+  if (!f || f.kind !== 'value' || f.stage !== 'S') return
+  const v = String(f.value || '').trim()
+  if (!v) return
+  const p = providerOf(v)
+  if (!p) return
+  setPendingPageFocus(ROUTE_NAME.proxies, 'provider', p)
+  closeDetails()
+  await router.push({ name: ROUTE_NAME.proxies })
 }
 
 const isSameFocus = (a: Focus | null, b: Focus | null) => {
@@ -1605,6 +1693,7 @@ watch(
 )
 
 onMounted(() => {
+  cleanupExpiredPendingPageFocus()
   updateColorSet()
   updateFontFamily()
 

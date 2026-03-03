@@ -1,5 +1,6 @@
 <template>
-  <CollapseCard :name="proxyGroup.name">
+  <div data-nav-kind="proxy-group" :data-nav-value="name">
+    <CollapseCard :name="proxyGroup.name">
     <template v-slot:title>
       <div
         class="relative flex items-center gap-2"
@@ -87,7 +88,8 @@
         :show-full-content="showFullContent"
       />
     </template>
-  </CollapseCard>
+    </CollapseCard>
+  </div>
 </template>
 
 <script setup lang="ts">
