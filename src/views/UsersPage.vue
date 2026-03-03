@@ -141,83 +141,107 @@
           </template>
         </CollapseCard>
 
-        <div class="flex flex-col gap-2">
-          <Draggable
-            v-if="sourceIPLabelList.length"
-            class="flex flex-1 flex-col gap-2"
-            v-model="sourceIPLabelList"
-            group="list"
-            :animation="150"
-            :handle="'.drag-handle'"
-            :filter="'.no-drag'"
-            :prevent-on-filter="false"
-            :item-key="'id'"
-            @start="disableSwipe = true"
-            @end="disableSwipe = false"
-          >
-            <template #item="{ element: sourceIP }">
+        <CollapseCard name="usersSourceIpMapping">
+          <template #title="{ open }">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <TagIcon class="h-4 w-4" />
+                <span class="text-base font-semibold">
+                  {{ t('sourceIPLabels') }}
+                  <span v-if="sourceIPLabelList.length" class="opacity-70">({{ sourceIPLabelList.length }})</span>
+                </span>
+              </div>
+              <ChevronDownIcon
+                class="h-4 w-4 opacity-60 transition-transform"
+                :class="open ? 'rotate-180' : ''"
+              />
+            </div>
+          </template>
+
+          <template #preview>
+            <div class="mt-1 text-sm opacity-70">
+              {{ t('usersTip') }}
+            </div>
+          </template>
+
+          <template #content>
+            <div class="flex flex-col gap-2 pt-1">
+              <Draggable
+                v-if="sourceIPLabelList.length"
+                class="flex flex-1 flex-col gap-2"
+                v-model="sourceIPLabelList"
+                group="list"
+                :animation="150"
+                :handle="'.drag-handle'"
+                :filter="'.no-drag'"
+                :prevent-on-filter="false"
+                :item-key="'id'"
+                @start="disableSwipe = true"
+                @end="disableSwipe = false"
+              >
+                <template #item="{ element: sourceIP }">
+                  <SourceIPInput
+                    :model-value="sourceIP"
+                    @update:model-value="handlerLabelUpdate"
+                  >
+                    <template #prefix>
+                      <ChevronUpDownIcon class="drag-handle h-4 w-4 shrink-0 cursor-grab" />
+                      <LockClosedIcon
+                        v-if="isBlockedUser(sourceIP)"
+                        class="no-drag h-4 w-4 text-error"
+                        :title="t('userBlockedTip')"
+                      />
+                      <CloudIcon
+                        v-if="usersDbSyncActive && usersDbSyncedIdSet.has(sourceIP.id)"
+                        class="no-drag h-4 w-4 text-success"
+                        :title="t('usersDbSyncedUserTip')"
+                      />
+                    </template>
+                    <template #default>
+                      <button
+                        type="button"
+                        class="no-drag btn btn-circle btn-ghost btn-sm"
+                        @click.stop.prevent="handlerLabelRemove(sourceIP.id)"
+                        @pointerdown.stop.prevent
+                        @mousedown.stop.prevent
+                        @touchstart.stop.prevent
+                        :title="t('delete')"
+                      >
+                        <TrashIcon class="h-4 w-4" />
+                      </button>
+                    </template>
+                  </SourceIPInput>
+                </template>
+              </Draggable>
+
+              <div v-else class="text-sm opacity-60">
+                {{ t('usersEmpty') }}
+              </div>
+
               <SourceIPInput
-                :model-value="sourceIP"
-                @update:model-value="handlerLabelUpdate"
+                v-model="newLabelForIP"
+                @keydown.enter="handlerLabelAdd"
               >
                 <template #prefix>
-                  <ChevronUpDownIcon class="drag-handle h-4 w-4 shrink-0 cursor-grab" />
-                  <LockClosedIcon
-                    v-if="isBlockedUser(sourceIP)"
-                    class="no-drag h-4 w-4 text-error"
-                    :title="t('userBlockedTip')"
-                  />
-                  <CloudIcon
-                    v-if="usersDbSyncActive && usersDbSyncedIdSet.has(sourceIP.id)"
-                    class="no-drag h-4 w-4 text-success"
-                    :title="t('usersDbSyncedUserTip')"
-                  />
+                  <TagIcon class="h-4 w-4 shrink-0" />
                 </template>
                 <template #default>
                   <button
                     type="button"
-                    class="no-drag btn btn-circle btn-ghost btn-sm"
-                    @click.stop.prevent="handlerLabelRemove(sourceIP.id)"
+                    class="no-drag btn btn-circle btn-sm"
+                    @click.stop.prevent="handlerLabelAdd"
                     @pointerdown.stop.prevent
                     @mousedown.stop.prevent
                     @touchstart.stop.prevent
-                    :title="t('delete')"
+                    :title="t('add')"
                   >
-                    <TrashIcon class="h-4 w-4" />
+                    <PlusIcon class="h-4 w-4" />
                   </button>
                 </template>
               </SourceIPInput>
-            </template>
-          </Draggable>
-
-          <div v-else class="text-sm opacity-60">
-            {{ t('usersEmpty') }}
-          </div>
-
-          <SourceIPInput
-            v-model="newLabelForIP"
-            @keydown.enter="handlerLabelAdd"
-          >
-            <template #prefix>
-              <TagIcon class="h-4 w-4 shrink-0" />
-            </template>
-            <template #default>
-              <button
-                type="button"
-                class="no-drag btn btn-circle btn-sm"
-                @click.stop.prevent="handlerLabelAdd"
-                @pointerdown.stop.prevent
-                @mousedown.stop.prevent
-                @touchstart.stop.prevent
-                :title="t('add')"
-              >
-                <PlusIcon class="h-4 w-4" />
-              </button>
-            </template>
-          </SourceIPInput>
-
-
-        </div>
+            </div>
+          </template>
+        </CollapseCard>
       </div>
     </div>
 
@@ -302,6 +326,13 @@ const importItems = ref<ImportItem[]>([])
 
 const IMPORT_COLLAPSE_NAME = 'usersImportLanHosts'
 const importLastFetchAt = ref(0)
+
+const MAPPING_COLLAPSE_NAME = 'usersSourceIpMapping'
+if (collapseGroupMap.value[MAPPING_COLLAPSE_NAME] === undefined) {
+  // Keep the mapping visible by default (same behavior as before),
+  // while allowing users to collapse it when the list grows.
+  collapseGroupMap.value[MAPPING_COLLAPSE_NAME] = true
+}
 
 const fetchImportItems = async () => {
   // Avoid re-fetch spam when user quickly toggles the panel.
