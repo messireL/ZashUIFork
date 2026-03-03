@@ -74,92 +74,80 @@
           {{ $t('agentDisabled') }}
         </div>
         <div v-else-if="providersPanelBusy" class="text-sm opacity-70">…</div>
-        <div v-else>
-          <div v-if="providersPanelError" class="text-xs text-error">{{ providersPanelError }}</div>
-          <div v-else-if="!providersPanelRenderList.length" class="text-sm opacity-70">—</div>
-          <div v-else class="flex flex-col gap-2">
-            <div
-              v-for="p in providersPanelRenderList"
-              :key="p.name"
-              class="rounded-lg border border-base-content/10 bg-base-200/40"
-            >
-              <button
-                type="button"
-                class="w-full px-3 py-2 text-left"
-                @click="toggleProvidersPanelOpen(p.name)"
-              >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <div class="truncate font-mono text-xs" :title="p.name">{{ p.name }}</div>
-                    <div
-                      v-if="proxyProviderPanelUrlMap[p.name] || p.url"
-                      class="mt-0.5 truncate text-[11px] opacity-60"
-                      :title="proxyProviderPanelUrlMap[p.name] || p.url"
-                    >
-                      {{ proxyProviderPanelUrlMap[p.name] || p.url }}
-                    </div>
-                  </div>
-
-                  <div class="shrink-0 flex items-center gap-2">
-                    <div
-                      class="text-[11px] font-mono opacity-70"
-                      :class="sslPanelInfo(p.name, p.sslNotAfter).cls"
-                      :title="sslPanelInfo(p.name, p.sslNotAfter).title"
-                    >
-                      {{ sslPanelInfo(p.name, p.sslNotAfter).text }}
-                    </div>
-                    <ChevronDownIcon
-                      class="h-4 w-4 opacity-60 transition-transform"
-                      :class="providersPanelOpenName === p.name ? 'rotate-180' : ''"
-                    />
-                  </div>
-                </div>
-              </button>
-
-              <div v-show="providersPanelOpenName === p.name" class="border-t border-base-content/10 px-3 py-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    class="input input-bordered input-sm flex-1 min-w-[260px]"
-                    :placeholder="$t('providerPanelUrlPlaceholder')"
-                    :value="proxyProviderPanelUrlMap[p.name] || ''"
-                    @input="(e) => setProviderPanelUrl(p.name, (e && e.target && e.target.value) || '')"
-                  />
-                  <a
-                    v-if="proxyProviderPanelUrlMap[p.name]"
-                    class="btn btn-sm"
-                    :href="proxyProviderPanelUrlMap[p.name]"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {{ $t('open') }}
-                  </a>
-                </div>
-
-                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <span class="opacity-70">{{ $t('sslWarnOverride') }}:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="365"
-                    class="input input-bordered input-xs w-20"
-                    :placeholder="String(sslNearExpiryDaysDefault)"
-                    :value="getProviderSslWarnOverride(p.name) === null ? '' : String(getProviderSslWarnOverride(p.name))"
-                    @input="(e) => setProviderSslWarnOverride(p.name, (e && e.target && e.target.value) || '')"
-                  />
-                  <button type="button" class="btn btn-ghost btn-xs" @click="clearProviderSslWarnOverride(p.name)">
-                    {{ $t('clear') }}
-                  </button>
-                  <span class="opacity-60">{{ $t('sslWarnOverrideTip') }}</span>
-                </div>
-
-                <div class="mt-1 text-[11px] opacity-60">
-                  {{ $t('sslSource') }} • {{ $t('checkedAt') }}: {{ fmtTs(providersPanelAt) }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+		  <div v-else>
+			<div v-if="providersPanelError" class="text-xs text-error">{{ providersPanelError }}</div>
+			<div v-else-if="!providersPanelRenderList.length" class="text-sm opacity-70">—</div>
+			<div v-else>
+				<div class="mt-1 text-[11px] opacity-60">
+				  <div>{{ $t('providersPanelColumnsExplain') }}</div>
+				  <div class="mt-0.5">{{ $t('sslSource') }} • {{ $t('checkedAt') }}: {{ fmtTs(providersPanelAt) }}</div>
+				</div>
+				
+				<div class="mt-2 overflow-x-auto">
+				  <table class="table table-zebra table-sm">
+					<thead>
+					  <tr>
+						<th class="w-[160px]">{{ $t('provider') }}</th>
+						<th>{{ $t('panelUrl') }}</th>
+						<th class="w-[140px]">{{ $t('sslWarnDays') }}</th>
+						<th class="w-[190px]">{{ $t('sslExpires') }}</th>
+					  </tr>
+					</thead>
+					<tbody>
+					  <tr v-for="p in providersPanelRenderList" :key="p.name">
+						<td class="font-mono text-xs" :title="p.name">{{ p.name }}</td>
+						<td>
+						  <div class="flex items-center gap-2">
+							<input
+							  type="text"
+							  class="input input-bordered input-xs flex-1 min-w-[220px]"
+							  :placeholder="$t('providerPanelUrlPlaceholder')"
+							  :value="proxyProviderPanelUrlMap[p.name] || ''"
+							  @input="(e) => setProviderPanelUrl(p.name, (e && e.target && e.target.value) || '')"
+							/>
+							<a
+							  v-if="proxyProviderPanelUrlMap[p.name]"
+							  class="btn btn-ghost btn-xs"
+							  :href="proxyProviderPanelUrlMap[p.name]"
+							  target="_blank"
+							  rel="noreferrer"
+							>
+							  {{ $t('open') }}
+							</a>
+						  </div>
+						</td>
+						<td>
+						  <div class="flex items-center gap-2">
+							<input
+							  type="number"
+							  min="0"
+							  max="365"
+							  class="input input-bordered input-xs w-20"
+							  :placeholder="String(sslNearExpiryDaysDefault)"
+							  :value="getProviderSslWarnOverride(p.name) === null ? '' : String(getProviderSslWarnOverride(p.name))"
+							  @input="(e) => setProviderSslWarnOverride(p.name, (e && e.target && e.target.value) || '')"
+							/>
+							<button type="button" class="btn btn-ghost btn-xs" @click="clearProviderSslWarnOverride(p.name)">
+							  {{ $t('clear') }}
+							</button>
+						  </div>
+						  <div class="mt-0.5 text-[10px] opacity-60">{{ $t('sslWarnDaysHint', { d: sslNearExpiryDaysDefault }) }}</div>
+						</td>
+						<td>
+						  <span
+							class="text-[11px] font-mono"
+							:class="sslPanelInfo(p.name, p.sslNotAfter).cls"
+							:title="sslPanelInfo(p.name, p.sslNotAfter).title"
+						  >
+							{{ sslPanelInfo(p.name, p.sslNotAfter).text }}
+						  </span>
+						</td>
+					  </tr>
+					</tbody>
+				  </table>
+				</div>
+			</div>
+		  </div>
       </div>
     </div>
 
@@ -929,7 +917,6 @@ const copyRouterUiUrl = async (asYaml: boolean) => {
 const providersPanelBusy = ref(false)
 const providersPanelError = ref('')
 const providersPanelList = ref<Array<{ name: string; url?: string; host?: string; port?: string; sslNotAfter?: string }>>([])
-const providersPanelOpenName = ref<string>('')
 const providersPanelExpanded = ref<boolean>(false)
 const providersPanelAt = ref<number>(0)
 
@@ -959,11 +946,7 @@ const toggleProvidersPanelExpanded = () => {
   providersPanelExpanded.value = !providersPanelExpanded.value
 }
 
-const toggleProvidersPanelOpen = (name: string) => {
-  const k = String(name || '').trim()
-  if (!k) return
-  providersPanelOpenName.value = providersPanelOpenName.value === k ? '' : k
-}
+// (no per-provider accordion state; rendered as a table)
 
 // Render list should include *all* providers known to UI (proxyProviederList), even if agent SSL probe returns only a subset.
 // Also include any providers that exist only in the synced panel-url map (so users can set URLs even before providers load).
@@ -1405,11 +1388,6 @@ const fmtUpdatedAt = (s?: string) => {
   const d = dayjs(s || '')
   if (!d.isValid()) return '—'
   return d.format('DD-MM-YYYY HH:mm:ss')
-}
-
-const fmtTs = (ts?: number) => {
-  if (!ts || !Number.isFinite(ts)) return '—'
-  return dayjs(ts).format('DD-MM-YYYY HH:mm:ss')
 }
 
 const shortPath = (p?: string) => {

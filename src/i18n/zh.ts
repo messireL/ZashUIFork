@@ -105,6 +105,13 @@ const zh: LANG_MESSAGE = {
   refreshProvidersSslTip: '通过路由器代理（mihomo_providers）刷新 SSL 到期信息。',
   providersPanelTitle: '代理提供者：管理面板',
   providersPanelTip: '管理面板 URL 保存在路由器上，并在设备间自动同步。',
+  providersPanelColumnsExplain:
+    '列说明：“面板链接”是点击“打开”时访问的 URL；“SSL 警告天数”用于控制何时显示“SSL 即将到期”（留空=全局阈值）。',
+  provider: '提供者',
+  panelUrl: '面板链接',
+  sslWarnDays: 'SSL 警告天数',
+  sslExpires: 'SSL 到期',
+  sslWarnDaysHint: '留空=全局（{d}天）',
   sslWarnThreshold: '“SSL 即将到期”阈值',
   sslWarnThresholdTip: '当证书到期剩余 ≤ N 天时显示“SSL 即将到期”。默认：2。',
   sslWarnOverride: '单个提供者阈值',

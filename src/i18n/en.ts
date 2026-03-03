@@ -103,6 +103,13 @@ const en = {
   refreshProvidersSslTip: 'Refreshes SSL expiry data via router-agent (mihomo_providers).',
   providersPanelTitle: 'Proxy providers: management panels',
   providersPanelTip: 'Panel URL is stored on the router and auto-synced across devices.',
+  providersPanelColumnsExplain:
+    'Columns: “Panel link” is the URL opened by the Open button. “SSL warn days” controls when “SSL soon” is shown (empty = global threshold).',
+  provider: 'Provider',
+  panelUrl: 'Panel link',
+  sslWarnDays: 'SSL warn days',
+  sslExpires: 'SSL expires',
+  sslWarnDaysHint: 'Empty = global ({d}d)',
   sslWarnThreshold: '"SSL soon" threshold',
   sslWarnThresholdTip: 'Shows the "SSL soon" warning when certificate expiry is ≤ N days. Default: 2.',
   sslWarnOverride: 'Per-provider threshold',

@@ -105,6 +105,13 @@ const ru: LANG_MESSAGE = {
   refreshProvidersSslTip: 'Обновляет даты SSL через router-agent (mihomo_providers).',
   providersPanelTitle: 'Прокси-провайдеры: панели управления',
   providersPanelTip: 'URL панели управления хранится на роутере и автоматически синхронизируется между ПК.',
+  providersPanelColumnsExplain:
+    'Колонки: «Ссылка на панель» — URL, который откроется по кнопке «Открыть». «Порог SSL, дни» — за сколько дней до истечения показывать «SSL скоро» (пусто = общий порог).',
+  provider: 'Провайдер',
+  panelUrl: 'Ссылка на панель',
+  sslWarnDays: 'Порог SSL, дни',
+  sslExpires: 'SSL истекает',
+  sslWarnDaysHint: 'Пусто — общий порог ({d} дн.)',
   sslWarnThreshold: 'Порог «SSL скоро»',
   sslWarnThresholdTip: 'Предупреждение «SSL скоро» показывается, если до истечения сертификата осталось ≤ N дней. По умолчанию 2.',
   sslWarnOverride: 'Порог для провайдера',
