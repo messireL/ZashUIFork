@@ -13,6 +13,14 @@
           >
             {{ $t(providerHealth.labelKey) }}
           </span>
+          <span
+            v-if="sslExpireBadge"
+            class="badge badge-sm ml-2 align-middle"
+            :class="sslExpireBadge.badgeCls"
+            :title="sslExpireBadge.tip"
+          >
+            {{ sslExpireBadge.text }}
+          </span>
           <span class="text-base-content/60 text-sm font-normal"> ({{ proxiesCount }}) </span>
         </div>
         <div class="flex gap-2">
@@ -66,7 +74,7 @@
             max="100"
           ></progress>
 
-          <div v-if="sslExpireInfo" class="mt-1 text-xs" :class="sslExpireInfo.cls" :title="sslExpireInfo.tip">
+          <div v-if="sslExpireInfo" class="mt-1 text-xs font-medium" :class="sslExpireInfo.cls" :title="sslExpireInfo.tip">
             {{ $t('sslExpire') }}: {{ sslExpireInfo.label }}
           </div>
 
@@ -586,6 +594,24 @@ const sslExpireInfo = computed(() => {
     : 'Source: TLS cert of proxy-provider URL (router-agent)'
 
   return { dateTime, days, cls, label, tip }
+})
+
+
+
+const sslExpireBadge = computed(() => {
+  const info = sslExpireInfo.value
+  if (!info) return null
+
+  const level = info.days < 0 ? 'error' : info.days <= sslWarnDays.value ? 'warning' : 'success'
+  const badgeCls =
+    level === 'error'
+      ? 'badge-error'
+      : level === 'warning'
+        ? 'badge-warning'
+        : 'badge-success'
+
+  const text = info.days < 0 ? 'SSL expired' : `SSL ${info.days}d`
+  return { badgeCls, text, tip: info.tip }
 })
 
 const subscriptionInfo = computed(() => {
