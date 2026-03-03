@@ -50,7 +50,8 @@
           <span v-if="status.serverVersion" class="opacity-60">
             latest <span class="font-mono">{{ status.serverVersion }}</span>
           </span>
-          <span v-if="needsUpdate" class="badge badge-warning badge-sm">update</span>
+          <span v-if="needsUpdate" class="badge badge-warning badge-sm">{{ $t('agentUpdate') }}</span>
+          <span v-else-if="isAhead" class="badge badge-info badge-sm">{{ $t('agentAhead') }}</span>
         </div>
       </div>
       <div v-else-if="agentEnabled && !status.ok">
@@ -71,8 +72,27 @@ import { computed, onMounted, ref } from 'vue'
 
 const status = ref<{ ok: boolean; version?: string; serverVersion?: string; tc?: boolean; wan?: string; lan?: string }>({ ok: false })
 
+const versionCmp = (a?: string, b?: string) => {
+  const as = (a || '').match(/\d+/g)?.map((x) => parseInt(x, 10)) || []
+  const bs = (b || '').match(/\d+/g)?.map((x) => parseInt(x, 10)) || []
+  const n = Math.max(as.length, bs.length)
+  for (let i = 0; i < n; i++) {
+    const av = as[i] ?? 0
+    const bv = bs[i] ?? 0
+    if (av < bv) return -1
+    if (av > bv) return 1
+  }
+  return 0
+}
+
 const needsUpdate = computed(() => {
-  return Boolean(status.value?.ok && status.value?.version && status.value?.serverVersion && status.value.version !== status.value.serverVersion)
+  if (!status.value?.ok || !status.value?.version || !status.value?.serverVersion) return false
+  return versionCmp(status.value.version, status.value.serverVersion) < 0
+})
+
+const isAhead = computed(() => {
+  if (!status.value?.ok || !status.value?.version || !status.value?.serverVersion) return false
+  return versionCmp(status.value.version, status.value.serverVersion) > 0
 })
 
 const refresh = async () => {

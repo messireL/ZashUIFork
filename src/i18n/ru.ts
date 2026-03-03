@@ -45,6 +45,8 @@ const ru: LANG_MESSAGE = {
   agentDetected: 'Обнаружено',
   agentVersion: 'Версия агента',
   agentServerVersion: 'Версия на сервере',
+  agentUpdate: 'обновить',
+  agentAhead: 'новее',
   agentOfflineTip: 'Агент включён, но недоступен. Проверь URL/порт и что агент запущен на роутере.',
   agentDisabledTip: 'Включи агент, чтобы лимит канала применялся “по-взрослому” (tc/iptables) и для расширенного мониторинга.',
   disabled: 'Выключено',

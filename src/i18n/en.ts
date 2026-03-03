@@ -43,6 +43,8 @@ const en = {
   agentDetected: 'Detected',
   agentVersion: 'Agent version',
   agentServerVersion: 'Server version',
+  agentUpdate: 'update',
+  agentAhead: 'ahead',
   agentOfflineTip: 'Agent is enabled but offline. Check URL/port and that the agent is running on the router.',
   agentDisabledTip: 'Enable the agent to enforce bandwidth limits (tc/iptables) and to get better router monitoring.',
   disabled: 'Disabled',
