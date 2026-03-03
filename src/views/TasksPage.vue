@@ -38,76 +38,86 @@
 
     <div class="card gap-2 p-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="font-semibold">{{ $t('providersPanelTitle') }}</div>
+        <button type="button" class="flex min-w-0 items-center gap-2 text-left" @click="toggleProvidersPanelExpanded">
+          <ChevronDownIcon class="h-4 w-4 opacity-70 transition-transform" :class="providersPanelExpanded ? 'rotate-180' : ''" />
+          <div class="truncate font-semibold">{{ $t('providersPanelTitle') }}</div>
+        </button>
         <div class="flex items-center gap-2">
-          <button type="button" class="btn btn-sm btn-ghost" @click="loadProvidersPanel(true)" :disabled="providersPanelBusy || !agentEnabled">
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost"
+            @click="loadProvidersPanel(true)"
+            :disabled="providersPanelBusy || !agentEnabled"
+          >
             {{ $t('refresh') }}
           </button>
         </div>
       </div>
 
-      <div class="text-xs opacity-70">{{ $t('providersPanelTip') }}</div>
+      <div v-show="providersPanelExpanded">
+        <div class="text-xs opacity-70">{{ $t('providersPanelTip') }}</div>
 
-      <div v-if="!agentEnabled" class="text-sm opacity-70">
-        {{ $t('agentDisabled') }}
-      </div>
-      <div v-else-if="providersPanelBusy" class="text-sm opacity-70">…</div>
-      <div v-else>
-        <div v-if="providersPanelError" class="text-xs text-error">{{ providersPanelError }}</div>
-        <div v-else-if="!providersPanelRenderList.length" class="text-sm opacity-70">—</div>
-        <div v-else class="flex flex-col gap-2">
-          <div
-            v-for="p in providersPanelRenderList"
-            :key="p.name"
-            class="rounded-lg border border-base-content/10 bg-base-200/40"
-          >
-            <button
-              type="button"
-              class="w-full px-3 py-2 text-left"
-              @click="toggleProvidersPanelOpen(p.name)"
+        <div v-if="!agentEnabled" class="text-sm opacity-70">
+          {{ $t('agentDisabled') }}
+        </div>
+        <div v-else-if="providersPanelBusy" class="text-sm opacity-70">…</div>
+        <div v-else>
+          <div v-if="providersPanelError" class="text-xs text-error">{{ providersPanelError }}</div>
+          <div v-else-if="!providersPanelRenderList.length" class="text-sm opacity-70">—</div>
+          <div v-else class="flex flex-col gap-2">
+            <div
+              v-for="p in providersPanelRenderList"
+              :key="p.name"
+              class="rounded-lg border border-base-content/10 bg-base-200/40"
             >
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <div class="truncate font-mono text-xs" :title="p.name">{{ p.name }}</div>
-                  <div
-                    v-if="proxyProviderPanelUrlMap[p.name] || p.url"
-                    class="mt-0.5 truncate text-[11px] opacity-60"
-                    :title="proxyProviderPanelUrlMap[p.name] || p.url"
-                  >
-                    {{ proxyProviderPanelUrlMap[p.name] || p.url }}
+              <button
+                type="button"
+                class="w-full px-3 py-2 text-left"
+                @click="toggleProvidersPanelOpen(p.name)"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="truncate font-mono text-xs" :title="p.name">{{ p.name }}</div>
+                    <div
+                      v-if="proxyProviderPanelUrlMap[p.name] || p.url"
+                      class="mt-0.5 truncate text-[11px] opacity-60"
+                      :title="proxyProviderPanelUrlMap[p.name] || p.url"
+                    >
+                      {{ proxyProviderPanelUrlMap[p.name] || p.url }}
+                    </div>
+                  </div>
+
+                  <div class="shrink-0 flex items-center gap-2">
+                    <div class="text-[11px] font-mono opacity-70" :title="$t('sslExpire')">
+                      {{ fmtSslPanel(p.sslNotAfter) }}
+                    </div>
+                    <ChevronDownIcon
+                      class="h-4 w-4 opacity-60 transition-transform"
+                      :class="providersPanelOpenName === p.name ? 'rotate-180' : ''"
+                    />
                   </div>
                 </div>
+              </button>
 
-                <div class="shrink-0 flex items-center gap-2">
-                  <div class="text-[11px] font-mono opacity-70" :title="$t('sslExpire')">
-                    {{ fmtSslPanel(p.sslNotAfter) }}
-                  </div>
-                  <ChevronDownIcon
-                    class="h-4 w-4 opacity-60 transition-transform"
-                    :class="providersPanelOpenName === p.name ? 'rotate-180' : ''"
+              <div v-show="providersPanelOpenName === p.name" class="border-t border-base-content/10 px-3 py-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    class="input input-bordered input-sm flex-1 min-w-[260px]"
+                    :placeholder="$t('providerPanelUrlPlaceholder')"
+                    :value="proxyProviderPanelUrlMap[p.name] || ''"
+                    @input="(e) => setProviderPanelUrl(p.name, (e && e.target && e.target.value) || '')"
                   />
+                  <a
+                    v-if="proxyProviderPanelUrlMap[p.name]"
+                    class="btn btn-sm"
+                    :href="proxyProviderPanelUrlMap[p.name]"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {{ $t('open') }}
+                  </a>
                 </div>
-              </div>
-            </button>
-
-            <div v-show="providersPanelOpenName === p.name" class="border-t border-base-content/10 px-3 py-3">
-              <div class="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  class="input input-bordered input-sm flex-1 min-w-[260px]"
-                  :placeholder="$t('providerPanelUrlPlaceholder')"
-                  :value="proxyProviderPanelUrlMap[p.name] || ''"
-                  @input="(e) => setProviderPanelUrl(p.name, (e && e.target && e.target.value) || '')"
-                />
-                <a
-                  v-if="proxyProviderPanelUrlMap[p.name]"
-                  class="btn btn-sm"
-                  :href="proxyProviderPanelUrlMap[p.name]"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {{ $t('open') }}
-                </a>
               </div>
             </div>
           </div>
@@ -872,6 +882,33 @@ const providersPanelBusy = ref(false)
 const providersPanelError = ref('')
 const providersPanelList = ref<Array<{ name: string; url?: string; host?: string; port?: string; sslNotAfter?: string }>>([])
 const providersPanelOpenName = ref<string>('')
+const providersPanelExpanded = ref<boolean>(false)
+
+const PROVIDERS_PANEL_EXPANDED_LS_KEY = 'zash.tasks.providersPanels.expanded'
+try {
+  const v = localStorage.getItem(PROVIDERS_PANEL_EXPANDED_LS_KEY)
+  // default: collapsed
+  if (v === '0') providersPanelExpanded.value = false
+  if (v === '1') providersPanelExpanded.value = true
+} catch {
+  // ignore
+}
+
+watch(
+  providersPanelExpanded,
+  (v) => {
+    try {
+      localStorage.setItem(PROVIDERS_PANEL_EXPANDED_LS_KEY, v ? '1' : '0')
+    } catch {
+      // ignore
+    }
+  },
+  { flush: 'post' },
+)
+
+const toggleProvidersPanelExpanded = () => {
+  providersPanelExpanded.value = !providersPanelExpanded.value
+}
 
 const toggleProvidersPanelOpen = (name: string) => {
   const k = String(name || '').trim()
