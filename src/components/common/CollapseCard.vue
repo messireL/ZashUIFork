@@ -1,7 +1,7 @@
 <template>
   <div :class="`collapse ${showCollapse ? 'collapse-open' : 'collapse-close'}`">
     <div
-      class="collapse-title cursor-pointer overflow-hidden pr-4 select-none"
+      class="collapse-title cursor-pointer overflow-visible pr-4 select-none"
       @click="showCollapse = !showCollapse"
     >
       <slot name="title" :open="showCollapse" />

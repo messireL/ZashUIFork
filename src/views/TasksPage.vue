@@ -56,13 +56,17 @@
         <div v-if="providersPanelError" class="text-xs text-error">{{ providersPanelError }}</div>
         <div v-else-if="!providersPanelRenderList.length" class="text-sm opacity-70">—</div>
         <div v-else class="flex flex-col gap-2">
-          <details
+          <div
             v-for="p in providersPanelRenderList"
             :key="p.name"
-            class="rounded-lg border border-base-content/10 bg-base-200/40 p-2"
+            class="rounded-lg border border-base-content/10 bg-base-200/40"
           >
-            <summary class="cursor-pointer select-none list-none [&::marker]:hidden [&::-webkit-details-marker]:hidden">
-              <div class="flex items-start justify-between gap-2">
+            <button
+              type="button"
+              class="w-full px-3 py-2 text-left"
+              @click="toggleProvidersPanelOpen(p.name)"
+            >
+              <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <div class="truncate font-mono text-xs" :title="p.name">{{ p.name }}</div>
                   <div
@@ -73,31 +77,40 @@
                     {{ proxyProviderPanelUrlMap[p.name] || p.url }}
                   </div>
                 </div>
-                <div class="shrink-0 text-[11px] font-mono opacity-70" :title="$t('sslExpire')">
-                  {{ fmtSslPanel(p.sslNotAfter) }}
+
+                <div class="shrink-0 flex items-center gap-2">
+                  <div class="text-[11px] font-mono opacity-70" :title="$t('sslExpire')">
+                    {{ fmtSslPanel(p.sslNotAfter) }}
+                  </div>
+                  <ChevronDownIcon
+                    class="h-4 w-4 opacity-60 transition-transform"
+                    :class="providersPanelOpenName === p.name ? 'rotate-180' : ''"
+                  />
                 </div>
               </div>
-            </summary>
+            </button>
 
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <input
-                type="text"
-                class="input input-bordered input-sm flex-1 min-w-[260px]"
-                :placeholder="$t('providerPanelUrlPlaceholder')"
-                :value="proxyProviderPanelUrlMap[p.name] || ''"
-                @input="(e) => setProviderPanelUrl(p.name, (e && e.target && e.target.value) || '')"
-              />
-              <a
-                v-if="proxyProviderPanelUrlMap[p.name]"
-                class="btn btn-sm"
-                :href="proxyProviderPanelUrlMap[p.name]"
-                target="_blank"
-                rel="noreferrer"
-              >
-                {{ $t('open') }}
-              </a>
+            <div v-show="providersPanelOpenName === p.name" class="border-t border-base-content/10 px-3 py-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  class="input input-bordered input-sm flex-1 min-w-[260px]"
+                  :placeholder="$t('providerPanelUrlPlaceholder')"
+                  :value="proxyProviderPanelUrlMap[p.name] || ''"
+                  @input="(e) => setProviderPanelUrl(p.name, (e && e.target && e.target.value) || '')"
+                />
+                <a
+                  v-if="proxyProviderPanelUrlMap[p.name]"
+                  class="btn btn-sm"
+                  :href="proxyProviderPanelUrlMap[p.name]"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {{ $t('open') }}
+                </a>
+              </div>
             </div>
-          </details>
+          </div>
         </div>
       </div>
     </div>
@@ -796,6 +809,7 @@ import type { RuleProvider } from '@/types'
 import { useI18n } from 'vue-i18n'
 import router from '@/router'
 import { ROUTE_NAME } from '@/constant'
+import { ChevronDownIcon } from '@heroicons/vue/20/solid'
 import {
   usersDbConflictCount,
   usersDbConflictDiff,
@@ -857,6 +871,13 @@ const copyRouterUiUrl = async (asYaml: boolean) => {
 const providersPanelBusy = ref(false)
 const providersPanelError = ref('')
 const providersPanelList = ref<Array<{ name: string; url?: string; host?: string; port?: string; sslNotAfter?: string }>>([])
+const providersPanelOpenName = ref<string>('')
+
+const toggleProvidersPanelOpen = (name: string) => {
+  const k = String(name || '').trim()
+  if (!k) return
+  providersPanelOpenName.value = providersPanelOpenName.value === k ? '' : k
+}
 
 // Render list should include *all* providers known to UI (proxyProviederList), even if agent SSL probe returns only a subset.
 // Also include any providers that exist only in the synced panel-url map (so users can set URLs even before providers load).
