@@ -184,6 +184,7 @@ export const fetchProxies = async () => {
 
 
 let providerFetchTime = 0
+let providerEmptyStreak = 0
 
 /**
  * Fetch ONLY proxy providers (no full proxies/groups refresh).
@@ -203,6 +204,17 @@ export const fetchProxyProvidersOnly = async () => {
   const providers = Object.values(providerData.providers).filter(
     (provider: any) => provider.name !== 'default' && provider.vehicleType !== 'Compatible',
   ) as any[]
+
+  // Mihomo/uhttpd can occasionally return an empty providers payload during short reload windows.
+  // Do NOT clear the whole Providers page on a single empty response — keep the last known-good state.
+  if (providers.length === 0) {
+    providerEmptyStreak++
+    if ((proxyProviederList.value?.length || 0) > 0 && providerEmptyStreak < 2) {
+      return
+    }
+  } else {
+    providerEmptyStreak = 0
+  }
 
   // Track old provider proxy names to remove stale ones.
   const oldProviderProxyNames = new Set<string>()

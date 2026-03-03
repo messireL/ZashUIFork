@@ -99,7 +99,7 @@ import { fetchConfigs } from '@/store/config'
 import { initConnections } from '@/store/connections'
 import { initLogs } from '@/store/logs'
 import { initSatistic } from '@/store/overview'
-import { fetchProxies, proxiesTabShow } from '@/store/proxies'
+import { fetchProxies, fetchProxyProvidersOnly, proxiesTabShow } from '@/store/proxies'
 import { fetchRules, rulesTabShow } from '@/store/rules'
 import { activeBackend, activeUuid, backendList } from '@/store/setup'
 import type { Backend } from '@/types'
@@ -212,9 +212,26 @@ watch(
   },
 )
 
+let lastVisibleProxiesRefresh = 0
+
 watch(documentVisible, () => {
   if (documentVisible.value !== 'visible') return
-  fetchProxies()
+
+  // Avoid aggressive full refresh when switching browser tabs.
+  // The Providers tab should refresh "softly" (only providers), without remounting the whole page.
+  const now = Date.now()
+  if (now - lastVisibleProxiesRefresh < 4000) return
+  lastVisibleProxiesRefresh = now
+
+  // Only refresh proxies data when user is on the Proxies page.
+  const routeName = router.currentRoute.value?.name
+  if (routeName !== ROUTE_NAME.proxies) return
+
+  if (proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER) {
+    fetchProxyProvidersOnly()
+  } else {
+    fetchProxies()
+  }
 })
 
 const { checkUIUpdate } = useSettings()
