@@ -54,10 +54,10 @@
       <div v-else-if="providersPanelBusy" class="text-sm opacity-70">…</div>
       <div v-else>
         <div v-if="providersPanelError" class="text-xs text-error">{{ providersPanelError }}</div>
-        <div v-else-if="!providersPanelList.length" class="text-sm opacity-70">—</div>
+        <div v-else-if="!providersPanelRenderList.length" class="text-sm opacity-70">—</div>
         <div v-else class="flex flex-col gap-2">
           <div
-            v-for="p in providersPanelList"
+            v-for="p in providersPanelRenderList"
             :key="p.name"
             class="rounded-lg border border-base-content/10 bg-base-200/40 p-2"
           >
@@ -774,6 +774,7 @@ import { decodeB64Utf8 } from '@/helper/b64'
 import { activeBackend } from '@/store/setup'
 import { agentEnabled, agentUrl } from '@/store/agent'
 import { proxyProviderPanelUrlMap } from '@/store/settings'
+import { proxyProviederList } from '@/store/proxies'
 import { userLimitProfiles } from '@/store/userLimitProfiles'
 import { userLimitSnapshots } from '@/store/userLimitSnapshots'
 import { autoDisconnectLimitedUsers, hardBlockLimitedUsers, managedLanDisallowedCidrs, userLimits } from '@/store/userLimits'
@@ -848,6 +849,50 @@ const copyRouterUiUrl = async (asYaml: boolean) => {
 const providersPanelBusy = ref(false)
 const providersPanelError = ref('')
 const providersPanelList = ref<Array<{ name: string; url?: string; host?: string; port?: string; sslNotAfter?: string }>>([])
+
+// Render list should include *all* providers known to UI (proxyProviederList), even if agent SSL probe returns only a subset.
+// Also include any providers that exist only in the synced panel-url map (so users can set URLs even before providers load).
+const providersPanelRenderList = computed(() => {
+  const names = new Set<string>()
+
+  try {
+    for (const p of (proxyProviederList.value || []) as any[]) {
+      const name = String(p?.name || '').trim()
+      if (!name) continue
+      if (name === 'default') continue
+      if (p?.vehicleType === 'Compatible') continue
+      names.add(name)
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    for (const k of Object.keys(proxyProviderPanelUrlMap.value || {})) {
+      const name = String(k || '').trim()
+      if (!name) continue
+      names.add(name)
+    }
+  } catch {
+    // ignore
+  }
+
+  const byName = new Map<string, any>()
+  for (const it of (providersPanelList.value || []) as any[]) {
+    const name = String(it?.name || '').trim()
+    if (!name) continue
+    byName.set(name, it)
+    names.add(name)
+  }
+
+  return Array.from(names)
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => {
+      const it = byName.get(name)
+      if (it) return it
+      return { name }
+    })
+})
 
 const fmtSslPanel = (v: any) => {
   const d = parseDateMaybe(v)
