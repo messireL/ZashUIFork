@@ -98,39 +98,26 @@
 					  <tr v-for="p in providersPanelRenderList" :key="p.name">
 						<td class="font-mono text-xs">
               <div class="flex items-center gap-2">
-                <details class="dropdown dropdown-end" @click.stop>
+                <details class="dropdown dropdown-end shrink-0" @click.stop>
                   <summary
-                    class="btn btn-ghost btn-xs h-7 min-w-[40px] rounded-md px-2"
+                    class="btn btn-ghost btn-xs h-7 w-10 shrink-0 px-0"
                     @click.stop
                     :title="$t('providerIcon')"
                   >
-                    <template v-if="providerIconKind(p.name) === 'flag'">
-                      <span
-                        class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/60 px-2 py-0.5 text-[13px] leading-none"
-                      >
-                        {{ providerIconFlag(p.name) }}
-                      </span>
-                    </template>
-                    <template v-else-if="providerIconKind(p.name) === 'globe'">
-                      <span
-                        class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/60 px-2 py-0.5 text-[13px] leading-none"
-                      >
-                        🌐
-                      </span>
-                    </template>
                     <span
-                      v-else
-                      class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/30 px-2 py-0.5 text-[13px] leading-none opacity-60"
-                      >—</span>
+                      class="inline-flex h-6 min-w-9 items-center justify-center whitespace-nowrap rounded-md border border-base-300/70 bg-base-200/40 px-2 text-[12px] font-semibold leading-none tracking-wide"
+                    >
+                      {{ providerIconLabel(p.name) }}
+                    </span>
                   </summary>
                   <div class="dropdown-content z-[999] mt-2 w-72 rounded-box bg-base-200 p-2 shadow ring-1 ring-base-300">
                     <div class="text-[11px] opacity-70">{{ $t('providerIconTip') }}</div>
                     <div class="mt-2 flex flex-wrap gap-1">
                       <button type="button" class="btn btn-ghost btn-xs px-2" @click.stop="(e) => pickProviderIcon(e, p.name, '')">
-                        <span class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/30 px-2 py-0.5 text-[13px] leading-none opacity-60">—</span>
+                        <span class="inline-flex h-6 min-w-9 items-center justify-center whitespace-nowrap rounded-md border border-base-300/50 bg-base-200/30 px-2 text-[12px] font-semibold leading-none tracking-wide opacity-70">—</span>
                       </button>
                       <button type="button" class="btn btn-ghost btn-xs px-2" @click.stop="(e) => pickProviderIcon(e, p.name, 'globe')">
-                        <span class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/60 px-2 py-0.5 text-[13px] leading-none">🌐</span>
+                        <span class="inline-flex h-6 min-w-9 items-center justify-center whitespace-nowrap rounded-md border border-base-300/70 bg-base-200/40 px-2 text-[12px] font-semibold leading-none tracking-wide">🌐</span>
                       </button>
                       <button
                         v-for="cc in providerIconCountries"
@@ -140,7 +127,7 @@
                         @click.stop="(e) => pickProviderIcon(e, p.name, cc)"
                         :title="cc"
                       >
-                        <span class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/60 px-2 py-0.5 text-[13px] leading-none">
+                        <span class="inline-flex h-6 min-w-9 items-center justify-center whitespace-nowrap rounded-md border border-base-300/70 bg-base-200/40 px-2 text-[12px] font-semibold leading-none tracking-wide">
                           {{ countryCodeToFlagEmoji(cc) || cc }}
                         </span>
                       </button>
@@ -1492,6 +1479,16 @@ const providerIconFlag = (name: string): string => {
   return countryCodeToFlagEmoji(v) || ''
 }
 
+
+
+const providerIconLabel = (name: string): string => {
+  const v = getProviderIconRaw(name)
+  if (!v) return '—'
+  if (v === 'globe') return '🌐'
+  // Prefer emoji if available; some OSes render flags as plain letters (DE/TR/etc),
+  // so the badge styling above keeps layout stable either way.
+  return countryCodeToFlagEmoji(v) || v
+}
 const setProviderIcon = (name: string, icon: string) => {
   const k = String(name || '').trim()
   if (!k) return
