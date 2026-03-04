@@ -98,6 +98,19 @@ export type UsersDbDiff = {
   }
 }
 
+export type UsersDbSmartChoiceMode = 'local' | 'remote' | 'custom'
+
+export type UsersDbSmartMergeChoices = {
+  // Keyed by SourceIPLabel.key
+  labels?: Record<string, { mode: UsersDbSmartChoiceMode; customLabel?: string }>
+  // Keyed by provider name
+  urls?: Record<string, { mode: UsersDbSmartChoiceMode; customUrl?: string }>
+  // Global SSL near-expiry days
+  sslDefault?: { mode: UsersDbSmartChoiceMode; customDays?: number }
+  // Keyed by provider name
+  warnDays?: Record<string, { mode: UsersDbSmartChoiceMode; customDays?: number }>
+}
+
 export type UsersDbHistoryItem = {
   rev: number
   updatedAt?: string
@@ -740,6 +753,140 @@ export const usersDbResolvePush = async () => {
   // Overwrite router with our local data (using latest remote rev).
   const rev = Number(usersDbConflictRemoteRev.value || usersDbRemoteRev.value) || 0
   const res = await usersDbPushNow(rev, getLocalPayload())
+  if (res.ok) clearConflictContext()
+  return res
+}
+
+const smartMergePayload = (remote: UsersDbPayload, local: UsersDbPayload, choices?: UsersDbSmartMergeChoices): UsersDbPayload => {
+  const rN = normalizePayload(remote)
+  const lN = normalizePayload(local)
+
+  const labelChoices = (choices?.labels || {}) as Record<string, any>
+  const urlChoices = (choices?.urls || {}) as Record<string, any>
+  const warnChoices = (choices?.warnDays || {}) as Record<string, any>
+  const sslChoice = choices?.sslDefault as any
+
+  // ---- labels (by key) ----
+  const rByKey = new Map<string, SourceIPLabel>()
+  const lByKey = new Map<string, SourceIPLabel>()
+  for (const it of rN.labels || []) {
+    const k = String(it?.key || '').trim()
+    if (k) rByKey.set(k, it as any)
+  }
+  for (const it of lN.labels || []) {
+    const k = String(it?.key || '').trim()
+    if (k) lByKey.set(k, it as any)
+  }
+
+  const keys = Array.from(new Set<string>([...rByKey.keys(), ...lByKey.keys()])).sort((a, b) => a.localeCompare(b))
+
+  const mergedLabels: SourceIPLabel[] = []
+  for (const key of keys) {
+    const r = rByKey.get(key)
+    const l = lByKey.get(key)
+
+    if (r && l) {
+      const ch = labelChoices[key] || { mode: 'local' }
+      const mode = (ch?.mode || 'local') as UsersDbSmartChoiceMode
+
+      if (mode === 'remote') mergedLabels.push(r)
+      else if (mode === 'custom') {
+        const base: any = l || r
+        const customLabel = String(ch?.customLabel ?? base?.label ?? '').trim()
+        const out: any = { ...(base || {}) }
+        if (customLabel) out.label = customLabel
+        mergedLabels.push(out)
+      } else {
+        mergedLabels.push(l)
+      }
+    } else if (l) mergedLabels.push(l)
+    else if (r) mergedLabels.push(r)
+  }
+
+  // ---- provider panel URLs ----
+  const mergedUrls: Record<string, string> = { ...(rN.providerPanelUrls || {}) }
+  for (const [k, v] of Object.entries(lN.providerPanelUrls || {})) {
+    const kk = String(k || '').trim()
+    if (!kk) continue
+    const lv = String(v || '').trim()
+    const rv = String(mergedUrls[kk] || '').trim()
+
+    if (!rv) {
+      if (lv) mergedUrls[kk] = lv
+      continue
+    }
+
+    if (lv && rv && lv !== rv) {
+      const ch = urlChoices[kk] || { mode: 'local' }
+      const mode = (ch?.mode || 'local') as UsersDbSmartChoiceMode
+      if (mode === 'remote') {
+        // keep router
+      } else if (mode === 'custom') {
+        const customUrl = String(ch?.customUrl ?? '').trim()
+        if (customUrl) mergedUrls[kk] = customUrl
+      } else {
+        mergedUrls[kk] = lv
+      }
+    } else if (lv) {
+      mergedUrls[kk] = lv
+    }
+  }
+
+  // ---- ssl default ----
+  let mergedSslNear = sanitizeInt(lN.sslNearExpiryDaysDefault, rN.sslNearExpiryDaysDefault || 2, 0, 365)
+  if (sslChoice) {
+    const mode = (sslChoice?.mode || 'local') as UsersDbSmartChoiceMode
+    if (mode === 'remote') mergedSslNear = sanitizeInt(rN.sslNearExpiryDaysDefault, 2, 0, 365)
+    else if (mode === 'custom') mergedSslNear = sanitizeInt(sslChoice?.customDays, mergedSslNear, 0, 365)
+    else mergedSslNear = sanitizeInt(lN.sslNearExpiryDaysDefault, mergedSslNear, 0, 365)
+  }
+
+  // ---- provider warn days ----
+  const mergedWarn: Record<string, number> = { ...(rN.providerSslWarnDaysMap || {}) }
+  for (const [k, v] of Object.entries(lN.providerSslWarnDaysMap || {})) {
+    const kk = String(k || '').trim()
+    if (!kk) continue
+    const lNum = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
+    const rNumRaw = mergedWarn[kk]
+    const rNum = typeof rNumRaw === 'number' ? rNumRaw : typeof rNumRaw === 'string' ? Number(rNumRaw as any) : NaN
+
+    if (!Number.isFinite(rNum)) {
+      if (Number.isFinite(lNum)) mergedWarn[kk] = Math.max(0, Math.min(365, Math.trunc(lNum)))
+      continue
+    }
+
+    if (Number.isFinite(lNum) && Math.trunc(lNum) !== Math.trunc(rNum)) {
+      const ch = warnChoices[kk] || { mode: 'local' }
+      const mode = (ch?.mode || 'local') as UsersDbSmartChoiceMode
+      if (mode === 'remote') {
+        // keep router
+      } else if (mode === 'custom') {
+        const customDays = sanitizeInt(ch?.customDays, Math.trunc(lNum), 0, 365)
+        mergedWarn[kk] = customDays
+      } else {
+        mergedWarn[kk] = Math.max(0, Math.min(365, Math.trunc(lNum)))
+      }
+    } else if (Number.isFinite(lNum)) {
+      mergedWarn[kk] = Math.max(0, Math.min(365, Math.trunc(lNum)))
+    }
+  }
+
+  return normalizePayload({
+    labels: sanitizeLabels(mergedLabels as any),
+    providerPanelUrls: sanitizeUrlMap(mergedUrls),
+    sslNearExpiryDaysDefault: mergedSslNear,
+    providerSslWarnDaysMap: sanitizeNumMap(mergedWarn),
+  })
+}
+
+export const usersDbResolveSmartMerge = async (choices?: UsersDbSmartMergeChoices) => {
+  const remotePayload = getConflictRemotePayload()
+  if (!remotePayload) return { ok: false, error: 'no-conflict' }
+  const merged = smartMergePayload(remotePayload, getLocalPayload(), choices)
+  suppressPushCount = 4
+  setLocalFromPayload(merged)
+  const rev = Number(usersDbConflictRemoteRev.value || usersDbRemoteRev.value) || 0
+  const res = await usersDbPushNow(rev, merged)
   if (res.ok) clearConflictContext()
   return res
 }

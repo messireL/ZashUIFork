@@ -642,9 +642,212 @@
           <button type="button" class="btn btn-xs" @click="usersDbResolvePull" :disabled="usersDbBusy">
             {{ $t('usersDbAcceptRouter') }}
           </button>
-          <button type="button" class="btn btn-xs btn-outline" @click="usersDbResolvePush" :disabled="usersDbBusy">
-            {{ $t('usersDbAcceptLocal') }}
+          <button type="button" class="btn btn-xs btn-ghost" @click="usersDbSmartOpen = !usersDbSmartOpen" :disabled="usersDbBusy">
+            {{ $t('usersDbSmartMerge') }}
           </button>
+        </div>
+
+        <div v-if="usersDbSmartOpen" class="mt-2 rounded-lg border border-base-content/10 bg-base-200/40 p-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="text-xs font-semibold">{{ $t('usersDbSmartMergeTitle') }}</div>
+            <button type="button" class="btn btn-xs btn-ghost" @click="usersDbSmartOpen = false" :disabled="usersDbBusy">✕</button>
+          </div>
+          <div class="mt-1 text-[11px] opacity-70">{{ $t('usersDbSmartMergeDesc') }}</div>
+
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <button type="button" class="btn btn-xs" @click="usersDbSmartApply" :disabled="usersDbBusy">
+              {{ $t('usersDbSmartMergeAndPush') }}
+            </button>
+          </div>
+
+          <div class="mt-2 space-y-4">
+            <div v-if="usersDbConflictDiff.labels.changed.length">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="font-semibold text-xs">{{ $t('usersDbLabels') }}: {{ $t('usersDbChanged') }} ({{ usersDbConflictDiff.labels.changed.length }})</div>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="btn btn-ghost btn-xs" @click="usersDbSmartSetAll('labels','local')" :disabled="usersDbBusy">{{ $t('usersDbSetAllLocal') }}</button>
+                  <button type="button" class="btn btn-ghost btn-xs" @click="usersDbSmartSetAll('labels','remote')" :disabled="usersDbBusy">{{ $t('usersDbSetAllRouter') }}</button>
+                </div>
+              </div>
+
+              <div class="mt-1 overflow-x-auto">
+                <table class="table table-xs">
+                  <thead>
+                    <tr>
+                      <th style="width: 220px">key</th>
+                      <th style="width: 260px">{{ $t('router') }}</th>
+                      <th style="width: 260px">{{ $t('local') }}</th>
+                      <th>{{ $t('actions') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="it in usersDbConflictDiff.labels.changed" :key="it.key">
+                      <td class="font-mono">{{ it.key }}</td>
+                      <td class="max-w-[260px] truncate">{{ it.remote.label }}</td>
+                      <td class="max-w-[260px] truncate">{{ it.local.label }}</td>
+                      <td class="min-w-[260px]">
+                        <div class="flex flex-wrap items-center gap-3">
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-l-${it.key}`" value="remote" v-model="usersDbSmartChoices.labels[it.key].mode" />
+                            <span class="text-[11px]">{{ $t('router') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-l-${it.key}`" value="local" v-model="usersDbSmartChoices.labels[it.key].mode" />
+                            <span class="text-[11px]">{{ $t('local') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-l-${it.key}`" value="custom" v-model="usersDbSmartChoices.labels[it.key].mode" />
+                            <span class="text-[11px]">{{ $t('custom') }}</span>
+                          </label>
+                        </div>
+                        <input
+                          v-if="usersDbSmartChoices.labels[it.key].mode === 'custom'"
+                          type="text"
+                          class="input input-bordered input-xs mt-1 w-full"
+                          v-model="usersDbSmartChoices.labels[it.key].customLabel"
+                          :placeholder="it.local.label"
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div v-if="usersDbConflictDiff.urls.changed.length">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="font-semibold text-xs">{{ $t('usersDbPanels') }}: {{ $t('usersDbChanged') }} ({{ usersDbConflictDiff.urls.changed.length }})</div>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="btn btn-ghost btn-xs" @click="usersDbSmartSetAll('urls','local')" :disabled="usersDbBusy">{{ $t('usersDbSetAllLocal') }}</button>
+                  <button type="button" class="btn btn-ghost btn-xs" @click="usersDbSmartSetAll('urls','remote')" :disabled="usersDbBusy">{{ $t('usersDbSetAllRouter') }}</button>
+                </div>
+              </div>
+
+              <div class="mt-1 overflow-x-auto">
+                <table class="table table-xs">
+                  <thead>
+                    <tr>
+                      <th style="width: 200px">{{ $t('provider') }}</th>
+                      <th style="width: 320px">{{ $t('router') }}</th>
+                      <th style="width: 320px">{{ $t('local') }}</th>
+                      <th>{{ $t('actions') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="it in usersDbConflictDiff.urls.changed" :key="it.provider">
+                      <td class="font-mono">{{ it.provider }}</td>
+                      <td class="max-w-[320px] truncate">{{ it.remote }}</td>
+                      <td class="max-w-[320px] truncate">{{ it.local }}</td>
+                      <td class="min-w-[260px]">
+                        <div class="flex flex-wrap items-center gap-3">
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-u-${it.provider}`" value="remote" v-model="usersDbSmartChoices.urls[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('router') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-u-${it.provider}`" value="local" v-model="usersDbSmartChoices.urls[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('local') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-u-${it.provider}`" value="custom" v-model="usersDbSmartChoices.urls[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('custom') }}</span>
+                          </label>
+                        </div>
+                        <input
+                          v-if="usersDbSmartChoices.urls[it.provider].mode === 'custom'"
+                          type="text"
+                          class="input input-bordered input-xs mt-1 w-full"
+                          v-model="usersDbSmartChoices.urls[it.provider].customUrl"
+                          :placeholder="it.local"
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div v-if="usersDbConflictDiff.ssl.defaultDays.changed">
+              <div class="font-semibold text-xs">{{ $t('sslWarnThreshold') }}: {{ $t('usersDbChanged') }}</div>
+              <div class="mt-1 flex flex-wrap items-center gap-3">
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input class="radio radio-xs" type="radio" name="udb-ssl-default" value="remote" v-model="usersDbSmartChoices.sslDefault.mode" />
+                  <span class="text-[11px]">{{ $t('router') }}: <span class="font-mono">{{ usersDbConflictDiff.ssl.defaultDays.remote }}</span></span>
+                </label>
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input class="radio radio-xs" type="radio" name="udb-ssl-default" value="local" v-model="usersDbSmartChoices.sslDefault.mode" />
+                  <span class="text-[11px]">{{ $t('local') }}: <span class="font-mono">{{ usersDbConflictDiff.ssl.defaultDays.local }}</span></span>
+                </label>
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input class="radio radio-xs" type="radio" name="udb-ssl-default" value="custom" v-model="usersDbSmartChoices.sslDefault.mode" />
+                  <span class="text-[11px]">{{ $t('custom') }}</span>
+                </label>
+
+                <input
+                  v-if="usersDbSmartChoices.sslDefault.mode === 'custom'"
+                  type="number"
+                  min="0"
+                  max="365"
+                  class="input input-bordered input-xs w-24"
+                  v-model.number="usersDbSmartChoices.sslDefault.customDays"
+                />
+              </div>
+            </div>
+
+            <div v-if="usersDbConflictDiff.ssl.providerDays.changed.length">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="font-semibold text-xs">{{ $t('sslWarnDays') }}: {{ $t('usersDbChanged') }} ({{ usersDbConflictDiff.ssl.providerDays.changed.length }})</div>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="btn btn-ghost btn-xs" @click="usersDbSmartSetAll('warnDays','local')" :disabled="usersDbBusy">{{ $t('usersDbSetAllLocal') }}</button>
+                  <button type="button" class="btn btn-ghost btn-xs" @click="usersDbSmartSetAll('warnDays','remote')" :disabled="usersDbBusy">{{ $t('usersDbSetAllRouter') }}</button>
+                </div>
+              </div>
+
+              <div class="mt-1 overflow-x-auto">
+                <table class="table table-xs">
+                  <thead>
+                    <tr>
+                      <th style="width: 200px">{{ $t('provider') }}</th>
+                      <th style="width: 120px">{{ $t('router') }}</th>
+                      <th style="width: 120px">{{ $t('local') }}</th>
+                      <th>{{ $t('actions') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="it in usersDbConflictDiff.ssl.providerDays.changed" :key="it.provider">
+                      <td class="font-mono">{{ it.provider }}</td>
+                      <td class="font-mono">{{ it.remote }}</td>
+                      <td class="font-mono">{{ it.local }}</td>
+                      <td class="min-w-[260px]">
+                        <div class="flex flex-wrap items-center gap-3">
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-w-${it.provider}`" value="remote" v-model="usersDbSmartChoices.warnDays[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('router') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-w-${it.provider}`" value="local" v-model="usersDbSmartChoices.warnDays[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('local') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-w-${it.provider}`" value="custom" v-model="usersDbSmartChoices.warnDays[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('custom') }}</span>
+                          </label>
+                        </div>
+                        <input
+                          v-if="usersDbSmartChoices.warnDays[it.provider].mode === 'custom'"
+                          type="number"
+                          min="0"
+                          max="365"
+                          class="input input-bordered input-xs mt-1 w-24"
+                          v-model.number="usersDbSmartChoices.warnDays[it.provider].customDays"
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
 
         <details class="mt-2">
@@ -945,6 +1148,7 @@ import {
   usersDbResolveMerge,
   usersDbResolvePull,
   usersDbResolvePush,
+  usersDbResolveSmartMerge,
   usersDbRestoreRev,
   usersDbFetchHistory,
   usersDbSyncEnabled,
@@ -1319,6 +1523,71 @@ const usersDbConflictSummary = computed(() => {
   }
 })
 
+
+// --- Users DB: smart conflict merge (per-row) ---
+type SmartChoiceMode = 'local' | 'remote' | 'custom'
+type SmartChoices = {
+  labels: Record<string, { mode: SmartChoiceMode; customLabel?: string }>
+  urls: Record<string, { mode: SmartChoiceMode; customUrl?: string }>
+  warnDays: Record<string, { mode: SmartChoiceMode; customDays?: number }>
+  sslDefault: { mode: SmartChoiceMode; customDays?: number }}
+
+const usersDbSmartOpen = ref(false)
+const usersDbSmartChoices = ref<SmartChoices>({
+  labels: {},
+  urls: {},
+  warnDays: {},
+  sslDefault: { mode: 'local' },
+})
+
+const initUsersDbSmartChoices = () => {
+  const d = usersDbConflictDiff.value
+  if (!d) return
+  const labels: SmartChoices['labels'] = {}
+  const urls: SmartChoices['urls'] = {}
+  const warnDays: SmartChoices['warnDays'] = {}
+
+  for (const it of d.labels.changed || []) labels[String(it.key)] = { mode: 'local' }
+  for (const it of d.urls.changed || []) urls[String(it.provider)] = { mode: 'local' }
+  for (const it of d.ssl.providerDays.changed || []) warnDays[String(it.provider)] = { mode: 'local' }
+
+  usersDbSmartChoices.value = {
+    labels,
+    urls,
+    warnDays,
+    sslDefault: { mode: 'local' },
+  }
+}
+
+const usersDbSmartSetAll = (section: 'labels' | 'urls' | 'warnDays', mode: SmartChoiceMode) => {
+  const v = usersDbSmartChoices.value
+  const obj: any = (v as any)[section] || {}
+  for (const k of Object.keys(obj)) {
+    obj[k] = { ...(obj[k] || {}), mode }
+  }
+  ;(usersDbSmartChoices.value as any)[section] = obj
+}
+
+const usersDbSmartApply = async () => {
+  const res = await usersDbResolveSmartMerge(usersDbSmartChoices.value as any)
+  if (res?.ok) {
+    usersDbSmartOpen.value = false
+    showNotification({ content: 'done', type: 'alert-success', timeout: 1800 })
+  } else {
+    showNotification({ content: String(res?.error || 'operationFailed'), type: 'alert-error', timeout: 2600 })
+  }
+}
+
+watch(
+  () => usersDbSmartOpen.value,
+  (v) => {
+    if (v) initUsersDbSmartChoices()
+  },
+)
+
+watch(usersDbHasConflict, (v) => {
+  if (!v) usersDbSmartOpen.value = false
+})
 
 const refreshUsersDbHistory = async () => {
   if (!agentEnabled.value || !usersDbSyncEnabled.value) return
