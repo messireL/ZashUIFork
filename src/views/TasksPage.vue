@@ -100,30 +100,49 @@
               <div class="flex items-center gap-2">
                 <details class="dropdown dropdown-end" @click.stop>
                   <summary
-                    class="btn btn-ghost btn-xs btn-circle"
+                    class="btn btn-ghost btn-xs h-7 min-w-[40px] rounded-md px-2"
                     @click.stop
                     :title="$t('providerIcon')"
                   >
                     <template v-if="providerIconKind(p.name) === 'flag'">
-                      <span class="text-base leading-none">{{ providerIconFlag(p.name) }}</span>
+                      <span
+                        class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/60 px-2 py-0.5 text-[13px] leading-none"
+                      >
+                        {{ providerIconFlag(p.name) }}
+                      </span>
                     </template>
-                    <GlobeAltIcon v-else-if="providerIconKind(p.name) === 'globe'" class="h-4 w-4" />
-                    <span v-else class="text-xs opacity-60">—</span>
+                    <template v-else-if="providerIconKind(p.name) === 'globe'">
+                      <span
+                        class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/60 px-2 py-0.5 text-[13px] leading-none"
+                      >
+                        🌐
+                      </span>
+                    </template>
+                    <span
+                      v-else
+                      class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/30 px-2 py-0.5 text-[13px] leading-none opacity-60"
+                      >—</span>
                   </summary>
                   <div class="dropdown-content z-[999] mt-2 w-72 rounded-box bg-base-200 p-2 shadow ring-1 ring-base-300">
                     <div class="text-[11px] opacity-70">{{ $t('providerIconTip') }}</div>
                     <div class="mt-2 flex flex-wrap gap-1">
-                      <button type="button" class="btn btn-ghost btn-xs" @click.stop="(e) => pickProviderIcon(e, p.name, '')">—</button>
-                      <button type="button" class="btn btn-ghost btn-xs" @click.stop="(e) => pickProviderIcon(e, p.name, 'globe')">🌐</button>
+                      <button type="button" class="btn btn-ghost btn-xs px-2" @click.stop="(e) => pickProviderIcon(e, p.name, '')">
+                        <span class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/30 px-2 py-0.5 text-[13px] leading-none opacity-60">—</span>
+                      </button>
+                      <button type="button" class="btn btn-ghost btn-xs px-2" @click.stop="(e) => pickProviderIcon(e, p.name, 'globe')">
+                        <span class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/60 px-2 py-0.5 text-[13px] leading-none">🌐</span>
+                      </button>
                       <button
                         v-for="cc in providerIconCountries"
                         :key="cc"
                         type="button"
-                        class="btn btn-ghost btn-xs"
+                        class="btn btn-ghost btn-xs px-2"
                         @click.stop="(e) => pickProviderIcon(e, p.name, cc)"
                         :title="cc"
                       >
-                        {{ countryCodeToFlagEmoji(cc) || cc }}
+                        <span class="inline-flex min-w-8 items-center justify-center whitespace-nowrap rounded-md bg-base-300/60 px-2 py-0.5 text-[13px] leading-none">
+                          {{ countryCodeToFlagEmoji(cc) || cc }}
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -1229,7 +1248,6 @@ import { useI18n } from 'vue-i18n'
 import router from '@/router'
 import { ROUTE_NAME } from '@/constant'
 import { ChevronDownIcon } from '@heroicons/vue/20/solid'
-import { GlobeAltIcon } from '@heroicons/vue/24/outline'
 import {
   usersDbConflictCount,
   usersDbConflictDiff,

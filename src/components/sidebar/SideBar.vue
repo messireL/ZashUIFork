@@ -65,6 +65,15 @@
         <div class="card">
           <CommonSidebar />
         </div>
+        <div class="flex w-full items-center justify-center">
+          <button
+            class="btn btn-ghost btn-sm w-full justify-start bg-base-100/40"
+            @click="isSidebarCollapsed = true"
+          >
+            <ArrowLeftCircleIcon class="h-5 w-5" />
+            <span class="ml-1">{{ $t('collapseMenu') }}</span>
+          </button>
+        </div>
       </template>
       <div class="px-3 pb-1 text-[10px] opacity-60" :class="isSidebarCollapsed ? 'text-center' : ''">
         UI {{ zashboardVersion }} (Netcraze Ultra/Mihomo)
@@ -82,8 +91,7 @@ import { useTooltip } from '@/helper/tooltip'
 import router from '@/router'
 import { isSidebarCollapsed, showStatisticsWhenSidebarCollapsed } from '@/store/settings'
 import { globalSearchOpen } from '@/store/globalSearch'
-import { ArrowRightCircleIcon } from '@heroicons/vue/24/outline'
-import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
+import { ArrowLeftCircleIcon, ArrowRightCircleIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
 import { twMerge } from 'tailwind-merge'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
