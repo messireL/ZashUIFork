@@ -228,27 +228,35 @@
 
         <div class="p-3 flex flex-col gap-3 overflow-y-auto h-full">
           <div class="flex flex-wrap items-center gap-2">
-            <button
-              class="btn btn-xs"
-              :class="filterMode === 'only' && isSameFocus(filterFocus, focus) ? 'btn-active' : 'btn-outline'"
-              :disabled="focus.kind !== 'value'"
-              @click="applyOnly"
-            >
-              <FunnelIcon class="h-4 w-4" />
-              {{ $t('topologyOnlyThis') }}
-            </button>
-            <button
-              class="btn btn-xs"
-              :class="filterMode === 'exclude' && isSameFocus(filterFocus, focus) ? 'btn-active' : 'btn-outline'"
-              :disabled="focus.kind !== 'value'"
-              @click="applyExclude"
-            >
-              <NoSymbolIcon class="h-4 w-4" />
-              {{ $t('topologyExcludeThis') }}
-            </button>
-            <button class="btn btn-xs btn-ghost" :disabled="filterMode === 'none'" @click="clearFilter">
-              {{ $t('clear') }}
-            </button>
+            <div class="join">
+              <button
+                class="btn btn-xs join-item"
+                :class="filterMode === 'none' ? 'btn-active' : 'btn-outline'"
+                :disabled="focus.kind !== 'value'"
+                @click="applyOpenForFocus"
+                :title="$t('topologyShowAll')"
+              >
+                <PresentationChartLineIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn btn-xs join-item"
+                :class="filterMode === 'only' && isSameFocus(filterFocus, focus) ? 'btn-active' : 'btn-outline'"
+                :disabled="focus.kind !== 'value'"
+                @click="applyOnly"
+                :title="$t('topologyOnlyThis')"
+              >
+                <FunnelIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn btn-xs join-item"
+                :class="filterMode === 'exclude' && isSameFocus(filterFocus, focus) ? 'btn-active' : 'btn-outline'"
+                :disabled="focus.kind !== 'value'"
+                @click="applyExclude"
+                :title="$t('topologyExcludeThis')"
+              >
+                <NoSymbolIcon class="h-4 w-4" />
+              </button>
+            </div>
 
             <button
               class="btn btn-xs"
@@ -300,16 +308,39 @@
                 <div class="font-semibold">{{ $t('topologyTopUsers') }}</div>
                 <div class="divider my-1" />
                 <div class="space-y-1">
-                  <button
-                    v-for="it in topUsers"
-                    :key="it.key"
-                    class="btn btn-ghost btn-sm w-full justify-between"
-                    @click="setFocus({ stage: 'C', kind: 'value', value: it.key })"
-                    :title="it.title"
-                  >
-                    <span class="truncate text-left">{{ it.label }}</span>
-                    <span class="ml-2 shrink-0 text-xs opacity-70">{{ it.metric }}</span>
-                  </button>
+                  <div v-for="it in topUsers" :key="it.key" class="flex items-center gap-2">
+                    <button
+                      class="btn btn-ghost btn-sm flex-1 justify-between"
+                      @click="applyListOpen('C', it.key)"
+                      :title="it.title"
+                    >
+                      <span class="truncate text-left">{{ it.label }}</span>
+                      <span class="ml-2 shrink-0 text-xs opacity-70">{{ it.metric }}</span>
+                    </button>
+                    <div class="join shrink-0">
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListOpen('C', it.key)"
+                        :title="$t('topologyShowAll')"
+                      >
+                        <PresentationChartLineIcon class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('only', 'C', it.key)"
+                        :title="$t('topologyOnlyThis')"
+                      >
+                        <FunnelIcon class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListFilter('exclude', 'C', it.key)"
+                        :title="$t('topologyExcludeThis')"
+                      >
+                        <NoSymbolIcon class="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                   <div v-if="!topUsers.length" class="text-sm opacity-70">—</div>
                 </div>
               </div>
@@ -323,13 +354,20 @@
                   <div v-for="it in topRules" :key="it.key" class="flex items-center gap-2">
                     <button
                       class="btn btn-ghost btn-sm flex-1 justify-between"
-                      @click="setFocus({ stage: 'R', kind: 'value', value: it.key })"
+                      @click="applyListOpen('R', it.key)"
                       :title="it.title"
                     >
                       <span class="truncate text-left">{{ it.label }}</span>
                       <span class="ml-2 shrink-0 text-xs opacity-70">{{ it.metric }}</span>
                     </button>
                     <div class="join shrink-0">
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListOpen('R', it.key)"
+                        :title="$t('topologyShowAll')"
+                      >
+                        <PresentationChartLineIcon class="h-4 w-4" />
+                      </button>
                       <button
                         class="btn btn-ghost btn-xs join-item"
                         @click.stop="applyListFilter('only', 'R', it.key)"
@@ -357,9 +395,22 @@
                 <div class="divider my-1" />
                 <div class="space-y-1">
                   <div v-for="it in topProviders" :key="it.key" class="flex items-center gap-2">
-                    <span class="min-w-0 flex-1 truncate" :title="it.title">{{ it.label }}</span>
-                    <span class="shrink-0 text-xs opacity-70">{{ it.metric }}</span>
+                    <button
+                      class="btn btn-ghost btn-sm flex-1 justify-between"
+                      @click="applyListOpen('P', it.key)"
+                      :title="it.title"
+                    >
+                      <span class="truncate text-left">{{ it.label }}</span>
+                      <span class="ml-2 shrink-0 text-xs opacity-70">{{ it.metric }}</span>
+                    </button>
                     <div class="join shrink-0">
+                      <button
+                        class="btn btn-ghost btn-xs join-item"
+                        @click.stop="applyListOpen('P', it.key)"
+                        :title="$t('topologyShowAll')"
+                      >
+                        <PresentationChartLineIcon class="h-4 w-4" />
+                      </button>
                       <button
                         class="btn btn-ghost btn-xs join-item"
                         @click.stop="applyListFilter('only', 'P', it.key)"
@@ -488,7 +539,7 @@ import {
 } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import type { Connection } from '@/types'
-import { ArrowDownTrayIcon, ArrowTopRightOnSquareIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, LockClosedIcon, LockOpenIcon, NoSymbolIcon, PencilIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowTopRightOnSquareIcon, ArrowUturnLeftIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, BookmarkIcon, CheckIcon, FunnelIcon, LockClosedIcon, LockOpenIcon, NoSymbolIcon, PencilIcon, PlusIcon, PresentationChartLineIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useElementSize, useStorage } from '@vueuse/core'
 import { SankeyChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -949,6 +1000,12 @@ const openFocusedMain = async () => {
     await router.push({ name: ROUTE_NAME.rules })
     return
   }
+  if (f.stage === 'P') {
+    setPendingPageFocus(ROUTE_NAME.proxies, 'provider', v)
+    closeDetails()
+    await router.push({ name: ROUTE_NAME.proxies })
+    return
+  }
   if (f.stage === 'G') {
     setPendingPageFocus(ROUTE_NAME.proxies, 'proxyGroup', v)
     closeDetails()
@@ -981,29 +1038,75 @@ const isSameFocus = (a: Focus | null, b: Focus | null) => {
   return (a.value || '') === (b.value || '')
 }
 
+const notifyFilterPinned = () => {
+  showNotification({ content: 'topologyFilterPinned', type: 'alert-info', timeout: 2200 })
+}
+
+const isFilterChangeBlocked = (mode: 'none' | 'only' | 'exclude', f: Focus | null) => {
+  if (!filterLocked.value) return false
+  if (filterMode.value === 'none') return false
+  if (mode === filterMode.value && isSameFocus(filterFocus.value, f)) return false
+  return true
+}
+
 const clearFilter = () => {
   filterMode.value = 'none'
   filterFocus.value = null
   filterLocked.value = false
 }
 
+const applyOpenForFocus = () => {
+  if (isFilterChangeBlocked('none', null)) {
+    notifyFilterPinned()
+    return
+  }
+  clearFilter()
+}
+
 const applyOnly = () => {
   if (!focus.value || focus.value.kind !== 'value') return
+  const target = { ...focus.value }
+  if (isFilterChangeBlocked('only', target)) {
+    notifyFilterPinned()
+    return
+  }
   filterMode.value = 'only'
-  filterFocus.value = { ...focus.value }
+  filterFocus.value = target
 }
 
 const applyExclude = () => {
   if (!focus.value || focus.value.kind !== 'value') return
+  const target = { ...focus.value }
+  if (isFilterChangeBlocked('exclude', target)) {
+    notifyFilterPinned()
+    return
+  }
   filterMode.value = 'exclude'
-  filterFocus.value = { ...focus.value }
+  filterFocus.value = target
+}
+
+const applyListOpen = (stage: any, value: string) => {
+  const v = String(value || '').trim()
+  if (!v) return
+  setFocus({ stage, kind: 'value', value: v } as any)
+  if (filterMode.value === 'none') return
+  if (isFilterChangeBlocked('none', null)) {
+    notifyFilterPinned()
+    return
+  }
+  clearFilter()
 }
 
 const applyListFilter = (mode: 'only' | 'exclude', stage: any, value: string) => {
   const v = String(value || '').trim()
   if (!v) return
+  const target = { stage, kind: 'value', value: v } as any
+  if (isFilterChangeBlocked(mode, target)) {
+    notifyFilterPinned()
+    return
+  }
   filterMode.value = mode
-  filterFocus.value = { stage, kind: 'value', value: v } as any
+  filterFocus.value = target
 }
 
 const otherLabels = computed(() => {
