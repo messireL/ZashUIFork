@@ -4,6 +4,8 @@
     <template v-slot:title="{ open }">
       <div class="flex items-center justify-between gap-2 rounded-xl px-2 py-1" :class="open ? 'bg-base-200 ring-1 ring-base-300' : ''">
         <div class="text-xl font-medium">
+          <span v-if="providerIconKind === 'flag'" class="mr-1 align-middle">{{ providerIconFlag }}</span>
+          <GlobeAltIcon v-else-if="providerIconKind === 'globe'" class="h-5 w-5 inline-block mr-1 align-middle opacity-80" />
           {{ proxyProvider.name }}
           <span
             v-if="providerHealth"
@@ -322,11 +324,12 @@ import { useBounceOnVisible } from '@/composables/bouncein'
 import { useRenderProxies } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
+import { countryCodeToFlagEmoji, normalizeProviderIcon } from '@/helper/providerIcon'
 import { fetchProxyProviderByNameOnly, getLatencyByName, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
 import { NOT_CONNECTED, ROUTE_NAME } from '@/constant'
-import { proxyProviderPanelUrlMap, proxyProviderSslWarnDaysMap, sslNearExpiryDaysDefault, twoColumnProxyGroup } from '@/store/settings'
-import { ArrowPathIcon, ArrowTopRightOnSquareIcon, BoltIcon, ClipboardDocumentIcon, LinkIcon, PresentationChartLineIcon } from '@heroicons/vue/24/outline'
+import { proxyProviderIconMap, proxyProviderPanelUrlMap, proxyProviderSslWarnDaysMap, sslNearExpiryDaysDefault, twoColumnProxyGroup } from '@/store/settings'
+import { ArrowPathIcon, ArrowTopRightOnSquareIcon, BoltIcon, ClipboardDocumentIcon, GlobeAltIcon, LinkIcon, PresentationChartLineIcon } from '@heroicons/vue/24/outline'
 import { ChevronDownIcon } from '@heroicons/vue/20/solid'
 import dayjs from 'dayjs'
 import { twMerge } from 'tailwind-merge'
@@ -347,6 +350,19 @@ const router = useRouter()
 const proxyProvider = computed(
   () => proxyProviederList.value.find((group) => group.name === props.name)!,
 )
+
+const providerIconRaw = computed(() => normalizeProviderIcon((proxyProviderIconMap.value || {})[props.name]))
+const providerIconKind = computed(() => {
+  const v = providerIconRaw.value
+  if (!v) return 'none' as const
+  if (v === 'globe') return 'globe' as const
+  return countryCodeToFlagEmoji(v) ? ('flag' as const) : ('none' as const)
+})
+const providerIconFlag = computed(() => {
+  const v = providerIconRaw.value
+  if (!v || v === 'globe') return ''
+  return countryCodeToFlagEmoji(v) || ''
+})
 const allProxies = computed(() => proxyProvider.value.proxies.map((node) => node.name) ?? [])
 const { renderProxies, proxiesCount } = useRenderProxies(allProxies)
 

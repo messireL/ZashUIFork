@@ -1,11 +1,12 @@
 import { agentUsersDbGetAPI, agentUsersDbHistoryAPI, agentUsersDbPutAPI, agentUsersDbRestoreAPI } from '@/api/agent'
 import { decodeB64Utf8 } from '@/helper/b64'
 import type { SourceIPLabel } from '@/types'
+import { normalizeProviderIcon } from '@/helper/providerIcon'
 import { useStorage } from '@vueuse/core'
 import { debounce, isEqual } from 'lodash'
 import { computed, ref, watch } from 'vue'
 import { agentEnabled } from './agent'
-import { proxyProviderPanelUrlMap, proxyProviderSslWarnDaysMap, sourceIPLabelList, sslNearExpiryDaysDefault } from './settings'
+import { proxyProviderIconMap, proxyProviderPanelUrlMap, proxyProviderSslWarnDaysMap, sourceIPLabelList, sslNearExpiryDaysDefault } from './settings'
 
 /**
  * Shared users database stored on the router via router-agent.
@@ -48,6 +49,11 @@ export const usersDbLastSyncedProviderPanelUrls = useStorage<Record<string, stri
   {},
 )
 
+export const usersDbLastSyncedProviderIcons = useStorage<Record<string, string>>(
+  'runtime/users-db-last-synced-provider-icons-v1',
+  {},
+)
+
 export const usersDbLastSyncedSslNearExpiryDaysDefault = useStorage<number>(
   'runtime/users-db-last-synced-ssl-near-expiry-days-default-v1',
   2,
@@ -72,6 +78,7 @@ export const usersDbSyncActive = computed(() => {
 type UsersDbPayload = {
   labels: SourceIPLabel[]
   providerPanelUrls: Record<string, string>
+  providerIcons: Record<string, string>
   sslNearExpiryDaysDefault: number
   providerSslWarnDaysMap: Record<string, number>
 }
@@ -86,6 +93,11 @@ export type UsersDbDiff = {
   urls: {
     localOnly: Array<{ provider: string; url: string }>
     remoteOnly: Array<{ provider: string; url: string }>
+    changed: Array<{ provider: string; local: string; remote: string }>
+  }
+  icons: {
+    localOnly: Array<{ provider: string; icon: string }>
+    remoteOnly: Array<{ provider: string; icon: string }>
     changed: Array<{ provider: string; local: string; remote: string }>
   }
   ssl: {
@@ -105,6 +117,8 @@ export type UsersDbSmartMergeChoices = {
   labels?: Record<string, { mode: UsersDbSmartChoiceMode; customLabel?: string }>
   // Keyed by provider name
   urls?: Record<string, { mode: UsersDbSmartChoiceMode; customUrl?: string }>
+  // Keyed by provider name
+  icons?: Record<string, { mode: UsersDbSmartChoiceMode; customIcon?: string }>
   // Global SSL near-expiry days
   sslDefault?: { mode: UsersDbSmartChoiceMode; customDays?: number }
   // Keyed by provider name
@@ -223,6 +237,20 @@ const sanitizeUrlMap = (raw: any): Record<string, string> => {
   return out
 }
 
+const sanitizeIconMap = (raw: any): Record<string, string> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    const kk = String(k || '').trim()
+    if (!kk) continue
+    const nv = normalizeProviderIcon(v)
+    if (!nv) continue
+    out[kk] = nv
+  }
+  return out
+}
+
+
 const sanitizeInt = (v: any, def: number, min: number, max: number): number => {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
   if (!Number.isFinite(n)) return def
@@ -245,9 +273,10 @@ const sanitizeNumMap = (raw: any): Record<string, number> => {
 const normalizePayload = (p: UsersDbPayload): UsersDbPayload => {
   const labels = sortLabels(sanitizeLabels(p?.labels || []))
   const urls = sanitizeUrlMap(p?.providerPanelUrls || {})
+  const icons = sanitizeIconMap((p as any)?.providerIcons || (p as any)?.proxyProviderIcons || (p as any)?.proxyProviderIconMap || {})
   const sslNear = sanitizeInt((p as any)?.sslNearExpiryDaysDefault, 2, 0, 365)
   const warnMap = sanitizeNumMap((p as any)?.providerSslWarnDaysMap)
-  return { labels, providerPanelUrls: urls, sslNearExpiryDaysDefault: sslNear, providerSslWarnDaysMap: warnMap }
+  return { labels, providerPanelUrls: urls, providerIcons: icons, sslNearExpiryDaysDefault: sslNear, providerSslWarnDaysMap: warnMap }
 }
 
 const labelSig = (x: any) => {
@@ -296,6 +325,21 @@ export const computeUsersDbDiff = (remote: UsersDbPayload, local: UsersDbPayload
     else if (rr && ll && rr !== ll) urlsChanged.push({ provider: k, local: ll, remote: rr })
   }
 
+  const iconsLocalOnly: Array<{ provider: string; icon: string }> = []
+  const iconsRemoteOnly: Array<{ provider: string; icon: string }> = []
+  const iconsChanged: Array<{ provider: string; local: string; remote: string }> = []
+
+  const rIcons = (r as any).providerIcons || {}
+  const lIcons = (l as any).providerIcons || {}
+  const iKeys = new Set<string>([...Object.keys(rIcons), ...Object.keys(lIcons)])
+  for (const k of iKeys) {
+    const rr = normalizeProviderIcon((rIcons as any)[k])
+    const ll = normalizeProviderIcon((lIcons as any)[k])
+    if (rr && !ll) iconsRemoteOnly.push({ provider: k, icon: rr })
+    else if (!rr && ll) iconsLocalOnly.push({ provider: k, icon: ll })
+    else if (rr && ll && rr != ll) iconsChanged.push({ provider: k, local: ll, remote: rr })
+  }
+
   const sslDefaultChanged = r.sslNearExpiryDaysDefault !== l.sslNearExpiryDaysDefault
 
   const rWarn = r.providerSslWarnDaysMap || {}
@@ -317,7 +361,7 @@ export const computeUsersDbDiff = (remote: UsersDbPayload, local: UsersDbPayload
   }
 
   // Safe auto-merge only if there are NO "changed" collisions.
-  const safeAutoMerge = labelsChanged.length === 0 && urlsChanged.length === 0 && !sslDefaultChanged && warnChanged.length === 0
+  const safeAutoMerge = labelsChanged.length === 0 && urlsChanged.length === 0 && iconsChanged.length === 0 && !sslDefaultChanged && warnChanged.length === 0
 
   // Stabilize for UI
   labelsLocalOnly.sort((a: any, b: any) => String(a?.key || '').localeCompare(String(b?.key || '')))
@@ -326,6 +370,9 @@ export const computeUsersDbDiff = (remote: UsersDbPayload, local: UsersDbPayload
   urlsLocalOnly.sort((a, b) => a.provider.localeCompare(b.provider))
   urlsRemoteOnly.sort((a, b) => a.provider.localeCompare(b.provider))
   urlsChanged.sort((a, b) => a.provider.localeCompare(b.provider))
+  iconsLocalOnly.sort((a, b) => a.provider.localeCompare(b.provider))
+  iconsRemoteOnly.sort((a, b) => a.provider.localeCompare(b.provider))
+  iconsChanged.sort((a, b) => a.provider.localeCompare(b.provider))
 
   warnLocalOnly.sort((a, b) => a.provider.localeCompare(b.provider))
   warnRemoteOnly.sort((a, b) => a.provider.localeCompare(b.provider))
@@ -335,6 +382,7 @@ export const computeUsersDbDiff = (remote: UsersDbPayload, local: UsersDbPayload
     safeAutoMerge,
     labels: { localOnly: labelsLocalOnly, remoteOnly: labelsRemoteOnly, changed: labelsChanged },
     urls: { localOnly: urlsLocalOnly, remoteOnly: urlsRemoteOnly, changed: urlsChanged },
+    icons: { localOnly: iconsLocalOnly, remoteOnly: iconsRemoteOnly, changed: iconsChanged },
     ssl: {
       defaultDays: { local: l.sslNearExpiryDaysDefault, remote: r.sslNearExpiryDaysDefault, changed: sslDefaultChanged },
       providerDays: { localOnly: warnLocalOnly, remoteOnly: warnRemoteOnly, changed: warnChanged },
@@ -379,6 +427,7 @@ const safeParsePayload = (raw: string): UsersDbPayload => {
       return {
         labels: sanitizeLabels(v),
         providerPanelUrls: {},
+        providerIcons: {},
         sslNearExpiryDaysDefault: 2,
         providerSslWarnDaysMap: {},
       }
@@ -401,6 +450,16 @@ const safeParsePayload = (raw: string): UsersDbPayload => {
               ? sanitizeUrlMap(v.proxyProviderPanelUrlMap)
               : {}
 
+      const iconsRaw =
+        v.providerIcons && typeof v.providerIcons === 'object'
+          ? v.providerIcons
+          : v.proxyProviderIcons && typeof v.proxyProviderIcons === 'object'
+            ? v.proxyProviderIcons
+            : v.proxyProviderIconMap && typeof v.proxyProviderIconMap === 'object'
+              ? v.proxyProviderIconMap
+              : {}
+      const icons = sanitizeIconMap(iconsRaw)
+
       const sslNear = sanitizeInt(v.sslNearExpiryDaysDefault, 2, 0, 365)
       const warnMapRaw =
         v.providerSslWarnDaysMap && typeof v.providerSslWarnDaysMap === 'object'
@@ -415,6 +474,7 @@ const safeParsePayload = (raw: string): UsersDbPayload => {
       return {
         labels,
         providerPanelUrls: urls,
+        providerIcons: icons,
         sslNearExpiryDaysDefault: sslNear,
         providerSslWarnDaysMap: warnMap,
       }
@@ -422,7 +482,7 @@ const safeParsePayload = (raw: string): UsersDbPayload => {
   } catch {
     // ignore
   }
-  return { labels: [], providerPanelUrls: {}, sslNearExpiryDaysDefault: 2, providerSslWarnDaysMap: {} }
+  return { labels: [], providerPanelUrls: {}, providerIcons: {}, sslNearExpiryDaysDefault: 2, providerSslWarnDaysMap: {} }
 }
 
 const buildPayloadForWrite = (p: UsersDbPayload) => {
@@ -430,6 +490,7 @@ const buildPayloadForWrite = (p: UsersDbPayload) => {
     version: 2,
     labels: p.labels || [],
     providerPanelUrls: p.providerPanelUrls || {},
+    providerIcons: (p as any).providerIcons || {},
     sslNearExpiryDaysDefault: p.sslNearExpiryDaysDefault,
     providerSslWarnDaysMap: p.providerSslWarnDaysMap || {},
   }
@@ -470,6 +531,15 @@ const mergePayload = (remote: UsersDbPayload, local: UsersDbPayload): UsersDbPay
     urls[kk] = vv
   }
 
+  const icons = { ...(rN.providerIcons || {}) }
+  for (const [k, v] of Object.entries(lN.providerIcons || {})) {
+    const kk = String(k || '').trim()
+    if (!kk) continue
+    const nv = normalizeProviderIcon(v)
+    if (!nv) continue
+    icons[kk] = nv
+  }
+
   const warnMap = { ...(rN.providerSslWarnDaysMap || {}) }
   for (const [k, v] of Object.entries(lN.providerSslWarnDaysMap || {})) {
     const kk = String(k || '').trim()
@@ -485,6 +555,7 @@ const mergePayload = (remote: UsersDbPayload, local: UsersDbPayload): UsersDbPay
   return normalizePayload({
     labels,
     providerPanelUrls: urls,
+    providerIcons: icons,
     sslNearExpiryDaysDefault: sslNear,
     providerSslWarnDaysMap: warnMap,
   })
@@ -496,6 +567,7 @@ const payloadEqual = (a: UsersDbPayload, b: UsersDbPayload) => {
   return (
     isEqual(an.labels || [], bn.labels || []) &&
     isEqual(an.providerPanelUrls || {}, bn.providerPanelUrls || {}) &&
+    isEqual((an as any).providerIcons || {}, (bn as any).providerIcons || {}) &&
     an.sslNearExpiryDaysDefault === bn.sslNearExpiryDaysDefault &&
     isEqual(an.providerSslWarnDaysMap || {}, bn.providerSslWarnDaysMap || {})
   )
@@ -505,6 +577,7 @@ const setLocalFromPayload = (p: UsersDbPayload) => {
   const n = normalizePayload(p)
   sourceIPLabelList.value = (n.labels || []) as any
   proxyProviderPanelUrlMap.value = (n.providerPanelUrls || {}) as any
+  proxyProviderIconMap.value = ((n as any).providerIcons || {}) as any
   sslNearExpiryDaysDefault.value = n.sslNearExpiryDaysDefault
   proxyProviderSslWarnDaysMap.value = (n.providerSslWarnDaysMap || {}) as any
 }
@@ -513,6 +586,7 @@ const getLocalPayload = (): UsersDbPayload => {
   return normalizePayload({
     labels: (sourceIPLabelList.value || []) as any,
     providerPanelUrls: (proxyProviderPanelUrlMap.value || {}) as any,
+    providerIcons: (proxyProviderIconMap.value || {}) as any,
     sslNearExpiryDaysDefault: sslNearExpiryDaysDefault.value,
     providerSslWarnDaysMap: (proxyProviderSslWarnDaysMap.value || {}) as any,
   })
@@ -521,6 +595,7 @@ const getLocalPayload = (): UsersDbPayload => {
 const markSynced = (p: UsersDbPayload) => {
   usersDbLastSyncedLabels.value = (p.labels || []) as any
   usersDbLastSyncedProviderPanelUrls.value = (p.providerPanelUrls || {}) as any
+  usersDbLastSyncedProviderIcons.value = ((p as any).providerIcons || {}) as any
   usersDbLastSyncedSslNearExpiryDaysDefault.value = p.sslNearExpiryDaysDefault
   usersDbLastSyncedProviderSslWarnDaysMap.value = (p.providerSslWarnDaysMap || {}) as any
 }
@@ -763,6 +838,7 @@ const smartMergePayload = (remote: UsersDbPayload, local: UsersDbPayload, choice
 
   const labelChoices = (choices?.labels || {}) as Record<string, any>
   const urlChoices = (choices?.urls || {}) as Record<string, any>
+  const iconChoices = (choices?.icons || {}) as Record<string, any>
   const warnChoices = (choices?.warnDays || {}) as Record<string, any>
   const sslChoice = choices?.sslDefault as any
 
@@ -832,6 +908,36 @@ const smartMergePayload = (remote: UsersDbPayload, local: UsersDbPayload, choice
     }
   }
 
+  // ---- provider icons ----
+  const mergedIcons: Record<string, string> = { ...(rN.providerIcons || {}) }
+  for (const [k, v] of Object.entries(lN.providerIcons || {})) {
+    const kk = String(k || '').trim()
+    if (!kk) continue
+    const lv = normalizeProviderIcon(v)
+    const rv = normalizeProviderIcon(mergedIcons[kk])
+
+    if (!rv) {
+      if (lv) mergedIcons[kk] = lv
+      continue
+    }
+
+    if (lv && rv && lv !== rv) {
+      const ch = iconChoices[kk] || { mode: 'local' }
+      const mode = (ch?.mode || 'local') as UsersDbSmartChoiceMode
+      if (mode === 'remote') {
+        // keep router
+      } else if (mode === 'custom') {
+        const customIcon = normalizeProviderIcon(ch?.customIcon)
+        if (customIcon) mergedIcons[kk] = customIcon
+        else if (String(ch?.customIcon || '').trim() === '') delete mergedIcons[kk]
+      } else {
+        mergedIcons[kk] = lv
+      }
+    } else if (lv) {
+      mergedIcons[kk] = lv
+    }
+  }
+
   // ---- ssl default ----
   let mergedSslNear = sanitizeInt(lN.sslNearExpiryDaysDefault, rN.sslNearExpiryDaysDefault || 2, 0, 365)
   if (sslChoice) {
@@ -874,6 +980,7 @@ const smartMergePayload = (remote: UsersDbPayload, local: UsersDbPayload, choice
   return normalizePayload({
     labels: sanitizeLabels(mergedLabels as any),
     providerPanelUrls: sanitizeUrlMap(mergedUrls),
+    providerIcons: sanitizeIconMap(mergedIcons),
     sslNearExpiryDaysDefault: mergedSslNear,
     providerSslWarnDaysMap: sanitizeNumMap(mergedWarn),
   })
@@ -950,7 +1057,7 @@ export const initUsersDbSync = () => {
   )
 
   watch(
-    [sourceIPLabelList, proxyProviderPanelUrlMap, sslNearExpiryDaysDefault, proxyProviderSslWarnDaysMap],
+    [sourceIPLabelList, proxyProviderPanelUrlMap, proxyProviderIconMap, sslNearExpiryDaysDefault, proxyProviderSslWarnDaysMap],
     () => {
       if (suppressPushCount > 0) {
         suppressPushCount -= 1

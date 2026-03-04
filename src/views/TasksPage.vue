@@ -98,6 +98,37 @@
 					  <tr v-for="p in providersPanelRenderList" :key="p.name">
 						<td class="font-mono text-xs">
               <div class="flex items-center gap-2">
+                <details class="dropdown dropdown-end" @click.stop>
+                  <summary
+                    class="btn btn-ghost btn-xs btn-circle"
+                    @click.stop
+                    :title="$t('providerIcon')"
+                  >
+                    <template v-if="providerIconKind(p.name) === 'flag'">
+                      <span class="text-base leading-none">{{ providerIconFlag(p.name) }}</span>
+                    </template>
+                    <GlobeAltIcon v-else-if="providerIconKind(p.name) === 'globe'" class="h-4 w-4" />
+                    <span v-else class="text-xs opacity-60">—</span>
+                  </summary>
+                  <div class="dropdown-content z-[999] mt-2 w-72 rounded-box bg-base-200 p-2 shadow ring-1 ring-base-300">
+                    <div class="text-[11px] opacity-70">{{ $t('providerIconTip') }}</div>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                      <button type="button" class="btn btn-ghost btn-xs" @click.stop="(e) => pickProviderIcon(e, p.name, '')">—</button>
+                      <button type="button" class="btn btn-ghost btn-xs" @click.stop="(e) => pickProviderIcon(e, p.name, 'globe')">🌐</button>
+                      <button
+                        v-for="cc in providerIconCountries"
+                        :key="cc"
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        @click.stop="(e) => pickProviderIcon(e, p.name, cc)"
+                        :title="cc"
+                      >
+                        {{ countryCodeToFlagEmoji(cc) || cc }}
+                      </button>
+                    </div>
+                  </div>
+                </details>
+
                 <span class="min-w-0 truncate" :title="p.name">{{ p.name }}</span>
                 <TopologyActionButtons :stage="'P'" :value="p.name" :grouped="true" />
               </div>
@@ -633,6 +664,14 @@
             <span class="opacity-60 ml-1">/</span>
             <span class="font-mono ml-1">~{{ usersDbConflictSummary.urlsChanged }}</span>
           </div>
+          <div>
+            <span class="opacity-60">{{ $t('providerIcon') }}:</span>
+            <span class="font-mono ml-1">+{{ usersDbConflictSummary.iconsLocalOnly }}</span>
+            <span class="opacity-60 ml-1">/</span>
+            <span class="font-mono ml-1">+{{ usersDbConflictSummary.iconsRemoteOnly }}</span>
+            <span class="opacity-60 ml-1">/</span>
+            <span class="font-mono ml-1">~{{ usersDbConflictSummary.iconsChanged }}</span>
+          </div>
         </div>
 
         <div class="mt-2 flex flex-wrap items-center gap-2">
@@ -760,6 +799,60 @@
                           v-model="usersDbSmartChoices.urls[it.provider].customUrl"
                           :placeholder="it.local"
                         />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div v-if="(usersDbConflictDiff as any).icons && (usersDbConflictDiff as any).icons.changed && (usersDbConflictDiff as any).icons.changed.length">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="font-semibold text-xs">{{ $t('providerIcon') }}: {{ $t('usersDbChanged') }} ({{ (usersDbConflictDiff as any).icons.changed.length }})</div>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="btn btn-ghost btn-xs" @click="usersDbSmartSetAll('icons','local')" :disabled="usersDbBusy">{{ $t('usersDbSetAllLocal') }}</button>
+                  <button type="button" class="btn btn-ghost btn-xs" @click="usersDbSmartSetAll('icons','remote')" :disabled="usersDbBusy">{{ $t('usersDbSetAllRouter') }}</button>
+                </div>
+              </div>
+
+              <div class="mt-1 overflow-x-auto">
+                <table class="table table-xs">
+                  <thead>
+                    <tr>
+                      <th style="width: 200px">{{ $t('provider') }}</th>
+                      <th style="width: 220px">{{ $t('router') }}</th>
+                      <th style="width: 220px">{{ $t('local') }}</th>
+                      <th>{{ $t('actions') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="it in (usersDbConflictDiff as any).icons.changed" :key="it.provider">
+                      <td class="font-mono">{{ it.provider }}</td>
+                      <td class="font-mono">{{ fmtProviderIcon(it.remote) }}</td>
+                      <td class="font-mono">{{ fmtProviderIcon(it.local) }}</td>
+                      <td class="min-w-[260px]">
+                        <div class="flex flex-wrap items-center gap-3">
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-i-${it.provider}`" value="remote" v-model="usersDbSmartChoices.icons[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('router') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-i-${it.provider}`" value="local" v-model="usersDbSmartChoices.icons[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('local') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input class="radio radio-xs" type="radio" :name="`udb-i-${it.provider}`" value="custom" v-model="usersDbSmartChoices.icons[it.provider].mode" />
+                            <span class="text-[11px]">{{ $t('custom') }}</span>
+                          </label>
+                        </div>
+                        <input
+                          v-if="usersDbSmartChoices.icons[it.provider].mode === 'custom'"
+                          type="text"
+                          class="input input-bordered input-xs mt-1 w-full"
+                          v-model="usersDbSmartChoices.icons[it.provider].customIcon"
+                          :placeholder="it.local"
+                        />
+                        <div class="mt-0.5 text-[10px] opacity-60">{{ $t('providerIconHint') }}</div>
                       </td>
                     </tr>
                   </tbody>
@@ -999,6 +1092,7 @@
                 <span v-if="usersDbViewSummary" class="ml-2 opacity-60">
                   • {{ $t('usersDbLabels') }}: <span class="font-mono">{{ usersDbViewSummary.labels }}</span>
                   • {{ $t('usersDbPanels') }}: <span class="font-mono">{{ usersDbViewSummary.panels }}</span>
+                  • {{ $t('providerIcon') }}: <span class="font-mono">{{ usersDbViewSummary.icons }}</span>
                   • SSL: <span class="font-mono">{{ usersDbViewSummary.sslDefault }}</span>
                 </span>
               </div>
@@ -1013,6 +1107,9 @@
               </button>
               <button type="button" class="btn btn-xs btn-ghost" @click="copyUsersDbViewPanels" :disabled="usersDbViewBusy || !usersDbViewPayload">
                 {{ $t('copy') }} {{ $t('usersDbPanels') }}
+              </button>
+              <button type="button" class="btn btn-xs btn-ghost" @click="copyUsersDbViewIcons" :disabled="usersDbViewBusy || !usersDbViewPayload">
+                {{ $t('copy') }} {{ $t('providerIcon') }}
               </button>
               <button type="button" class="btn btn-xs" @click="usersDbCloseRevPreview">
                 {{ $t('close') }}
@@ -1112,9 +1209,10 @@ import { navigateToTopology } from '@/helper/topologyNav'
 import { parseDateMaybe } from '@/helper/providerHealth'
 import { showNotification } from '@/helper/notification'
 import { decodeB64Utf8 } from '@/helper/b64'
+import { countryCodeToFlagEmoji, normalizeProviderIcon } from '@/helper/providerIcon'
 import { activeBackend } from '@/store/setup'
 import { agentEnabled, agentUrl } from '@/store/agent'
-import { proxyProviderPanelUrlMap, proxyProviderSslWarnDaysMap, sslNearExpiryDaysDefault } from '@/store/settings'
+import { proxyProviderIconMap, proxyProviderPanelUrlMap, proxyProviderSslWarnDaysMap, sslNearExpiryDaysDefault } from '@/store/settings'
 import { panelSslCheckedAt, panelSslNotAfterByName, panelSslProbeError, panelSslProbeLoading, probePanelSsl } from '@/store/providerHealth'
 import { proxyProviederList } from '@/store/proxies'
 import { userLimitProfiles } from '@/store/userLimitProfiles'
@@ -1131,6 +1229,7 @@ import { useI18n } from 'vue-i18n'
 import router from '@/router'
 import { ROUTE_NAME } from '@/constant'
 import { ChevronDownIcon } from '@heroicons/vue/20/solid'
+import { GlobeAltIcon } from '@heroicons/vue/24/outline'
 import {
   usersDbConflictCount,
   usersDbConflictDiff,
@@ -1351,6 +1450,64 @@ const setProviderPanelUrl = (name: string, url: string) => {
   proxyProviderPanelUrlMap.value = cur
 }
 
+// ---- Provider icon (flag/globe) ----
+const providerIconCountries = [
+  'RU','US','DE','FR','GB','NL','FI','SE','NO','EE','LV','LT','PL','UA','RO','TR','ES','IT','CH','AT','CZ','SG','JP','KR','CN','HK','IN',
+]
+
+const getProviderIconRaw = (name: string): string => {
+  const k = String(name || '').trim()
+  if (!k) return ''
+  return normalizeProviderIcon((proxyProviderIconMap.value || {})[k])
+}
+
+const providerIconKind = (name: string): 'none' | 'globe' | 'flag' => {
+  const v = getProviderIconRaw(name)
+  if (!v) return 'none'
+  if (v === 'globe') return 'globe'
+  return countryCodeToFlagEmoji(v) ? 'flag' : 'none'
+}
+
+const providerIconFlag = (name: string): string => {
+  const v = getProviderIconRaw(name)
+  if (!v || v === 'globe') return ''
+  return countryCodeToFlagEmoji(v) || ''
+}
+
+const setProviderIcon = (name: string, icon: string) => {
+  const k = String(name || '').trim()
+  if (!k) return
+  const nv = normalizeProviderIcon(icon)
+  const cur = { ...(proxyProviderIconMap.value || {}) }
+  if (!nv) delete cur[k]
+  else cur[k] = nv
+  proxyProviderIconMap.value = cur
+}
+
+const closeDetails = (e: any) => {
+  try {
+    const el = (e?.target as any) as HTMLElement
+    const d = el?.closest ? (el.closest('details') as HTMLDetailsElement | null) : null
+    if (d) d.removeAttribute('open')
+  } catch {
+    // ignore
+  }
+}
+
+const pickProviderIcon = (e: any, name: string, icon: string) => {
+  setProviderIcon(name, icon)
+  closeDetails(e)
+}
+
+const fmtProviderIcon = (v: any): string => {
+  const n = normalizeProviderIcon(v)
+  if (!n) return '—'
+  if (n === 'globe') return '🌐'
+  const f = countryCodeToFlagEmoji(n)
+  return f ? `${f} ${n}` : n
+}
+
+
 const loadProvidersPanel = async (force = false) => {
   if (!agentEnabled.value) {
     providersPanelList.value = []
@@ -1519,6 +1676,9 @@ const usersDbConflictSummary = computed(() => {
     urlsLocalOnly: d.urls.localOnly.length,
     urlsRemoteOnly: d.urls.remoteOnly.length,
     urlsChanged: d.urls.changed.length,
+    iconsLocalOnly: (d as any).icons?.localOnly?.length || 0,
+    iconsRemoteOnly: (d as any).icons?.remoteOnly?.length || 0,
+    iconsChanged: (d as any).icons?.changed?.length || 0,
     safeAutoMerge: d.safeAutoMerge,
   }
 })
@@ -1529,6 +1689,7 @@ type SmartChoiceMode = 'local' | 'remote' | 'custom'
 type SmartChoices = {
   labels: Record<string, { mode: SmartChoiceMode; customLabel?: string }>
   urls: Record<string, { mode: SmartChoiceMode; customUrl?: string }>
+  icons: Record<string, { mode: SmartChoiceMode; customIcon?: string }>
   warnDays: Record<string, { mode: SmartChoiceMode; customDays?: number }>
   sslDefault: { mode: SmartChoiceMode; customDays?: number }}
 
@@ -1536,6 +1697,7 @@ const usersDbSmartOpen = ref(false)
 const usersDbSmartChoices = ref<SmartChoices>({
   labels: {},
   urls: {},
+  icons: {},
   warnDays: {},
   sslDefault: { mode: 'local' },
 })
@@ -1545,21 +1707,24 @@ const initUsersDbSmartChoices = () => {
   if (!d) return
   const labels: SmartChoices['labels'] = {}
   const urls: SmartChoices['urls'] = {}
+  const icons: SmartChoices['icons'] = {}
   const warnDays: SmartChoices['warnDays'] = {}
 
   for (const it of d.labels.changed || []) labels[String(it.key)] = { mode: 'local' }
   for (const it of d.urls.changed || []) urls[String(it.provider)] = { mode: 'local' }
+  for (const it of ((d as any).icons?.changed || []) as any[]) icons[String(it.provider)] = { mode: 'local' }
   for (const it of d.ssl.providerDays.changed || []) warnDays[String(it.provider)] = { mode: 'local' }
 
   usersDbSmartChoices.value = {
     labels,
     urls,
+    icons,
     warnDays,
     sslDefault: { mode: 'local' },
   }
 }
 
-const usersDbSmartSetAll = (section: 'labels' | 'urls' | 'warnDays', mode: SmartChoiceMode) => {
+const usersDbSmartSetAll = (section: 'labels' | 'urls' | 'icons' | 'warnDays', mode: SmartChoiceMode) => {
   const v = usersDbSmartChoices.value
   const obj: any = (v as any)[section] || {}
   for (const k of Object.keys(obj)) {
@@ -1619,6 +1784,15 @@ const extractUsersDbPayloadView = (v: any) => {
           ? v.proxyProviderPanelUrlMap
           : {}
 
+  const providerIcons =
+    v?.providerIcons && typeof v.providerIcons === 'object'
+      ? v.providerIcons
+      : v?.proxyProviderIcons && typeof v.proxyProviderIcons === 'object'
+        ? v.proxyProviderIcons
+        : v?.proxyProviderIconMap && typeof v.proxyProviderIconMap === 'object'
+          ? v.proxyProviderIconMap
+          : {}
+
   const sslNearExpiryDaysDefault =
     typeof v?.sslNearExpiryDaysDefault === 'number'
       ? v.sslNearExpiryDaysDefault
@@ -1647,6 +1821,18 @@ const extractUsersDbPayloadView = (v: any) => {
     // ignore
   }
 
+  const cleanIconMap: Record<string, string> = {}
+  try {
+    for (const [k, vv] of Object.entries(providerIcons || {})) {
+      const kk = String(k || '').trim()
+      const nv = normalizeProviderIcon(vv)
+      if (!kk || !nv) continue
+      cleanIconMap[kk] = nv
+    }
+  } catch {
+    // ignore
+  }
+
   const cleanWarnMap: Record<string, number> = {}
   try {
     for (const [k, vv] of Object.entries(providerSslWarnDaysMap || {})) {
@@ -1664,6 +1850,7 @@ const extractUsersDbPayloadView = (v: any) => {
   return {
     labels: Array.isArray(labels) ? labels : [],
     providerPanelUrls: cleanUrlMap,
+    providerIcons: cleanIconMap,
     sslNearExpiryDaysDefault: sslDef,
     providerSslWarnDaysMap: cleanWarnMap,
   }
@@ -1680,6 +1867,7 @@ const usersDbViewSummary = computed(() => {
   return {
     labels: Array.isArray(p.labels) ? p.labels.length : 0,
     panels: p.providerPanelUrls ? Object.keys(p.providerPanelUrls).length : 0,
+    icons: (p as any).providerIcons ? Object.keys((p as any).providerIcons).length : 0,
     sslDefault: p.sslNearExpiryDaysDefault,
     warnMap: p.providerSslWarnDaysMap ? Object.keys(p.providerSslWarnDaysMap).length : 0,
   }
@@ -1765,6 +1953,12 @@ const copyUsersDbViewPanels = async () => {
   const p = usersDbViewNormalized.value
   if (!p) return
   await copyTextToClipboard(JSON.stringify(p.providerPanelUrls || {}, null, 2))
+}
+
+const copyUsersDbViewIcons = async () => {
+  const p: any = usersDbViewNormalized.value as any
+  if (!p) return
+  await copyTextToClipboard(JSON.stringify(p.providerIcons || {}, null, 2))
 }
 
 // --- Top rules -> open Topology with filter (stage R) ---
