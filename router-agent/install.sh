@@ -138,83 +138,23 @@ ssl_not_after() {
   printf '%s' "$end"
 }
 
-# Batch SSL probe for arbitrary URLs (used by UI to show SSL for provider management panel URLs).
-# Request: POST body lines "<name>\t<url>\n".
-ssl_probe_batch_json() {
-  if [ "$REQUEST_METHOD" != "POST" ]; then
-    reply_ok '{"ok":false,"error":"method-not-allowed"}'
-    return
-  fi
+users_db_panel_urls_lines() {
+  # Extract providerPanelUrls map from users-db JSON as lines: name<TAB>url
+  [ -f "$USERS_DB_FILE" ] || return 0
+  data="$(head -c 1048576 "$USERS_DB_FILE" 2>/dev/null | tr -d '\n\r')"
+  part="$(printf '%s' "$data" | sed -nE 's/.*\"providerPanelUrls\"[[:space:]]*:[[:space:]]*\\{([^}]*)\\}.*/\\1/p' | head -n1)"
+  [ -n "$part" ] || return 0
+  printf '%s' "$part" | tr ',' '\n' | sed -nE 's/^[[:space:]]*\"([^\"]+)\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\\1\\t\\2/p'
+  return 0
+}
 
-  body=""
-  if [ -n "$CONTENT_LENGTH" ] && echo "$CONTENT_LENGTH" | grep -qE '^[0-9]+$'; then
-    body="$(head -c "$CONTENT_LENGTH" 2>/dev/null || dd bs=1 count="$CONTENT_LENGTH" 2>/dev/null || true)"
-  else
-    body="$(cat 2>/dev/null || true)"
-  fi
-
-  now="$(date +%s 2>/dev/null || echo 0)"
-  tmp="/tmp/zash-sslprobe.$$"
-  printf '%s' "$body" > "$tmp" 2>/dev/null || true
-
-  out='{"ok":true,"checkedAtSec":'
-  out="$out$now,\"items\":["
-  first=1
-
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-
-    # split by tab
-    oldIFS="$IFS"
-    IFS="$(printf '\t')"
-    set -- $line
-    IFS="$oldIFS"
-
-    name="$1"
-    url="$2"
-    name="$(printf '%s' "$name" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-    url="$(printf '%s' "$url" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-    [ -n "$name" ] || continue
-    [ -n "$url" ] || continue
-
-    scheme="${url%%://*}"
-    rest="${url#*://}"
-    hostport="${rest%%/*}"
-
-    host="$hostport"
-    port="443"
-    if echo "$hostport" | grep -q '^\['; then
-      host="$(echo "$hostport" | sed -E 's/^\[([^\]]+)\].*/\1/')"
-      port_part="$(echo "$hostport" | sed -nE 's/^\[[^\]]+\]:(.*)$/\1/p')"
-      [ -n "$port_part" ] && port="$port_part"
-    else
-      host="$(printf '%s' "$hostport" | cut -d: -f1)"
-      if echo "$hostport" | grep -q ':'; then
-        port_part="$(printf '%s' "$hostport" | awk -F: '{print $NF}')"
-        [ -n "$port_part" ] && port="$port_part"
-      fi
-    fi
-
-    not_after=""
-    if [ "$scheme" = "https" ] || [ "$scheme" = "wss" ]; then
-      not_after="$(ssl_not_after "$host" "$port")"
-    fi
-
-    [ $first -eq 0 ] && out="$out,"
-    first=0
-
-    esc_name="$(printf '%s' "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-    esc_url="$(printf '%s' "$url" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-    esc_host="$(printf '%s' "$host" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-    esc_port="$(printf '%s' "$port" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-    esc_na="$(printf '%s' "$not_after" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-
-    out="$out{\"name\":\"$esc_name\",\"url\":\"$esc_url\",\"host\":\"$esc_host\",\"port\":\"$esc_port\",\"sslNotAfter\":\"$esc_na\"}"
-  done < "$tmp"
-
-  rm -f "$tmp" 2>/dev/null || true
-  out="$out]}"
-  reply_ok "$out"
+panel_url_for_provider() {
+  # args: providerName, panelMapLines
+  name="$1"
+  lines="$2"
+  [ -n "$name" ] || return 0
+  [ -n "$lines" ] || return 0
+  printf '%s\n' "$lines" | awk -F'\t' -v n="$name" 'tolower($1)==tolower(n){print $2; exit}'
 }
 
 remote_agent_version() {
@@ -272,10 +212,13 @@ mihomo_providers_json() {
     return
   fi
 
+  checkedAtSec="$(date +%s 2>/dev/null || echo 0)"
+  panel_map="$(users_db_panel_urls_lines)"
+
   in=0
   pname=""
   url=""
-  out='{"ok":true,"providers":['
+  out="{\"ok\":true,\"checkedAtSec\":${checkedAtSec},\"providers\":["
   first=1
 
   while IFS= read -r line; do
@@ -329,7 +272,37 @@ mihomo_providers_json() {
       esc_port="$(printf '%s' "$port" | sed 's/"/\\\"/g')"
       esc_na="$(printf '%s' "$not_after" | sed 's/"/\\\"/g')"
 
-      out="$out{\"name\":\"$esc_name\",\"url\":\"$esc_url\",\"host\":\"$esc_host\",\"port\":\"$esc_port\",\"sslNotAfter\":\"$esc_na\"}"
+
+      panel_url="$(panel_url_for_provider "$pname" "$panel_map")"
+      panel_na=""
+      if [ -n "$panel_url" ]; then
+        pscheme="${panel_url%%://*}"
+        prest="${panel_url#*://}"
+        phostport="${prest%%/*}"
+
+        p_host="$phostport"
+        p_port="443"
+        if echo "$phostport" | grep -q '^\['; then
+          p_host="$(echo "$phostport" | sed -E 's/^\[([^\]]+)\].*/\1/')"
+          pport_part="$(echo "$phostport" | sed -nE 's/^\[[^\]]+\]:(.*)$/\1/p')"
+          [ -n "$pport_part" ] && p_port="$pport_part"
+        else
+          p_host="$(printf '%s' "$phostport" | cut -d: -f1)"
+          if echo "$phostport" | grep -q ':'; then
+            pport_part="$(printf '%s' "$phostport" | awk -F: '{print $NF}')"
+            [ -n "$pport_part" ] && p_port="$pport_part"
+          fi
+        fi
+
+        if [ "$pscheme" = "https" ] || [ "$pscheme" = "wss" ]; then
+          panel_na="$(ssl_not_after "$p_host" "$p_port")"
+        fi
+      fi
+
+      esc_purl="$(printf '%s' "$panel_url" | sed 's/"/\\"/g')"
+      esc_pna="$(printf '%s' "$panel_na" | sed 's/"/\\"/g')"
+
+      out="$out{\"name\":\"$esc_name\",\"url\":\"$esc_url\",\"host\":\"$esc_host\",\"port\":\"$esc_port\",\"sslNotAfter\":\"$esc_na\",\"panelUrl\":\"$esc_purl\",\"panelSslNotAfter\":\"$esc_pna\"}"
     fi
   done < "$MIHOMO_CONFIG"
 
@@ -1729,9 +1702,6 @@ case "$cmd" in
     ;;
   mihomo_providers)
     mihomo_providers_json
-    ;;
-  ssl_probe_batch)
-    ssl_probe_batch_json
     ;;
   geo_info)
     geo_info_json

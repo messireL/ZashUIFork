@@ -114,7 +114,7 @@ const en = {
   sslWarnThresholdTip: 'Shows the "SSL soon" warning when certificate expiry is ≤ N days. Default: 2.',
   sslWarnOverride: 'Per-provider threshold',
   sslWarnOverrideTip: 'Empty = use global threshold.',
-  sslSource: 'Source: TLS certificate of provider URL (router-agent)',
+  sslSource: 'Source: TLS cert of panel URL (if set), otherwise provider URL (router-agent)',
   checkedAt: 'Checked',
   daysShort: 'd',
   open: 'Open',

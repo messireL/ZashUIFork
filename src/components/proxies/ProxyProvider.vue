@@ -311,7 +311,7 @@
 <script setup lang="ts">
 import { proxyProviderHealthCheckAPI, updateProxyProviderAPI } from '@/api'
 import { getProviderHealth } from '@/helper/providerHealth'
-import { agentProviderByName, agentProviderPanelSslAt, agentProviderPanelSslMap, agentProvidersAt, fetchAgentProviders } from '@/store/providerHealth'
+import { agentProviderByName, agentProvidersAt, fetchAgentProviders } from '@/store/providerHealth'
 import { useBounceOnVisible } from '@/composables/bouncein'
 import { useRenderProxies } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
@@ -548,10 +548,6 @@ const sslExpireInfo = computed(() => {
   const p: any = proxyProvider.value as any
   const info: any = (proxyProvider.value as any).subscriptionInfo
 
-  // Prefer SSL for management panel URL if present; fallback to proxy-provider subscription URL.
-  const panelUrl = String((proxyProviderPanelUrlMap.value || {})[props.name] || '').trim()
-  const panelSsl = String((agentProviderPanelSslMap.value || {})[props.name] || '').trim()
-
   const raw =
     getAnyFromObj(p, [
       'sslExpire',
@@ -580,21 +576,18 @@ const sslExpireInfo = computed(() => {
       'certNotAfter',
     ])
 
-  const providerSsl: any = raw || agentProviderByName.value[props.name]?.sslNotAfter
-  const usePanel = !!panelUrl && /^(https|wss):\/\//i.test(panelUrl)
-  const raw2: any = usePanel ? (panelSsl || providerSsl) : providerSsl
+  const agentP: any = agentProviderByName.value[props.name]
 
-  const checkedAtMs = usePanel && agentProviderPanelSslAt.value ? agentProviderPanelSslAt.value : agentProvidersAt.value
-  const checked = checkedAtMs ? dayjs(checkedAtMs).format('DD-MM-YYYY HH:mm:ss') : ''
+  const raw2: any = raw || agentP?.panelSslNotAfter || agentP?.sslNotAfter
+  const src: string = raw ? 'sub' : agentP?.panelSslNotAfter ? 'panel' : agentP?.sslNotAfter ? 'provider' : 'none'
+
+  const checked = agentProvidersAt.value ? dayjs(agentProvidersAt.value).format('DD-MM-YYYY HH:mm:ss') : ''
 
   const d = parseDateMaybe(raw2)
   if (!d) {
-    const src = usePanel
-      ? 'panel URL (router-agent openssl)'
-      : 'proxy-provider URL (router-agent openssl)'
     const tip = checked
-      ? `SSL: not available (${src}) • Checked: ${checked}`
-      : `SSL: not available (${src})`
+      ? `SSL: not available (non-https or not retrieved) • Checked: ${checked}`
+      : 'SSL: not available (non-https or not retrieved)'
     return { dateTime: '—', days: Number.NaN, cls: 'text-base-content/60', label: '—', tip }
   }
 
@@ -605,11 +598,17 @@ const sslExpireInfo = computed(() => {
   const cls = days < 0 ? 'text-error' : days <= warnDays ? 'text-warning' : 'text-success'
   const label = days < 0 ? `${dateTime} (expired)` : `${dateTime} (${days}d)`
 
-  const src = usePanel
-    ? 'Source: TLS cert of panel URL (router-agent)'
-    : 'Source: TLS cert of proxy-provider URL (router-agent)'
-
-  const tip = checked ? `${src} • Checked: ${checked}` : src
+  const tip = checked
+    ? src === 'panel'
+      ? `Source: TLS cert of panel URL (router-agent) • Checked: ${checked}`
+      : src === 'provider'
+        ? `Source: TLS cert of proxy-provider URL (router-agent) • Checked: ${checked}`
+        : `Source: — • Checked: ${checked}`
+    : src === 'panel'
+      ? 'Source: TLS cert of panel URL (router-agent)'
+      : src === 'provider'
+        ? 'Source: TLS cert of proxy-provider URL (router-agent)'
+        : 'Source: —'
 
   return { dateTime, days, cls, label, tip }
 })

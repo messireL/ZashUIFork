@@ -116,7 +116,7 @@ const zh: LANG_MESSAGE = {
   sslWarnThresholdTip: '当证书到期剩余 ≤ N 天时显示“SSL 即将到期”。默认：2。',
   sslWarnOverride: '单个提供者阈值',
   sslWarnOverrideTip: '留空 = 使用全局阈值。',
-  sslSource: '来源：提供者 URL 的 TLS 证书（router-agent）',
+  sslSource: '来源：管理面板 URL 的 TLS 证书（如已设置），否则为提供者 URL（router-agent）',
   checkedAt: '检查时间',
   daysShort: '天',
   open: '打开',

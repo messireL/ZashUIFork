@@ -116,7 +116,7 @@ const ru: LANG_MESSAGE = {
   sslWarnThresholdTip: 'Предупреждение «SSL скоро» показывается, если до истечения сертификата осталось ≤ N дней. По умолчанию 2.',
   sslWarnOverride: 'Порог для провайдера',
   sslWarnOverrideTip: 'Пусто — использовать общий порог.',
-  sslSource: 'Источник: TLS сертификат URL провайдера (router-agent)',
+  sslSource: 'Источник: TLS сертификат панели управления (если указан), иначе URL провайдера (router-agent)',
   checkedAt: 'Проверено',
   daysShort: 'дн.',
   open: 'Открыть',

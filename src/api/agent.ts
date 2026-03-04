@@ -366,29 +366,6 @@ export const agentMihomoProvidersAPI = async (force = false): Promise<{
   }
 }
 
-// Probe SSL expiration for arbitrary URLs (used for Provider Panel URLs).
-// Body format: lines "<name>\t<url>\n".
-export const agentSslProbeBatchAPI = async (
-  lines: string,
-): Promise<{
-  ok: boolean
-  checkedAtSec?: number
-  items?: Array<{ name: string; url?: string; host?: string; port?: string; sslNotAfter?: string }>
-  error?: string
-}> => {
-  try {
-    const { data } = await agentAxios().post('/cgi-bin/api.sh?cmd=ssl_probe_batch', lines || '', {
-      headers: { 'Content-Type': 'text/plain' },
-      // openssl s_client can take a bit; keep higher than default
-      timeout: 12000,
-      transformResponse: [(d) => parseMaybeCgiJson(d)],
-    })
-    return (data || { ok: true }) as any
-  } catch (e: any) {
-    return { ok: false, error: e?.message || 'failed' }
-  }
-}
-
 // --- Shared users DB (Source IP mapping) ---
 
 export const agentUsersDbGetAPI = async (): Promise<{
