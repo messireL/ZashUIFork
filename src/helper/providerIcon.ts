@@ -3,8 +3,37 @@ export const normalizeProviderIcon = (v: any): string => {
   if (!s) return ''
   const low = s.toLowerCase()
   if (low === 'globe' || s === '🌍' || s === '🌎' || s === '🌏' || s === '🌐') return 'globe'
+  // Backward compatibility: stored emoji flag (e.g. "🇩🇪")
+  const fromEmoji = flagEmojiToCountryCode(s)
+  if (fromEmoji) return fromEmoji
   // ISO 3166-1 alpha-2
   if (/^[a-zA-Z]{2}$/.test(s)) return s.toUpperCase()
+  return ''
+}
+
+/**
+ * Convert a flag emoji (pair of Regional Indicator Symbols) to ISO 3166-1 alpha-2.
+ * Examples: "🇩🇪" -> "DE", "🇯🇵" -> "JP".
+ */
+export const flagEmojiToCountryCode = (emoji: string): string => {
+  const chars = Array.from(String(emoji || '').trim())
+  if (chars.length < 2) return ''
+
+  const isRegional = (cp: number) => cp >= 0x1f1e6 && cp <= 0x1f1ff
+  const cps = chars
+    .map((c) => c.codePointAt(0))
+    .filter((cp): cp is number => typeof cp === 'number')
+
+  for (let i = 0; i < cps.length - 1; i++) {
+    const a = cps[i]
+    const b = cps[i + 1]
+    if (!isRegional(a) || !isRegional(b)) continue
+    const A = 0x1f1e6
+    const c1 = String.fromCharCode(65 + (a - A))
+    const c2 = String.fromCharCode(65 + (b - A))
+    const cc = `${c1}${c2}`
+    if (/^[A-Z]{2}$/.test(cc)) return cc
+  }
   return ''
 }
 
