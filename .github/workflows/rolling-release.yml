@@ -35,7 +35,7 @@ jobs:
           set -o pipefail
           # Always create log files so summary steps don't fail.
           : > install.log
-          # pnpm enables frozen-lockfile in CI by default; allow lockfile drift so builds don't break.
+          # Allow lockfile drift (e.g. after adding deps) so CI can still build.
           pnpm i --no-frozen-lockfile 2>&1 | tee -a install.log
 
       # Capture build output into build.log so you can download it even if the build fails.

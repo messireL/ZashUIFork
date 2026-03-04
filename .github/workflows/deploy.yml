@@ -34,7 +34,7 @@ jobs:
 
       - name: Install and Build 🔧
         run: |
-          pnpm i
+          pnpm i --no-frozen-lockfile
           pnpm run build
           echo 'board.zash.run.place' > ./dist/CNAME
 
@@ -54,7 +54,7 @@ jobs:
 
       - name: Install and Build cdn-fonts 🔧
         run: |
-          pnpm i
+          pnpm i --no-frozen-lockfile
           pnpm run build:cdn-fonts
           echo 'board.zash.run.place' > ./dist/CNAME
 
@@ -75,7 +75,7 @@ jobs:
 
       - name: Install and Build firasans-only 🔧
         run: |
-          pnpm i
+          pnpm i --no-frozen-lockfile
           pnpm run build:firasans-only
           echo 'board.zash.run.place' > ./dist/CNAME
 
@@ -96,7 +96,7 @@ jobs:
 
       - name: Install and Build misans-only 🔧
         run: |
-          pnpm i
+          pnpm i --no-frozen-lockfile
           pnpm run build:misans-only
           echo 'board.zash.run.place' > ./dist/CNAME
 
@@ -117,7 +117,7 @@ jobs:
 
       - name: Install and Build pingfang-only 🔧
         run: |
-          pnpm i
+          pnpm i --no-frozen-lockfile
           pnpm run build:pingfang-only
           echo 'board.zash.run.place' > ./dist/CNAME
 
@@ -138,7 +138,7 @@ jobs:
 
       - name: Install and Build sarasa-only 🔧
         run: |
-          pnpm i
+          pnpm i --no-frozen-lockfile
           pnpm run build:sarasa-only
           echo 'board.zash.run.place' > ./dist/CNAME
 
@@ -159,7 +159,7 @@ jobs:
 
       - name: Install and Build no-fonts 🔧
         run: |
-          pnpm i
+          pnpm i --no-frozen-lockfile
           pnpm run build:no-fonts
           echo 'board.zash.run.place' > ./dist/CNAME
 
@@ -181,7 +181,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pnpm i
+          pnpm i --no-frozen-lockfile
 
       - name: Build and Zip the dist folder
         run: |

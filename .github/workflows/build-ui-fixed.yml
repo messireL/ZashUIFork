@@ -15,6 +15,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: pnpm
 
       - name: Enable corepack (pnpm)
         run: |
@@ -22,18 +23,79 @@ jobs:
           corepack prepare pnpm@9.12.1 --activate
 
       - name: Install deps
-        run: pnpm i
+        id: install
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          : > install.log
+          set +e
+          pnpm i --no-frozen-lockfile 2>&1 | tee -a install.log
+          ec=${PIPESTATUS[0]}
+          echo "exitcode=$ec" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Build
-        run: pnpm build
+        id: build
+        if: steps.install.outputs.exitcode == '0'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          : > build.log
+          set +e
+          pnpm build 2>&1 | tee -a build.log
+          ec=${PIPESTATUS[0]}
+          echo "exitcode=$ec" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload install log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-log
+          path: install.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+
+      - name: Add logs to summary (tail)
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Outcomes"
+            echo "- Install deps: ${{ steps.install.outcome }} (exit=${{ steps.install.outputs.exitcode }})"
+            echo "- Build: ${{ steps.build.outcome }} (exit=${{ steps.build.outputs.exitcode }})"
+            echo ""
+            echo "### Install log (last 200 lines)"
+            echo "\`\`\`"
+            if [ -s install.log ]; then tail -n 200 install.log; else echo "(install.log is empty or missing)"; fi
+            echo "\`\`\`"
+            echo ""
+            echo "### Build log (last 200 lines)"
+            echo "\`\`\`"
+            if [ -s build.log ]; then tail -n 200 build.log; else echo "(build.log is empty or missing)"; fi
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job if install/build failed
+        if: steps.install.outputs.exitcode != '0' || steps.build.outputs.exitcode != '0'
+        run: exit 1
 
       - name: Zip dist
+        if: steps.build.outputs.exitcode == '0'
         run: |
           cd dist
           zip -r ../dist.zip .
           cd ..
 
       - name: Upload dist.zip artifact
+        if: steps.build.outputs.exitcode == '0'
         uses: actions/upload-artifact@v4
         with:
           name: dist-zip
