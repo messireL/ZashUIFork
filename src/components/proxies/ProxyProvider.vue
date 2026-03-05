@@ -164,7 +164,7 @@
               <ChevronDownIcon class="h-4 w-4 opacity-60" />
             </summary>
 
-            <div class="dropdown-content z-[999] mt-2 w-72 rounded-box bg-base-200 p-2 shadow ring-1 ring-base-300">
+            <div class="dropdown-content z-[999] mt-2 w-72 rounded-box bg-base-200 bg-opacity-100 p-2 shadow ring-1 ring-base-300">
               <div class="text-xs mb-2">
                 <span class="opacity-70">{{ activeProxy ? $t('activeProxy') : $t('bestLatencyProxy') }}:</span>
                 <span class="font-mono break-all">{{ displayProxyName || '—' }}</span>
@@ -256,7 +256,7 @@
             <ChevronDownIcon class="h-4 w-4 opacity-60" />
           </summary>
 
-          <div class="dropdown-content z-[999] mt-2 w-72 rounded-box bg-base-200 p-2 shadow ring-1 ring-base-300">
+          <div class="dropdown-content z-[999] mt-2 w-72 rounded-box bg-base-200 bg-opacity-100 p-2 shadow ring-1 ring-base-300">
             <div class="text-xs mb-2">
               <span class="opacity-70">{{ activeProxy ? $t('activeProxy') : $t('bestLatencyProxy') }}:</span>
               <span class="font-mono break-all">{{ displayProxyName || '—' }}</span>

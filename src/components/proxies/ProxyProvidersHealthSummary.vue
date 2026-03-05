@@ -235,7 +235,7 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
             >
               ⚙
             </summary>
-            <div class="dropdown-content z-[999] mt-2 w-64 rounded-box bg-base-100 p-2 shadow-2xl ring-1 ring-base-300 backdrop-blur-md">
+            <div class="dropdown-content z-[999] mt-2 w-64 rounded-box bg-base-100 bg-opacity-100 p-2 shadow-2xl ring-1 ring-base-300 backdrop-blur-none">
               <div class="text-xs font-medium mb-1">{{ $t('providerProtoManage') }}</div>
               <div class="text-[11px] opacity-70 mb-2">{{ $t('providerProtoTip') }}</div>
               <div class="flex flex-wrap items-center gap-2 mb-2">
