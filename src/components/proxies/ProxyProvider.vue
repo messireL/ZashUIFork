@@ -1,5 +1,5 @@
 <template>
-  <div data-nav-kind="proxy-provider" :data-nav-value="proxyProvider.name">
+  <div v-if="proxyProvider" data-nav-kind="proxy-provider" :data-nav-value="proxyProvider.name">
     <CollapseCard :name="proxyProvider.name">
     <template v-slot:title="{ open }">
       <div class="flex items-center justify-between gap-2 rounded-xl px-2 py-1" :class="open ? 'bg-base-200 ring-1 ring-base-300' : ''">
@@ -337,6 +337,14 @@
     </template>
     </CollapseCard>
   </div>
+
+  <!-- Defensive fallback: avoid a totally blank page if provider is missing/mismatched -->
+  <div
+    v-else
+    class="rounded-box bg-base-200/40 p-4 text-sm opacity-80"
+  >
+    Провайдер не найден: <span class="font-mono">{{ name }}</span>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -379,15 +387,24 @@ const props = defineProps<{
 const router = useRouter()
 const { t } = useI18n()
 
-const proxyProvider = computed(
-  () => proxyProviederList.value.find((group) => group.name === props.name)!,
-)
+// Provider list can refresh/reorder; be defensive to avoid blank screens if a provider is
+// temporarily missing (or name mismatched).
+const proxyProvider = computed(() => proxyProviederList.value.find((group) => group.name === props.name))
+
+// Different cores/APIs may shape provider.proxies as an array OR as an object map.
+// Normalize to an array to keep rendering stable.
+const providerProxyItems = computed<any[]>(() => {
+  const v = (proxyProvider.value as any)?.proxies
+  if (Array.isArray(v)) return v
+  if (v && typeof v === 'object') return Object.values(v)
+  return []
+})
 
 const providerIconRaw = computed(() => normalizeProviderIcon((proxyProviderIconMap.value || {})[props.name]))
 
 const providerTypeCounts = computed(() => {
   const m = new Map<string, number>()
-  for (const p of (proxyProvider.value as any)?.proxies || []) {
+	for (const p of providerProxyItems.value) {
 		const t0 = typeof (p as any) === 'string' ? (proxyMap.value as any)?.[(p as any)]?.type : (p as any)?.type
 		const k = normalizeProxyProtoKey(t0)
     if (!k) continue
@@ -410,7 +427,7 @@ const providerTypesTooltip = computed(() => {
     .join(' / ')
 })
 const allProxies = computed(() =>
-  (proxyProvider.value.proxies ?? [])
+  providerProxyItems.value
     .map((node: any) => (typeof node === 'string' ? node : node?.name))
     .filter(Boolean),
 )
