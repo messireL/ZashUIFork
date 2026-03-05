@@ -214,14 +214,14 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
             >
               ⚙
             </summary>
-            <div class="dropdown-content z-[999] mt-2 w-64 rounded-box bg-base-200 p-2 shadow ring-1 ring-base-300">
+            <div class="dropdown-content z-[999] mt-2 w-64 rounded-box bg-base-100/95 p-2 shadow-2xl ring-1 ring-base-300 backdrop-blur-md">
               <div class="text-xs font-medium mb-1">{{ $t('providerProtoManage') }}</div>
               <div class="text-[11px] opacity-70 mb-2">{{ $t('providerProtoTip') }}</div>
               <div class="max-h-64 overflow-auto">
                 <div
                   v-for="t2 in manageableProtoTabs"
                   :key="t2.key"
-                  class="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-base-300/40"
+                  class="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-base-300/60"
                 >
                   <input
                     type="checkbox"

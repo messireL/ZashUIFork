@@ -47,3 +47,47 @@ In addition to capability flags (tc/iptables/hashlimit), `status` also reports b
 - `uptimeSec`
 - `memUsedPct` (0..100)
 - `memUsed`, `memTotal` (bytes)
+
+## Backups (Google Drive / Yandex Disk)
+
+The installer also creates `/opt/zash-agent/backup.sh` — it archives Mihomo config + zash-agent state (including `users-db.json`) and can optionally upload it to a cloud drive via **rclone**.
+
+### 1) Install & configure rclone (Entware)
+
+```sh
+opkg update
+opkg install rclone
+rclone config
+```
+
+**Yandex Disk**: easiest is WebDAV (`type = webdav`, URL `https://webdav.yandex.ru`, user = Yandex login, pass = app password).
+
+### 2) Enable upload in agent.env
+
+Edit `/opt/zash-agent/agent.env` and set:
+
+```sh
+RCLONE_REMOTE="gdrive"     # or yandex
+RCLONE_PATH="NetcrazeBackups/zash-agent"
+RCLONE_KEEP_DAYS="30"
+```
+
+### 3) Run once
+
+```sh
+/opt/zash-agent/backup.sh
+```
+
+### 4) Schedule (cron)
+
+Example: daily at 03:30
+
+```sh
+crontab -e
+```
+
+Add:
+
+```cron
+30 3 * * * /opt/zash-agent/backup.sh >/opt/zash-agent/var/backup.last.log 2>&1
+```

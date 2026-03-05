@@ -57,6 +57,12 @@ ASN_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/Ge
 # Optional: set a token to require Authorization: Bearer <token>
 TOKEN=""
 
+# Optional: backups to cloud via rclone (see /opt/zash-agent/backup.sh)
+BACKUP_TMP_DIR="$AGENT_DIR/var/backups"
+RCLONE_REMOTE=""   # e.g. gdrive / yandex
+RCLONE_PATH="NetcrazeBackups/zash-agent"
+RCLONE_KEEP_DAYS="30"
+
 # Root class rates (mbit). Keep high unless you want a global cap.
 WAN_RATE="1000"
 LAN_RATE="1000"
@@ -1843,6 +1849,80 @@ esac
 EOF
 
 chmod +x "$AGENT_DIR/www/cgi-bin/api.sh"
+
+cat > "$AGENT_DIR/backup.sh" <<'EOF'
+#!/bin/sh
+# Simple router backup helper (Mihomo config + zash-agent state) with optional cloud upload via rclone.
+set -e
+
+ENV_FILE="/opt/zash-agent/agent.env"
+[ -f "$ENV_FILE" ] && . "$ENV_FILE"
+
+BACKUP_TMP_DIR="${BACKUP_TMP_DIR:-/opt/zash-agent/var/backups}"
+RCLONE_REMOTE="${RCLONE_REMOTE:-}"
+RCLONE_PATH="${RCLONE_PATH:-NetcrazeBackups/zash-agent}"
+RCLONE_KEEP_DAYS="${RCLONE_KEEP_DAYS:-30}"
+
+MIHOMO_CONFIG="${MIHOMO_CONFIG:-/opt/etc/mihomo/config.yaml}"
+
+ts="$(date '+%Y%m%d-%H%M%S' 2>/dev/null || echo now)"
+host="$(uname -n 2>/dev/null || echo router)"
+
+mkdir -p "$BACKUP_TMP_DIR" 2>/dev/null || true
+
+list="$BACKUP_TMP_DIR/.backup.list.$$"
+rm -f "$list" 2>/dev/null || true
+
+add() {
+  p="$1"
+  [ -e "$p" ] && echo "$p" >> "$list"
+}
+
+# Mihomo
+add "$MIHOMO_CONFIG"
+add "/opt/etc/mihomo/GeoIP.dat"
+add "/opt/etc/mihomo/GeoSite.dat"
+add "/opt/etc/mihomo/ASN.mmdb"
+add "/opt/etc/mihomo/rules"
+
+# zash-agent
+add "/opt/zash-agent/agent.env"
+add "/opt/zash-agent/var/users-db.json"
+add "/opt/zash-agent/var/users-db.meta.json"
+add "/opt/zash-agent/var/users-db.revs"
+add "/opt/zash-agent/var/shapers.db"
+add "/opt/zash-agent/var/blocks.db"
+add "/opt/zash-agent/var/agent.log"
+
+out="$BACKUP_TMP_DIR/zash-backup-${host}-${ts}.tar.gz"
+
+# BusyBox tar may not support -z; fall back to gzip pipeline.
+if tar -czf "$out" -T "$list" >/dev/null 2>&1; then
+  :
+else
+  tar -cf - -T "$list" 2>/dev/null | gzip -c > "$out"
+fi
+
+rm -f "$list" 2>/dev/null || true
+
+echo "[backup] created: $out"
+
+if [ -n "$RCLONE_REMOTE" ] && command -v rclone >/dev/null 2>&1; then
+  dst="$RCLONE_REMOTE:$RCLONE_PATH"
+  rclone mkdir "$dst" >/dev/null 2>&1 || true
+  rclone copy "$out" "$dst" --transfers 1 --checkers 1 --retries 2
+  echo "[backup] uploaded to: $dst"
+  # retention (best-effort)
+  if echo "$RCLONE_KEEP_DAYS" | grep -qE '^[0-9]+$' && [ "$RCLONE_KEEP_DAYS" -gt 0 ]; then
+    rclone delete "$dst" --min-age "${RCLONE_KEEP_DAYS}d" --include "zash-backup-*.tar.gz" >/dev/null 2>&1 || true
+  fi
+else
+  echo "[backup] rclone is not configured; set RCLONE_REMOTE in $ENV_FILE to enable cloud upload"
+fi
+
+EOF
+
+chmod +x "$AGENT_DIR/backup.sh"
 
 cat > "$AGENT_DIR/start.sh" <<'EOF'
 #!/bin/sh
