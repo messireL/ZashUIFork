@@ -35,13 +35,31 @@ const isUsed = (provider: any) => {
 
 const allProviders = computed(() => proxyProviederList.value || [])
 
+const providersAfterHideUnused = computed(() => {
+  let list = allProviders.value || []
+  if (hideUnusedProxyProviders.value) {
+    list = list.filter((p) => isUsed(p))
+  }
+  return list
+})
+
 const providers = computed(() => {
-  return allProviders.value.filter((p) => !hideUnusedProxyProviders.value || isUsed(p))
+  let list = providersAfterHideUnused.value || []
+
+  if (showOnlyActiveProxyProviders.value) {
+    list = list.filter((p) => {
+      const act = (providerActivityByName.value || {})[p.name]
+      const conns = Number((act as any)?.connections ?? 0)
+      return conns > 0
+    })
+  }
+
+  return list
 })
 
 const hiddenUnusedCount = computed(() => {
   if (!hideUnusedProxyProviders.value) return 0
-  return Math.max(0, (allProviders.value.length || 0) - (providers.value.length || 0))
+  return Math.max(0, (allProviders.value.length || 0) - (providersAfterHideUnused.value.length || 0))
 })
 
 const counts = computed(() => {

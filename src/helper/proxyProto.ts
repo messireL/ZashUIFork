@@ -1,23 +1,29 @@
-export type ProxyProtoKey = string
+export const normalizeProxyProtoKey = (type?: string | null): string => {
+  const raw = String(type || '').trim().toLowerCase()
+  if (!raw) return ''
 
-export const normalizeProxyProtoKey = (type: any): ProxyProtoKey => {
-  let t = String(type || '').trim().toLowerCase()
-  if (!t) return ''
+  // Normalize separators: spaces, underscores, dashes, dots, slashes
+  const compact = raw.replace(/[\s_\-./\\]/g, '')
+  let t = compact
 
-  // common aliases
+  // aliases / families
+  if (raw === 'trojan-go' || t === 'trojango') t = 'trojan'
   if (t === 'shadowsocks' || t.startsWith('shadowsocks')) t = 'ss'
-  if (t === 'wireguard') t = 'wg'
-  if (t === 'hysteria') t = 'hy'
-  if (t === 'hysteria2' || t === 'hy2') t = 'hy2'
+  if (t === 'hysteria' || t.startsWith('hysteria')) t = 'hy'
 
-  // normalize some known names
-  if (t === 'trojan-go') t = 'trojan'
+  // common protocol synonyms
+  if (t === 'wireguard') t = 'wg'
 
   return t
 }
 
-export const protoLabel = (key: string): string => {
-  const k = String(key || '').trim()
-  if (!k) return ''
-  return k.toUpperCase()
+export const getProxyProtoLabel = (type?: string | null): string => {
+  const t = normalizeProxyProtoKey(type)
+  if (!t) return ''
+
+  if (t === 'wg') return 'WG'
+  if (t === 'ss') return 'SS'
+  if (t === 'hy') return 'HY'
+
+  return t.toUpperCase()
 }
