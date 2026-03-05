@@ -5,6 +5,17 @@
     @scroll.passive="handleScroll"
   >
     <ProxyProvidersHealthSummary />
+
+    <div
+      v-if="proxiesTabShow === PROXY_TAB_TYPE.PROVIDER && renderGroups.length === 0"
+      class="mt-6 rounded-xl border border-base-content/10 bg-base-200/40 p-4 text-sm opacity-80"
+    >
+      <div>{{ $t('providerNoMatches') }}</div>
+      <button type="button" class="btn btn-sm mt-3" @click="resetProviderFilters">
+        {{ $t('resetFilters') }}
+      </button>
+    </div>
+
     <template v-if="displayTwoColumns">
       <div class="grid grid-cols-2 gap-1">
         <div
@@ -45,7 +56,8 @@ import { PROXY_TAB_TYPE, ROUTE_NAME } from '@/constant'
 import { cleanupExpiredPendingPageFocus, clearPendingPageFocus, flashNavHighlight, getPendingPageFocusForRoute } from '@/helper/navFocus'
 import { isMiddleScreen } from '@/helper/utils'
 import { fetchProxies, proxyGroupList, proxyMap, proxiesTabShow } from '@/store/proxies'
-import { collapseGroupMap, twoColumnProxyGroup } from '@/store/settings'
+import { collapseGroupMap, twoColumnProxyGroup, hideUnusedProxyProviders } from '@/store/settings'
+import { providerHealthFilter, proxyProvidersProtoFilter, showOnlyActiveProxyProviders } from '@/store/providerHealth'
 import { useElementSize, useSessionStorage } from '@vueuse/core'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
@@ -116,6 +128,13 @@ const filterContent: <T>(all: T[], target: number) => T[] = (all, target) => {
 }
 
 fetchProxies()
+
+const resetProviderFilters = () => {
+  providerHealthFilter.value = ''
+  proxyProvidersProtoFilter.value = 'all'
+  showOnlyActiveProxyProviders.value = false
+  hideUnusedProxyProviders.value = false
+}
 
 // --- Cross-page navigation focus (Topology -> Proxies) ---
 const findNavEl = (kind: string, value: string) => {

@@ -635,6 +635,11 @@ usersDbChanged: '已更改',
   topRulesTip: '基于最近连接（active + closed）。',
   openInTopology: '在 Topology 打开',
 
+  providerHideUnused: "隐藏未使用",
+  providerHideUnusedTip: "开启后，未被分组使用的提供商将被隐藏。",
+  providerHiddenCount: "已隐藏: {n}",
+  providerNoMatches: "未找到提供商（可能有筛选）。",
+  resetFilters: "重置筛选",
 }
 
 export default zh

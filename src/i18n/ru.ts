@@ -638,6 +638,11 @@ usersDbChanged: 'Изменено',
   topRulesTip: 'По последним соединениям (active + closed).',
   openInTopology: 'Открыть в Topology',
 
+  providerHideUnused: "Скрывать неиспользуемые",
+  providerHideUnusedTip: "Если включено — провайдеры, чьи прокси не используются в группах, скрываются.",
+  providerHiddenCount: "Скрыто неисп.: {n}",
+  providerNoMatches: "Провайдеры не найдены (возможны фильтры).",
+  resetFilters: "Сбросить фильтры",
 }
 
 export default ru

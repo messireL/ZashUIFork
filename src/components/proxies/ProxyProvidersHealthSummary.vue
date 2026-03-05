@@ -33,8 +33,15 @@ const isUsed = (provider: any) => {
   return (provider.proxies || []).some((p: any) => usedProxyNames.value.has(p.name))
 }
 
+const allProviders = computed(() => proxyProviederList.value || [])
+
 const providers = computed(() => {
-  return proxyProviederList.value.filter((p) => !hideUnusedProxyProviders.value || isUsed(p))
+  return allProviders.value.filter((p) => !hideUnusedProxyProviders.value || isUsed(p))
+})
+
+const hiddenUnusedCount = computed(() => {
+  if (!hideUnusedProxyProviders.value) return 0
+  return Math.max(0, (allProviders.value.length || 0) - (providers.value.length || 0))
 })
 
 const counts = computed(() => {
@@ -191,6 +198,19 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
       </div>
 
       <div class="ml-auto flex items-center gap-2">
+
+        <button
+          class="badge badge-neutral cursor-pointer"
+          :class="hideUnusedProxyProviders ? '' : 'badge-outline'"
+          @click="hideUnusedProxyProviders = !hideUnusedProxyProviders"
+          :title="$t('providerHideUnusedTip')"
+        >
+          {{ $t('providerHideUnused') }}
+          <template v-if="hiddenUnusedCount > 0">
+            • {{ $t('providerHiddenCount', { n: hiddenUnusedCount }) }}
+          </template>
+        </button>
+
         <button
           class="badge badge-neutral cursor-pointer"
           :class="showOnlyActiveProxyProviders ? '' : 'badge-outline'"
