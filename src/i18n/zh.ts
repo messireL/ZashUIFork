@@ -72,8 +72,6 @@ tasks: '任务',
   providerHealthAgentOffline: 'Agent 离线',
   providerOnlyActive: '仅活动',
   providerOnlyActiveTip: '仅显示当前有活动连接的提供者',
-  providerProtoTip: '协议标签会显示包含该类型代理的提供商。（WG 只有在 Mihomo 以 proxy-provider 形式提供时才会出现在这里。）',
-  providerProtoManage: '显示/隐藏协议标签',
   providerSortHealth: '健康',
   providerSortActivity: '活跃',
   providerSortName: '名称',
@@ -636,11 +634,6 @@ usersDbChanged: '已更改',
   topRulesTip: '基于最近连接（active + closed）。',
   openInTopology: '在 Topology 打开',
 
-  providerHideUnused: "隐藏未使用",
-  providerHideUnusedTip: "开启后，未被分组使用的提供商将被隐藏。",
-  providerHiddenCount: "已隐藏: {n}",
-  providerNoMatches: "未找到提供商（可能有筛选）。",
-  resetFilters: "重置筛选",
 }
 
 export default zh

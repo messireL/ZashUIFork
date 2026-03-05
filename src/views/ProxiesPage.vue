@@ -5,31 +5,7 @@
     @scroll.passive="handleScroll"
   >
     <ProxyProvidersHealthSummary />
-
-    <div
-      v-if="proxiesTabShow === PROXY_TAB_TYPE.PROVIDER && renderGroups.length === 0"
-      class="mt-6 rounded-xl border border-base-content/10 bg-base-200/40 p-4 text-sm opacity-80"
-    >
-      <div>{{ $t('providerNoMatches') }}</div>
-      <button type="button" class="btn btn-sm mt-3" @click="resetProviderFilters">
-        {{ $t('resetFilters') }}
-      </button>
-    </div>
-
-    <template v-if="providerCardsAutoGrid">
-      <div
-        class="grid gap-1"
-        :style="providerGridStyle"
-      >
-        <component
-          v-for="name in renderGroups"
-          :is="renderComponent"
-          :key="name"
-          :name="name"
-        />
-      </div>
-    </template>
-    <template v-else-if="displayTwoColumns">
+    <template v-if="displayTwoColumns">
       <div class="grid grid-cols-2 gap-1">
         <div
           v-for="idx in [0, 1]"
@@ -69,8 +45,7 @@ import { PROXY_TAB_TYPE, ROUTE_NAME } from '@/constant'
 import { cleanupExpiredPendingPageFocus, clearPendingPageFocus, flashNavHighlight, getPendingPageFocusForRoute } from '@/helper/navFocus'
 import { isMiddleScreen } from '@/helper/utils'
 import { fetchProxies, proxyGroupList, proxyMap, proxiesTabShow } from '@/store/proxies'
-import { collapseGroupMap, twoColumnProxyGroup, hideUnusedProxyProviders } from '@/store/settings'
-import { providerHealthFilter, proxyProvidersProtoFilter, showOnlyActiveProxyProviders } from '@/store/providerHealth'
+import { collapseGroupMap, twoColumnProxyGroup } from '@/store/settings'
 import { useElementSize, useSessionStorage } from '@vueuse/core'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
@@ -127,23 +102,7 @@ const renderComponent = computed(() => {
   return ProxyGroup
 })
 
-const isProviderTab = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
-
-const providerCardsAutoGrid = computed(() => {
-  // Providers tab: make provider cards auto-fit to screen width.
-  // Controlled by the existing twoColumnProxyGroup switch.
-  return isProviderTab.value && twoColumnProxyGroup.value && renderGroups.value.length > 1
-})
-
-const providerGridStyle = computed(() => {
-  // Prevent horizontal overflow on small screens: min(520px, 100%).
-  return 'grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr));'
-})
-
 const displayTwoColumns = computed(() => {
-  // Two-column layout is used for proxy groups (not provider cards).
-  if (isProviderTab.value) return false
-
   if (renderGroups.value.length < 2 || !twoColumnProxyGroup.value) {
     return false
   }
@@ -157,13 +116,6 @@ const filterContent: <T>(all: T[], target: number) => T[] = (all, target) => {
 }
 
 fetchProxies()
-
-const resetProviderFilters = () => {
-  providerHealthFilter.value = ''
-  proxyProvidersProtoFilter.value = 'all'
-  showOnlyActiveProxyProviders.value = false
-  hideUnusedProxyProviders.value = false
-}
 
 // --- Cross-page navigation focus (Topology -> Proxies) ---
 const findNavEl = (kind: string, value: string) => {

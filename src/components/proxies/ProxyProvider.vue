@@ -1,24 +1,13 @@
 <template>
-  <div v-if="proxyProvider" data-nav-kind="proxy-provider" :data-nav-value="proxyProvider.name">
+  <div data-nav-kind="proxy-provider" :data-nav-value="proxyProvider.name">
     <CollapseCard :name="proxyProvider.name">
     <template v-slot:title="{ open }">
       <div class="flex items-center justify-between gap-2 rounded-xl px-2 py-1" :class="open ? 'bg-base-200 ring-1 ring-base-300' : ''">
         <div class="text-xl font-medium">
           <ProviderIconBadge v-if="providerIconRaw" :icon="providerIconRaw" size="sm" class="mr-1 align-middle" />
           {{ proxyProvider.name }}
-          <span
-            v-if="providerTypeCounts.length"
-            class="ml-2 inline-flex flex-wrap items-center gap-1 align-middle"
-            :title="providerTypesTooltip"
-          >
-            <span
-              v-for="b in providerTypeBadges"
-              :key="b.key"
-              class="badge badge-sm opacity-70"
-            >
-              {{ b.label }}<template v-if="b.count > 1">×{{ b.count }}</template>
-            </span>
-            <span v-if="providerTypeOverflow" class="badge badge-sm opacity-70">+{{ providerTypeOverflow }}</span>
+          <span v-if="providerTypesLabel" class="badge badge-sm ml-2 align-middle opacity-70" :title="providerTypesLabel">
+            {{ providerTypesLabel }}
           </span>
           <span
             v-if="providerHealth"
@@ -99,9 +88,9 @@
             </button>
           </div>
           <progress
-            v-if="subscriptionInfo?.percent != null"
+            v-if="subscriptionInfo.percent !== null"
             class="progress progress-info w-full max-w-72"
-            :value="subscriptionInfo?.percent ?? 0"
+            :value="subscriptionInfo.percent"
             max="100"
           ></progress>
 
@@ -131,7 +120,7 @@
           </div>
 
           <pre
-            v-if="subscriptionInfo?.totalLabel === '—' && showRawSub"
+            v-if="subscriptionInfo.totalLabel === '—' && showRawSub"
             class="mt-2 text-xs opacity-70 whitespace-pre-wrap break-all"
           >{{ subscriptionInfo.raw }}</pre>
 
@@ -337,14 +326,6 @@
     </template>
     </CollapseCard>
   </div>
-
-  <!-- Defensive fallback: avoid a totally blank page if provider is missing/mismatched -->
-  <div
-    v-else
-    class="rounded-box bg-base-200/40 p-4 text-sm opacity-80"
-  >
-    Провайдер не найден: <span class="font-mono">{{ name }}</span>
-  </div>
 </template>
 
 <script setup lang="ts">
@@ -362,7 +343,6 @@ import { useRenderProxies } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
 import { normalizeProviderIcon } from '@/helper/providerIcon'
-import { normalizeProxyProtoKey, protoLabel } from '@/helper/proxyProto'
 import { fetchProxyProviderByNameOnly, getLatencyByName, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
 import { NOT_CONNECTED, ROUTE_NAME } from '@/constant'
@@ -387,50 +367,23 @@ const props = defineProps<{
 const router = useRouter()
 const { t } = useI18n()
 
-// Provider list can refresh/reorder; be defensive to avoid blank screens if a provider is
-// temporarily missing (or name mismatched).
-const proxyProvider = computed(() => proxyProviederList.value.find((group) => group.name === props.name))
-
-// Different cores/APIs may shape provider.proxies as an array OR as an object map.
-// Normalize to an array to keep rendering stable.
-const providerProxyItems = computed<any[]>(() => {
-  const v = (proxyProvider.value as any)?.proxies
-  if (Array.isArray(v)) return v
-  if (v && typeof v === 'object') return Object.values(v)
-  return []
-})
+const proxyProvider = computed(
+  () => proxyProviederList.value.find((group) => group.name === props.name)!,
+)
 
 const providerIconRaw = computed(() => normalizeProviderIcon((proxyProviderIconMap.value || {})[props.name]))
 
-const providerTypeCounts = computed(() => {
-  const m = new Map<string, number>()
-	for (const p of providerProxyItems.value) {
-		const t0 = typeof (p as any) === 'string' ? (proxyMap.value as any)?.[(p as any)]?.type : (p as any)?.type
-		const k = normalizeProxyProtoKey(t0)
-    if (!k) continue
-    m.set(k, (m.get(k) || 0) + 1)
+const providerTypesLabel = computed(() => {
+  const set = new Set<string>()
+  for (const p of (proxyProvider.value as any)?.proxies || []) {
+    const t = String((p as any)?.type || '').trim().toLowerCase()
+    if (t) set.add(t)
   }
-  const arr = Array.from(m.entries()).map(([key, count]) => ({
-    key,
-    label: protoLabel(key),
-    count,
-  }))
-  arr.sort((a, b) => (b.count - a.count) || a.key.localeCompare(b.key))
-  return arr
+  const arr = Array.from(set)
+  arr.sort()
+  return arr.length ? arr.join('/') : ''
 })
-
-const providerTypeBadges = computed(() => providerTypeCounts.value.slice(0, 4))
-const providerTypeOverflow = computed(() => Math.max(0, providerTypeCounts.value.length - providerTypeBadges.value.length))
-const providerTypesTooltip = computed(() => {
-  return providerTypeCounts.value
-    .map((x) => x.label + (x.count > 1 ? ('\u00D7' + String(x.count)) : ''))
-    .join(' / ')
-})
-const allProxies = computed(() =>
-  providerProxyItems.value
-    .map((node: any) => (typeof node === 'string' ? node : node?.name))
-    .filter(Boolean),
-)
+const allProxies = computed(() => proxyProvider.value.proxies.map((node) => node.name) ?? [])
 const { renderProxies, proxiesCount } = useRenderProxies(allProxies)
 
 // best-effort: ensure cache is populated when provider cards mount
