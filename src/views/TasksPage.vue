@@ -166,12 +166,20 @@
           <Teleport to="body">
             <div v-if="providerIconPickerOpen" class="fixed inset-0 z-[9999]" @mousedown.self="closeProviderIconPicker">
               <div
+                ref="providerIconPickerRoot"
                 class="absolute w-[min(18rem,calc(100vw-16px))] rounded-box bg-base-200 p-2 shadow ring-1 ring-base-300"
                 :style="providerIconPickerStyle"
                 @mousedown.stop
               >
                 <div class="text-[11px] opacity-70">{{ $t('providerIconTip') }}</div>
-                <div class="mt-2 flex flex-wrap gap-1">
+                <input
+                  type="text"
+                  class="input input-bordered input-xs mt-2 w-full"
+                  v-model="providerIconSearch"
+                  :placeholder="$t('search') + ' (RU/US/DE...)'"
+                  @keydown.stop
+                />
+                <div class="mt-2 max-h-64 overflow-auto pr-1 flex flex-wrap gap-1">
                   <button type="button" class="btn btn-ghost btn-xs px-2" @click.stop="() => pickProviderIconFromPicker('')">
                     <ProviderIconBadge icon="" />
                   </button>
@@ -1219,7 +1227,8 @@ import { navigateToTopology } from '@/helper/topologyNav'
 import { parseDateMaybe } from '@/helper/providerHealth'
 import { showNotification } from '@/helper/notification'
 import { decodeB64Utf8 } from '@/helper/b64'
-import { countryCodeToFlagEmoji, normalizeProviderIcon } from '@/helper/providerIcon'
+import { normalizeProviderIcon } from '@/helper/providerIcon'
+import { FLAG_CODES } from '@/helper/flagIcons'
 import { activeBackend } from '@/store/setup'
 import { agentEnabled, agentUrl } from '@/store/agent'
 import { proxyProviderIconMap, proxyProviderPanelUrlMap, proxyProviderSslWarnDaysMap, sslNearExpiryDaysDefault } from '@/store/settings'
@@ -1460,9 +1469,26 @@ const setProviderPanelUrl = (name: string, url: string) => {
 }
 
 // ---- Provider icon (flag/globe) ----
-const providerIconCountries = [
+const providerIconPopular = [
   'RU','US','DE','FR','GB','NL','FI','SE','NO','EE','LV','LT','PL','UA','RO','TR','ES','IT','CH','AT','CZ','SG','JP','KR','CN','HK','IN',
 ]
+
+const providerIconSearch = ref('')
+
+const providerIconCountries = computed(() => {
+  const all = Array.isArray(FLAG_CODES) ? FLAG_CODES : []
+  const q = String(providerIconSearch.value || '').trim().toUpperCase()
+
+  if (q) {
+    return all.filter((cc) => cc.includes(q))
+  }
+
+  // default: popular first
+  const pop = providerIconPopular.filter((cc) => all.includes(cc))
+  const popSet = new Set(pop)
+  const rest = all.filter((cc) => !popSet.has(cc))
+  return [...pop, ...rest]
+})
 
 const getProviderIconRaw = (name: string): string => {
   const k = String(name || '').trim()
@@ -1470,29 +1496,6 @@ const getProviderIconRaw = (name: string): string => {
   return normalizeProviderIcon((proxyProviderIconMap.value || {})[k])
 }
 
-const providerIconKind = (name: string): 'none' | 'globe' | 'flag' => {
-  const v = getProviderIconRaw(name)
-  if (!v) return 'none'
-  if (v === 'globe') return 'globe'
-  return countryCodeToFlagEmoji(v) ? 'flag' : 'none'
-}
-
-const providerIconFlag = (name: string): string => {
-  const v = getProviderIconRaw(name)
-  if (!v || v === 'globe') return ''
-  return countryCodeToFlagEmoji(v) || ''
-}
-
-
-
-const providerIconLabel = (name: string): string => {
-  const v = getProviderIconRaw(name)
-  if (!v) return '—'
-  if (v === 'globe') return '🌐'
-  // Prefer emoji if available; some OSes render flags as plain letters (DE/TR/etc),
-  // so the badge styling above keeps layout stable either way.
-  return countryCodeToFlagEmoji(v) || v
-}
 const setProviderIcon = (name: string, icon: string) => {
   const k = String(name || '').trim()
   if (!k) return
@@ -1507,6 +1510,7 @@ const setProviderIcon = (name: string, icon: string) => {
 const providerIconPickerOpen = ref(false)
 const providerIconPickerProvider = ref('')
 const providerIconPickerAnchor = ref<HTMLElement | null>(null)
+const providerIconPickerRoot = ref<HTMLElement | null>(null)
 const providerIconPickerPos = reactive({ top: 0, left: 0 })
 
 const providerIconPickerStyle = computed(() => ({
@@ -1548,6 +1552,8 @@ const closeProviderIconPicker = () => {
   providerIconPickerOpen.value = false
   providerIconPickerProvider.value = ''
   providerIconPickerAnchor.value = null
+  providerIconPickerRoot.value = null
+  providerIconSearch.value = ''
 }
 
 const pickProviderIconFromPicker = (icon: string) => {
@@ -1572,16 +1578,38 @@ const onDocMousedownProviderIconPicker = (ev: MouseEvent) => {
   closeProviderIconPicker()
 }
 
+let providerIconPickerRaf = 0
+const onScrollProviderIconPicker = (ev: Event) => {
+  if (!providerIconPickerOpen.value) return
+
+  // Don't close/reposition while the user scrolls inside the picker itself.
+  const root = providerIconPickerRoot.value
+  const t = ev.target as any
+  if (root && t && typeof (t as any).nodeType === 'number') {
+    try {
+      if (root.contains(t as Node)) return
+    } catch {
+      // ignore
+    }
+  }
+
+  if (providerIconPickerRaf) return
+  providerIconPickerRaf = window.requestAnimationFrame(() => {
+    providerIconPickerRaf = 0
+    repositionProviderIconPicker()
+  })
+}
+
 onMounted(() => {
   window.addEventListener('resize', repositionProviderIconPicker)
-  window.addEventListener('scroll', closeProviderIconPicker, true)
+  window.addEventListener('scroll', onScrollProviderIconPicker, true)
   document.addEventListener('keydown', onDocKeydownProviderIconPicker)
   document.addEventListener('mousedown', onDocMousedownProviderIconPicker)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', repositionProviderIconPicker)
-  window.removeEventListener('scroll', closeProviderIconPicker, true)
+  window.removeEventListener('scroll', onScrollProviderIconPicker, true)
   document.removeEventListener('keydown', onDocKeydownProviderIconPicker)
   document.removeEventListener('mousedown', onDocMousedownProviderIconPicker)
 })

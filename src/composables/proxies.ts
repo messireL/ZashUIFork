@@ -1,6 +1,7 @@
 import { isSingBox } from '@/api'
 import { GLOBAL, PROXY_TAB_TYPE } from '@/constant'
 import { isHiddenGroup } from '@/helper'
+import { normalizeProxyProtoKey } from '@/helper/proxyProto'
 import { getProviderHealth } from '@/helper/providerHealth'
 import { configs } from '@/store/config'
 import { providerActivityByName, providerActivitySnapshot } from '@/store/providerActivity'
@@ -19,6 +20,8 @@ import {
   providerHealthFilter,
   proxyProvidersSortMode,
   showOnlyActiveProxyProviders,
+
+  proxyProvidersProtoFilter,
 } from '@/store/providerHealth'
 import { isEmpty } from 'lodash'
 import { computed, ref } from 'vue'
@@ -72,7 +75,10 @@ export const renderGroups = computed(() => {
 
     const isUsed = (provider: any) => {
       if (usedProxyNames.has(provider.name)) return true
-      return (provider.proxies || []).some((p: any) => usedProxyNames.has(p.name))
+	  return (provider.proxies || []).some((p: any) => {
+	    const name = typeof p === 'string' ? p : p?.name
+	    return name ? usedProxyNames.has(name) : false
+	  })
     }
 
     // When proxyMap is temporarily empty, usedProxyNames becomes empty and the "hide unused" filter
@@ -97,6 +103,22 @@ export const renderGroups = computed(() => {
     // Optionally show only providers with active connections (best-effort).
     if (showOnlyActiveProxyProviders.value) {
       list = list.filter((p: any) => (providerActivityByName.value[p.name]?.connections || 0) > 0)
+    }
+
+    // Optional protocol filter sub-tab (wg/vless/ss/...)
+    const proto = String(proxyProvidersProtoFilter.value || 'all').trim()
+    if (proto && proto !== 'all') {
+      list = list.filter((p: any) => {
+        // Some backends (or proxy types like WireGuard) may omit proxy items or their `type`.
+        // Prefer provider-level `type` when available, then fall back to scanning proxy items.
+        const providerProto = normalizeProxyProtoKey((p as any)?.type)
+        if (providerProto === proto) return true
+
+        return ((p as any)?.proxies || []).some((n: any) => {
+          const t0 = typeof n === 'string' ? (proxyMap.value[n]?.type as any) : (n as any)?.type
+          return normalizeProxyProtoKey(t0) === proto
+        })
+      })
     }
 
     const mode = proxyProvidersSortMode.value || 'health'

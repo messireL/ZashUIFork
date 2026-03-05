@@ -1,9 +1,14 @@
 <template>
   <div
-    class="card hover:bg-base-200 gap-1 p-2 text-sm"
+    class="card hover:bg-base-200 gap-1 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-base-300"
+    :class="expanded ? 'bg-base-200' : ''"
     data-nav-kind="rule"
     :data-rule-type="rule.type"
     :data-rule-payload="String(rule.payload || '')"
+    tabindex="0"
+    @click="toggleExpanded"
+    @keydown.enter.prevent="toggleExpanded()"
+    @keydown.space.prevent="toggleExpanded()"
   >
     <div class="flex items-start justify-between gap-2 min-h-5 leading-5">
       <div class="min-w-0 flex items-center gap-2">
@@ -15,7 +20,8 @@
 
         <span
           v-if="rule.payload"
-          class="text-main min-w-0 truncate font-mono text-xs"
+          class="text-main min-w-0 font-mono text-xs"
+          :class="expanded ? 'whitespace-pre-wrap break-all' : 'truncate'"
           :title="String(rule.payload)"
         >
           {{ rule.payload }}
@@ -55,6 +61,17 @@
           :value="ruleTextForTopology"
           :grouped="true"
         />
+
+        <button
+          class="btn btn-circle btn-ghost btn-xs"
+          @click.stop="expanded = !expanded"
+          :title="expanded ? 'Свернуть' : 'Развернуть'"
+        >
+          <ChevronDownIcon
+            class="h-4 w-4 transition-transform"
+            :class="expanded ? 'rotate-180' : ''"
+          />
+        </button>
       </div>
     </div>
 
@@ -84,6 +101,50 @@
         {{ $t('updated') }} {{ ruleSetProviderInfo.updatedFromNow }}
       </div>
     </div>
+
+    <div
+      v-if="expanded"
+      class="mt-2 pt-2 border-t border-base-300/40 text-xs text-base-content/70"
+    >
+      <div class="flex flex-wrap gap-x-4 gap-y-1">
+        <span>
+          <span class="text-base-content/50">Type:</span>
+          <span class="ml-1 font-mono">{{ rule.type }}</span>
+        </span>
+        <span>
+          <span class="text-base-content/50">{{ $t('proxy') }}:</span>
+          <span class="ml-1 font-mono">{{ rule.proxy }}</span>
+        </span>
+        <span>
+          <span class="text-base-content/50">{{ $t('hits') }}:</span>
+          <span class="ml-1 font-mono">{{ hits }}</span>
+        </span>
+        <template v-if="typeof rule.size === 'number' && rule.size > 0">
+          <span>
+            <span class="text-base-content/50">{{ $t('size') }}:</span>
+            <span class="ml-1 font-mono">{{ prettyBytes(rule.size) }}</span>
+          </span>
+        </template>
+        <template v-if="ruleSetProviderInfo">
+          <span>
+            <span class="text-base-content/50">RuleSet:</span>
+            <span class="ml-1 font-mono">{{ ruleSetProviderInfo.name }}</span>
+          </span>
+          <span>
+            <span class="text-base-content/50">Behavior:</span>
+            <span class="ml-1 font-mono">{{ ruleSetProviderInfo.behavior }}</span>
+          </span>
+          <span>
+            <span class="text-base-content/50">Rules:</span>
+            <span class="ml-1 font-mono">{{ ruleSetProviderInfo.ruleCount }}</span>
+          </span>
+          <span>
+            <span class="text-base-content/50">Vehicle:</span>
+            <span class="ml-1 font-mono">{{ ruleSetProviderInfo.vehicleType }}</span>
+          </span>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -101,6 +162,7 @@ import type { Rule } from '@/types'
 import {
   ArrowPathIcon,
   ArrowRightCircleIcon,
+  ChevronDownIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/vue/24/outline'
 import { twMerge } from 'tailwind-merge'
@@ -113,6 +175,34 @@ const props = defineProps<{
   rule: Rule
   index: number
 }>()
+
+const expanded = ref(false)
+
+function toggleExpanded(event?: Event) {
+  if (!event) {
+    expanded.value = !expanded.value
+    return
+  }
+
+  const target = event.target as HTMLElement | null
+  if (!target) {
+    expanded.value = !expanded.value
+    return
+  }
+
+  // Не разворачиваем карточку, если клик/тап пришёл по интерактивному элементу.
+  if (
+    target.closest('button') ||
+    target.closest('a') ||
+    target.closest('input') ||
+    target.closest('select') ||
+    target.closest('textarea')
+  ) {
+    return
+  }
+
+  expanded.value = !expanded.value
+}
 
 const { t } = useI18n()
 const { showTip } = useTooltip()
@@ -168,9 +258,12 @@ const ruleSetProviderInfo = computed(() => {
   const provider = ruleProviderList.value.find((p) => p.name === props.rule.payload)
   if (!provider) return null
   return {
+    name: provider.name,
     updatedAt: provider.updatedAt,
     updatedFromNow: fromNow(provider.updatedAt),
     vehicleType: provider.vehicleType,
+    behavior: provider.behavior,
+    ruleCount: provider.ruleCount,
   }
 })
 

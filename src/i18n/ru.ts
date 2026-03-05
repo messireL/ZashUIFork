@@ -72,6 +72,8 @@ tasks: 'Задачи',
   providerHealthAgentOffline: 'Агент недоступен',
   providerOnlyActive: 'Только активные',
   providerOnlyActiveTip: 'Показывать только провайдеры с активными соединениями',
+  providerProtoTip: 'Разделение по протоколам: вкладка показывает провайдеры, в которых есть прокси этого типа. (WG появится здесь только если он приходит как proxy-provider от Mihomo.)',
+  providerProtoManage: 'Показать/скрыть протоколы',
   providerSortHealth: 'По состоянию',
   providerSortActivity: 'По активности',
   providerSortName: 'По имени',
@@ -637,6 +639,11 @@ usersDbChanged: 'Изменено',
   topRulesTip: 'По последним соединениям (active + closed).',
   openInTopology: 'Открыть в Topology',
 
+  providerHideUnused: "Скрывать неиспользуемые",
+  providerHideUnusedTip: "Если включено — провайдеры, чьи прокси не используются в группах, скрываются.",
+  providerHiddenCount: "Скрыто неисп.: {n}",
+  providerNoMatches: "Провайдеры не найдены (возможны фильтры).",
+  resetFilters: "Сбросить фильтры",
 }
 
 export default ru
