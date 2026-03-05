@@ -354,6 +354,7 @@ import { useRenderProxies } from '@/composables/renderProxies'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
 import { normalizeProviderIcon } from '@/helper/providerIcon'
+import { normalizeProxyProtoKey, protoLabel } from '@/helper/proxyProto'
 import { fetchProxyProviderByNameOnly, getLatencyByName, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
 import { NOT_CONNECTED, ROUTE_NAME } from '@/constant'
@@ -384,26 +385,16 @@ const proxyProvider = computed(
 
 const providerIconRaw = computed(() => normalizeProviderIcon((proxyProviderIconMap.value || {})[props.name]))
 
-const formatProxyType = (type: string) => {
-  let t = String(type || '').trim().toLowerCase()
-  if (!t) return ''
-  t = t.replace('shadowsocks', 'ss')
-  t = t.replace('wireguard', 'wg')
-  t = t.replace('hysteria', 'hy')
-  return t
-}
-
 const providerTypeCounts = computed(() => {
   const m = new Map<string, number>()
   for (const p of (proxyProvider.value as any)?.proxies || []) {
-    const raw = String((p as any)?.type || '')
-    const k = formatProxyType(raw)
+    const k = normalizeProxyProtoKey((p as any)?.type)
     if (!k) continue
     m.set(k, (m.get(k) || 0) + 1)
   }
   const arr = Array.from(m.entries()).map(([key, count]) => ({
     key,
-    label: key.toUpperCase(),
+    label: protoLabel(key),
     count,
   }))
   arr.sort((a, b) => (b.count - a.count) || a.key.localeCompare(b.key))
@@ -414,7 +405,7 @@ const providerTypeBadges = computed(() => providerTypeCounts.value.slice(0, 4))
 const providerTypeOverflow = computed(() => Math.max(0, providerTypeCounts.value.length - providerTypeBadges.value.length))
 const providerTypesTooltip = computed(() => {
   return providerTypeCounts.value
-    .map((x) => `${x.label}${x.count > 1 ? `×${x.count}` : ''}`)
+    .map((x) => x.label + (x.count > 1 ? ('\u00D7' + String(x.count)) : ''))
     .join(' / ')
 })
 const allProxies = computed(() => proxyProvider.value.proxies.map((node) => node.name) ?? [])

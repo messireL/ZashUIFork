@@ -24,6 +24,9 @@ export const showOnlyActiveProxyProviders = useStorage<boolean>(
 /** Optional quick filter for providers tab: expired | nearExpiry | offline | degraded | healthy */
 export const providerHealthFilter = useStorage<string>('config/provider-health-filter', '')
 
+/** Providers sub-tab: protocol filter on Providers page (all | wg | vless | ss | ...). */
+export const proxyProvidersProtoFilter = useStorage<string>('config/proxy-providers-proto-filter', 'all')
+
 export const agentProvidersLoading = ref(false)
 export const agentProvidersOk = ref(false)
 export const agentProvidersError = ref<string | null>(null)

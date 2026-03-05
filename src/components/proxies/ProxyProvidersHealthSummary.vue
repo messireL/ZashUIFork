@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { getProviderHealth } from '@/helper/providerHealth'
+import { normalizeProxyProtoKey, protoLabel } from '@/helper/proxyProto'
 import { PROXY_TAB_TYPE } from '@/constant'
 import { proxiesTabShow, proxyGroupList, proxyMap, proxyProviederList } from '@/store/proxies'
 import { providerActivityByName } from '@/store/providerActivity'
@@ -14,9 +15,10 @@ import {
   providerHealthFilter,
   proxyProvidersSortMode,
   showOnlyActiveProxyProviders,
+  proxyProvidersProtoFilter,
 } from '@/store/providerHealth'
 import dayjs from 'dayjs'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 
 const usedProxyNames = computed(() => {
   const set = new Set<string>()
@@ -48,6 +50,45 @@ const counts = computed(() => {
   return c
 })
 
+const protoTabs = computed(() => {
+  const m = new Map<string, number>()
+
+  for (const p of providers.value || []) {
+    const seen = new Set<string>()
+    for (const n of ((p as any)?.proxies || []) as any[]) {
+      const k = normalizeProxyProtoKey((n as any)?.type)
+      if (k) seen.add(k)
+    }
+    for (const k of seen) {
+      m.set(k, (m.get(k) || 0) + 1)
+    }
+  }
+
+  const arr = Array.from(m.entries()).map(([key, count]) => ({
+    key,
+    label: protoLabel(key),
+    count,
+  }))
+  arr.sort((a, b) => (b.count - a.count) || a.key.localeCompare(b.key))
+
+  const out: any[] = [{ key: 'all', label: '', count: providers.value.length }]
+  out.push(...arr)
+  return out
+})
+
+const setProto = (k: string) => {
+  proxyProvidersProtoFilter.value = k || 'all'
+}
+
+watch(
+  protoTabs,
+  (tabs) => {
+    const keys = new Set((tabs || []).map((t: any) => String(t.key)))
+    const cur = String(proxyProvidersProtoFilter.value || 'all')
+    if (!keys.has(cur)) proxyProvidersProtoFilter.value = 'all'
+  },
+  { immediate: true },
+)
 const activeProvidersCount = computed(() => {
   let n = 0
   for (const p of providers.value || []) {
@@ -128,6 +169,25 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
         >
           {{ $t('providerHealthHealthy') }}: {{ counts.healthy }}
         </button>
+      </div>
+
+      <div class="w-full"></div>
+
+      <div v-if="protoTabs.length > 1" class="flex flex-wrap items-center gap-2" data-proto-tabs>
+        <div class="tabs tabs-boxed tabs-sm">
+          <a
+            v-for="t2 in protoTabs"
+            :key="t2.key"
+            class="tab"
+            :class="proxyProvidersProtoFilter === t2.key ? 'tab-active' : ''"
+            @click="setProto(t2.key)"
+            :title="t2.key === 'all' ? $t('all') : (t2.label + ': ' + t2.count)"
+          >
+            <template v-if="t2.key === 'all'">{{ $t('all') }}</template>
+            <template v-else>{{ t2.label }} ({{ t2.count }})</template>
+          </a>
+        </div>
+        <div class="text-[11px] opacity-60">{{ $t('providerProtoTip') }}</div>
       </div>
 
       <div class="ml-auto flex items-center gap-2">

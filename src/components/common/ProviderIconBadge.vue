@@ -14,20 +14,10 @@
 </template>
 
 <script setup lang="ts">
+import { FLAG_URLS } from '@/helper/flagIcons'
 import { normalizeProviderIcon } from '@/helper/providerIcon'
 import { GlobeAltIcon } from '@heroicons/vue/24/outline'
 import { computed } from 'vue'
-
-// Bundle flag SVGs into dist so icons work on systems without emoji flags.
-// Avoid relying on OS fonts and avoid CSS url path issues in external-ui zip deployment.
-// NOTE: Vite requires globs to start with '/' or './'. Using an absolute path from project root
-// ensures Rollup can resolve assets from node_modules and bundle them into dist.
-// We also use `query`/`import` instead of deprecated `as: 'url'`.
-const FLAG_URLS = import.meta.glob('/node_modules/flag-icons/flags/4x3/*.svg', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-}) as Record<string, string>
 
 const props = withDefaults(
   defineProps<{ icon: string; size?: 'sm' | 'md' }>(),
@@ -51,7 +41,7 @@ const flagCode = computed(() => {
 const flagUrl = computed(() => {
   if (!flagCode.value) return ''
   const key = `/node_modules/flag-icons/flags/4x3/${flagCode.value.toLowerCase()}.svg`
-  return FLAG_URLS[key] || ''
+  return (FLAG_URLS as any)[key] || ''
 })
 
 const titleText = computed(() => {

@@ -1,6 +1,7 @@
 import { isSingBox } from '@/api'
 import { GLOBAL, PROXY_TAB_TYPE } from '@/constant'
 import { isHiddenGroup } from '@/helper'
+import { normalizeProxyProtoKey } from '@/helper/proxyProto'
 import { getProviderHealth } from '@/helper/providerHealth'
 import { configs } from '@/store/config'
 import { providerActivityByName, providerActivitySnapshot } from '@/store/providerActivity'
@@ -19,6 +20,8 @@ import {
   providerHealthFilter,
   proxyProvidersSortMode,
   showOnlyActiveProxyProviders,
+
+  proxyProvidersProtoFilter,
 } from '@/store/providerHealth'
 import { isEmpty } from 'lodash'
 import { computed, ref } from 'vue'
@@ -97,6 +100,12 @@ export const renderGroups = computed(() => {
     // Optionally show only providers with active connections (best-effort).
     if (showOnlyActiveProxyProviders.value) {
       list = list.filter((p: any) => (providerActivityByName.value[p.name]?.connections || 0) > 0)
+    }
+
+    // Optional protocol filter sub-tab (wg/vless/ss/...)
+    const proto = String(proxyProvidersProtoFilter.value || 'all').trim()
+    if (proto && proto !== 'all') {
+      list = list.filter((p: any) => ((p as any)?.proxies || []).some((n: any) => normalizeProxyProtoKey((n as any)?.type) === proto))
     }
 
     const mode = proxyProvidersSortMode.value || 'health'
