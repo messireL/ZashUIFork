@@ -70,6 +70,8 @@ tasks: 'Tasks',
   providerHealthAgentOffline: 'Agent offline',
   providerOnlyActive: 'Active only',
   providerOnlyActiveTip: 'Show only providers that currently have active connections',
+  providerProtoTip: 'Protocol tabs show providers that contain proxies of that type. (WG appears here only if it is delivered as a proxy-provider by Mihomo.)',
+  providerProtoManage: 'Show/hide protocol tabs',
   providerSortHealth: 'Health',
   providerSortActivity: 'Activity',
   providerSortName: 'Name',
@@ -635,6 +637,11 @@ usersDbChanged: 'Changed',
   topRulesTip: 'Based on recent connections (active + closed).',
   openInTopology: 'Open in Topology',
 
+  providerHideUnused: "Hide unused",
+  providerHideUnusedTip: "When enabled, providers whose proxies are not used by groups are hidden.",
+  providerHiddenCount: "Hidden unused: {n}",
+  providerNoMatches: "No providers found (filters may be active).",
+  resetFilters: "Reset filters",
 }
 
 export type LANG_MESSAGE = typeof en

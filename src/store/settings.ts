@@ -204,6 +204,27 @@ if (typeof hideUnusedProxyProviders.value === 'string') {
   hideUnusedProxyProviders.value = hideUnusedProxyProviders.value === 'true'
 }
 
+// Providers tab: hide specific protocol tabs (e.g. DIRECT/REJECT/VLESS/...).
+export const hiddenProxyProviderProtoKeys = useStorage<string[]>(
+  'config/proxy-providers-proto-hidden',
+  [],
+)
+
+// normalize legacy / bad values from storage
+if (typeof (hiddenProxyProviderProtoKeys as any).value === 'string') {
+  const raw = String((hiddenProxyProviderProtoKeys as any).value || '')
+  ;(hiddenProxyProviderProtoKeys as any).value = raw
+    .split(/[
+,;]+/g)
+    .map((x) => x.trim())
+    .filter(Boolean)
+}
+if (Array.isArray(hiddenProxyProviderProtoKeys.value)) {
+  hiddenProxyProviderProtoKeys.value = Array.from(
+    new Set((hiddenProxyProviderProtoKeys.value || []).map((x) => String(x || '').trim()).filter(Boolean)),
+  )
+}
+
 export const lowLatency = useStorage('config/low-latency', 400)
 export const mediumLatency = useStorage('config/medium-latency', 800)
 export const IPv6test = useStorage('config/ipv6-test', false)

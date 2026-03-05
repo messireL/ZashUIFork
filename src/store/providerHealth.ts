@@ -1,4 +1,5 @@
 import { agentMihomoProvidersAPI, agentSslProbeBatchAPI } from '@/api/agent'
+import { normalizeProxyProtoKey } from '@/helper/proxyProto'
 import { useStorage } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
 import { agentEnabled } from './agent'
@@ -23,6 +24,21 @@ export const showOnlyActiveProxyProviders = useStorage<boolean>(
 
 /** Optional quick filter for providers tab: expired | nearExpiry | offline | degraded | healthy */
 export const providerHealthFilter = useStorage<string>('config/provider-health-filter', '')
+
+/** Providers sub-tab: protocol filter on Providers page (all | wg | vless | ss | ...). */
+const _proxyProvidersProtoFilter = useStorage<string>('config/proxy-providers-proto-filter', 'all')
+
+/** Providers sub-tab: protocol filter on Providers page (all | wg | vless | ss | ...). */
+export const proxyProvidersProtoFilter = computed({
+  get: () => {
+    const v = normalizeProxyProtoKey(_proxyProvidersProtoFilter.value || 'all')
+    return v || 'all'
+  },
+  set: (val) => {
+    const v = normalizeProxyProtoKey(val || 'all')
+    _proxyProvidersProtoFilter.value = v || 'all'
+  },
+})
 
 export const agentProvidersLoading = ref(false)
 export const agentProvidersOk = ref(false)
