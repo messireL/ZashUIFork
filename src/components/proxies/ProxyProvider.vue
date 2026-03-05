@@ -6,8 +6,19 @@
         <div class="text-xl font-medium">
           <ProviderIconBadge v-if="providerIconRaw" :icon="providerIconRaw" size="sm" class="mr-1 align-middle" />
           {{ proxyProvider.name }}
-          <span v-if="providerTypesLabel" class="badge badge-sm ml-2 align-middle opacity-70" :title="providerTypesLabel">
-            {{ providerTypesLabel }}
+          <span
+            v-if="providerTypeCounts.length"
+            class="ml-2 inline-flex flex-wrap items-center gap-1 align-middle"
+            :title="providerTypesTooltip"
+          >
+            <span
+              v-for="b in providerTypeBadges"
+              :key="b.key"
+              class="badge badge-sm opacity-70"
+            >
+              {{ b.label }}<template v-if="b.count > 1">×{{ b.count }}</template>
+            </span>
+            <span v-if="providerTypeOverflow" class="badge badge-sm opacity-70">+{{ providerTypeOverflow }}</span>
           </span>
           <span
             v-if="providerHealth"
@@ -373,15 +384,38 @@ const proxyProvider = computed(
 
 const providerIconRaw = computed(() => normalizeProviderIcon((proxyProviderIconMap.value || {})[props.name]))
 
-const providerTypesLabel = computed(() => {
-  const set = new Set<string>()
+const formatProxyType = (type: string) => {
+  let t = String(type || '').trim().toLowerCase()
+  if (!t) return ''
+  t = t.replace('shadowsocks', 'ss')
+  t = t.replace('wireguard', 'wg')
+  t = t.replace('hysteria', 'hy')
+  return t
+}
+
+const providerTypeCounts = computed(() => {
+  const m = new Map<string, number>()
   for (const p of (proxyProvider.value as any)?.proxies || []) {
-    const t = String((p as any)?.type || '').trim().toLowerCase()
-    if (t) set.add(t)
+    const raw = String((p as any)?.type || '')
+    const k = formatProxyType(raw)
+    if (!k) continue
+    m.set(k, (m.get(k) || 0) + 1)
   }
-  const arr = Array.from(set)
-  arr.sort()
-  return arr.length ? arr.join('/') : ''
+  const arr = Array.from(m.entries()).map(([key, count]) => ({
+    key,
+    label: key.toUpperCase(),
+    count,
+  }))
+  arr.sort((a, b) => (b.count - a.count) || a.key.localeCompare(b.key))
+  return arr
+})
+
+const providerTypeBadges = computed(() => providerTypeCounts.value.slice(0, 4))
+const providerTypeOverflow = computed(() => Math.max(0, providerTypeCounts.value.length - providerTypeBadges.value.length))
+const providerTypesTooltip = computed(() => {
+  return providerTypeCounts.value
+    .map((x) => `${x.label}${x.count > 1 ? `×${x.count}` : ''}`)
+    .join(' / ')
 })
 const allProxies = computed(() => proxyProvider.value.proxies.map((node) => node.name) ?? [])
 const { renderProxies, proxiesCount } = useRenderProxies(allProxies)
