@@ -207,7 +207,7 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
     class="sticky top-0 z-20 pb-2"
   >
     <div
-      class="flex flex-wrap items-center gap-2 rounded-xl bg-base-200/90 px-3 py-2 ring-1 ring-base-300 backdrop-blur"
+      class="flex flex-wrap items-center gap-2 rounded-xl bg-base-200 px-3 py-2 ring-1 ring-base-300 shadow-md"
     >
       <div v-if="protoTabs.length > 1" class="flex w-full flex-wrap items-center gap-2" data-proto-tabs>
         <div class="tabs tabs-boxed tabs-sm">
@@ -235,7 +235,7 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
             >
               ⚙
             </summary>
-            <div class="dropdown-content z-[999] mt-2 w-64 rounded-box bg-base-100 bg-opacity-100 p-2 shadow-2xl ring-1 ring-base-300 backdrop-blur-none">
+            <div class="dropdown-content z-[999] mt-2 w-64 rounded-box !bg-base-100 !bg-opacity-100 opacity-100 p-2 shadow-2xl ring-1 ring-base-300 backdrop-blur-none">
               <div class="text-xs font-medium mb-1">{{ $t('providerProtoManage') }}</div>
               <div class="text-[11px] opacity-70 mb-2">{{ $t('providerProtoTip') }}</div>
               <div class="flex flex-wrap items-center gap-2 mb-2">
@@ -246,7 +246,7 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
                 <div
                   v-for="t2 in manageableProtoTabs"
                   :key="t2.key"
-                  class="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-base-300/60"
+                  class="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-base-300"
                 >
                   <input
                     type="checkbox"
