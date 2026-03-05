@@ -105,6 +105,7 @@ const protoTabs = computed(() => {
   return out
 })
 
+<<<<<<< HEAD
 
 const hiddenProtoSet = computed(() => {
   const raw = hiddenProxyProviderProtoKeys.value || []
@@ -143,12 +144,18 @@ const toggleProtoHidden = (k0: string) => {
   hiddenProxyProviderProtoKeys.value = Array.from(set).sort((a, b) => a.localeCompare(b))
 }
 
+=======
+>>>>>>> 66fcc1804db49997302bb6acab04402e08b95c77
 const setProto = (k: string) => {
   proxyProvidersProtoFilter.value = k || 'all'
 }
 
 watch(
+<<<<<<< HEAD
   protoTabsVisible,
+=======
+  protoTabs,
+>>>>>>> 66fcc1804db49997302bb6acab04402e08b95c77
   (tabs) => {
     const keys = new Set((tabs || []).map((t: any) => String(t.key)))
     const cur = String(proxyProvidersProtoFilter.value || 'all')
@@ -290,6 +297,7 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
         </button>
       </div>
 
+<<<<<<< HEAD
       <div class="font-medium">
         {{ $t('providerHealth') }}
       </div>
@@ -341,6 +349,27 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
       </div>
 
       
+=======
+      <div class="w-full"></div>
+
+      <div v-if="protoTabs.length > 1" class="flex flex-wrap items-center gap-2" data-proto-tabs>
+        <div class="tabs tabs-boxed tabs-sm">
+          <a
+            v-for="t2 in protoTabs"
+            :key="t2.key"
+            class="tab"
+            :class="proxyProvidersProtoFilter === t2.key ? 'tab-active' : ''"
+            @click="setProto(t2.key)"
+            :title="t2.key === 'all' ? $t('all') : (t2.label + ': ' + t2.count)"
+          >
+            <template v-if="t2.key === 'all'">{{ $t('all') }}</template>
+            <template v-else>{{ t2.label }} ({{ t2.count }})</template>
+          </a>
+        </div>
+        <div class="text-[11px] opacity-60">{{ $t('providerProtoTip') }}</div>
+      </div>
+
+>>>>>>> 66fcc1804db49997302bb6acab04402e08b95c77
       <div class="ml-auto flex items-center gap-2">
 
         <button

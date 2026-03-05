@@ -71,7 +71,10 @@ tasks: 'Tasks',
   providerOnlyActive: 'Active only',
   providerOnlyActiveTip: 'Show only providers that currently have active connections',
   providerProtoTip: 'Protocol tabs show providers that contain proxies of that type. (WG appears here only if it is delivered as a proxy-provider by Mihomo.)',
+<<<<<<< HEAD
   providerProtoManage: 'Show/hide protocol tabs',
+=======
+>>>>>>> 66fcc1804db49997302bb6acab04402e08b95c77
   providerSortHealth: 'Health',
   providerSortActivity: 'Activity',
   providerSortName: 'Name',

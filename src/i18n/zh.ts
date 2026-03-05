@@ -73,7 +73,10 @@ tasks: '任务',
   providerOnlyActive: '仅活动',
   providerOnlyActiveTip: '仅显示当前有活动连接的提供者',
   providerProtoTip: '协议标签会显示包含该类型代理的提供商。（WG 只有在 Mihomo 以 proxy-provider 形式提供时才会出现在这里。）',
+<<<<<<< HEAD
   providerProtoManage: '显示/隐藏协议标签',
+=======
+>>>>>>> 66fcc1804db49997302bb6acab04402e08b95c77
   providerSortHealth: '健康',
   providerSortActivity: '活跃',
   providerSortName: '名称',

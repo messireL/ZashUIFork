@@ -73,7 +73,10 @@ tasks: 'Задачи',
   providerOnlyActive: 'Только активные',
   providerOnlyActiveTip: 'Показывать только провайдеры с активными соединениями',
   providerProtoTip: 'Разделение по протоколам: вкладка показывает провайдеры, в которых есть прокси этого типа. (WG появится здесь только если он приходит как proxy-provider от Mihomo.)',
+<<<<<<< HEAD
   providerProtoManage: 'Показать/скрыть протоколы',
+=======
+>>>>>>> 66fcc1804db49997302bb6acab04402e08b95c77
   providerSortHealth: 'По состоянию',
   providerSortActivity: 'По активности',
   providerSortName: 'По имени',
