@@ -143,7 +143,7 @@
           >{{ subscriptionInfo.raw }}</pre>
 
           <div
-            v-if="providerStats.active || providerStats.bytes > 0 || providerStats.currentBytes > 0"
+            v-if="providerStats.active || providerStats.bytes > 0 || providerStats.todayBytes > 0 || providerStats.currentBytes > 0"
             class="mt-1 text-xs opacity-70"
           >
             {{ $t('connections') }}: {{ providerStats.connections }}
@@ -151,7 +151,8 @@
               · {{ $t('killableConnections') }}: {{ providerStats.killableConnections }}
             </template>
             · {{ $t('proxies') }}: {{ proxiesCount }}
-            · {{ $t('traffic') }}: {{ prettyBytesHelper(providerStats.bytes, { binary: true }) }}
+            · {{ $t('providerTrafficToday') }}: {{ prettyBytesHelper(providerStats.todayBytes, { binary: true }) }}
+            · {{ $t('providerTrafficSinceReset') }}: {{ prettyBytesHelper(providerStats.bytes, { binary: true }) }}
             <template v-if="providerStats.currentBytes > 0">
               · {{ $t('providerTrafficLive') }}: {{ prettyBytesHelper(providerStats.currentBytes, { binary: true }) }}
             </template>
@@ -475,6 +476,7 @@ const providerStats = computed(() => {
   const liveConnections = Number((live as any)?.connections || 0)
   const connections = Math.max(mappedConnections, liveConnections)
   const bytes = Number((rec as any)?.bytes || 0)
+  const todayBytes = Number((rec as any)?.todayBytes || 0)
   const speed = Number((rec as any)?.speed || 0)
   const currentBytes = Number((rec as any)?.currentBytes || 0)
   const killableConnections = activeConnectionTargets.value.length
@@ -484,15 +486,19 @@ const providerStats = computed(() => {
     || connections > 0
     || currentBytes > 0
     || speed > 0
+    || todayBytes > 0
   return {
     active,
     connections,
     killableConnections,
     bytes,
+    todayBytes,
     speed,
     currentBytes,
     download: Number((rec as any)?.download || 0),
     upload: Number((rec as any)?.upload || 0),
+    todayDownload: Number((rec as any)?.todayDownload || 0),
+    todayUpload: Number((rec as any)?.todayUpload || 0),
   }
 })
 

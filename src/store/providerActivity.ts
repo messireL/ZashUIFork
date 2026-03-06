@@ -8,22 +8,20 @@ export type ProviderActivity = {
   connections: number
   /** Whether the provider is currently active in routing/traffic. */
   active: boolean
-  /** Accumulated traffic observed for this provider during the current UI session. */
+  /** Accumulated traffic observed for this provider since manual reset. */
   bytes: number
   speed: number
   activeProxy: string
   activeProxyBytes: number
   /** Sum of currently active connection counters for this provider. */
   currentBytes: number
-  /** Session totals split by direction. */
+  /** Since reset totals split by direction. */
   download: number
   upload: number
-  updatedAt?: number
-}
-
-type ProviderTrafficTotals = {
-  dl: number
-  ul: number
+  /** Since start of current day totals split by direction. */
+  todayBytes: number
+  todayDownload: number
+  todayUpload: number
   updatedAt?: number
 }
 
@@ -32,27 +30,53 @@ export type ProviderLiveStatus = {
   active: boolean
 }
 
-const STORAGE_KEY = 'stats/provider-traffic-session-v1'
+type ProviderTrafficTotals = {
+  dl: number
+  ul: number
+  updatedAt?: number
+}
+
+type DailyTrafficStore = {
+  day: string
+  totals: Record<string, ProviderTrafficTotals>
+}
+
+const STORAGE_KEY = 'stats/provider-traffic-session-v2'
+const DAILY_STORAGE_KEY = 'stats/provider-traffic-daily-v1'
 const trafficTotals = ref<Record<string, ProviderTrafficTotals>>({})
+const dailyTrafficTotals = ref<Record<string, ProviderTrafficTotals>>({})
 const connTotals = new Map<string, { provider: string; dl: number; ul: number }>()
 const providerActivityCurrent = ref<Record<string, ProviderActivity>>({})
 
-const safeParse = (raw: string | null): Record<string, ProviderTrafficTotals> => {
-  if (!raw) return {}
+const todayKey = () => new Date().toISOString().slice(0, 10)
+
+const safeParse = <T>(raw: string | null, fallback: T): T => {
+  if (!raw) return fallback
   try {
     const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object' ? parsed : {}
+    return (parsed && typeof parsed === 'object' ? parsed : fallback) as T
   } catch {
-    return {}
+    return fallback
   }
 }
 
-const load = () => {
+const loadTrafficTotals = () => {
   if (typeof localStorage === 'undefined') return
-  trafficTotals.value = safeParse(localStorage.getItem(STORAGE_KEY))
+  trafficTotals.value = safeParse<Record<string, ProviderTrafficTotals>>(localStorage.getItem(STORAGE_KEY), {})
 }
 
-const save = debounce(() => {
+const loadDailyTrafficTotals = () => {
+  if (typeof localStorage === 'undefined') return
+  const day = todayKey()
+  const parsed = safeParse<DailyTrafficStore>(localStorage.getItem(DAILY_STORAGE_KEY), { day, totals: {} })
+  if (parsed.day !== day) {
+    dailyTrafficTotals.value = {}
+    return
+  }
+  dailyTrafficTotals.value = parsed.totals || {}
+}
+
+const saveTrafficTotals = debounce(() => {
   if (typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trafficTotals.value || {}))
@@ -61,29 +85,38 @@ const save = debounce(() => {
   }
 }, 1500)
 
-load()
+const saveDailyTrafficTotals = debounce(() => {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const payload: DailyTrafficStore = { day: todayKey(), totals: dailyTrafficTotals.value || {} }
+    localStorage.setItem(DAILY_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+}, 1500)
+
+loadTrafficTotals()
+loadDailyTrafficTotals()
 
 const emptyActivity = (): ProviderActivity => ({
   connections: 0,
+  active: false,
   bytes: 0,
   speed: 0,
   activeProxy: '',
   activeProxyBytes: 0,
   currentBytes: 0,
-  active: false,
   download: 0,
   upload: 0,
+  todayBytes: 0,
+  todayDownload: 0,
+  todayUpload: 0,
   updatedAt: undefined,
 })
 
 export const providerProxyNames = (provider: any): string[] => {
   const raw = provider?.proxies
-  const items = Array.isArray(raw)
-    ? raw
-    : raw && typeof raw === 'object'
-      ? Object.values(raw)
-      : []
-
+  const items = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.values(raw) : []
   return (items as any[])
     .map((node: any) => (typeof node === 'string' ? node : node?.name))
     .map((name: any) => String(name || '').trim())
@@ -92,24 +125,20 @@ export const providerProxyNames = (provider: any): string[] => {
 
 export const connectionProxyCandidates = (conn: any): string[] => {
   const candidates: string[] = []
-
   const specialProxy = String(conn?.metadata?.specialProxy || '').trim()
   if (specialProxy) candidates.push(specialProxy)
-
   const chains = Array.isArray(conn?.chains) ? conn.chains : []
   for (let i = chains.length - 1; i >= 0; i--) {
     const name = String(chains[i] || '').trim()
     if (name) candidates.push(name)
   }
-
   const out: string[] = []
   const seen = new Set<string>()
-  for (const proxyName of candidates) {
-    if (!proxyName || seen.has(proxyName)) continue
-    seen.add(proxyName)
-    out.push(proxyName)
+  for (const name of candidates) {
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    out.push(name)
   }
-
   return out
 }
 
@@ -129,13 +158,17 @@ const resolveProviderFromConnection = (
     const providerName = proxyToProvider[proxyName]
     if (providerName) return { providerName, proxyName }
   }
-
   return { providerName: '', proxyName: '' }
 }
 
 watch(
   [activeConnections, proxyProviederList],
   ([list, providers]) => {
+    if (todayKey() !== safeParse<DailyTrafficStore>(typeof localStorage === 'undefined' ? null : localStorage.getItem(DAILY_STORAGE_KEY), { day: todayKey(), totals: {} }).day) {
+      dailyTrafficTotals.value = {}
+      saveDailyTrafficTotals()
+    }
+
     const now = Date.now()
     const proxyToProvider: Record<string, string> = {}
     const current: Record<string, ProviderActivity> = {}
@@ -145,7 +178,8 @@ watch(
       if (!providerName) continue
       current[providerName] = emptyActivity()
       for (const proxyName of providerProxyNames(p as any)) {
-        if (proxyName) proxyToProvider[proxyName] = providerName
+        if (!proxyName) continue
+        if (!(proxyName in proxyToProvider)) proxyToProvider[proxyName] = providerName
       }
     }
 
@@ -161,7 +195,6 @@ watch(
       if (!providerName) continue
 
       const rec = current[providerName] || (current[providerName] = emptyActivity())
-
       const curDl = Number((c as any)?.download ?? 0) || 0
       const curUl = Number((c as any)?.upload ?? 0) || 0
       const curSpeed = (Number((c as any)?.downloadSpeed ?? 0) || 0) + (Number((c as any)?.uploadSpeed ?? 0) || 0)
@@ -193,6 +226,12 @@ watch(
         totals.ul += dUl
         totals.updatedAt = now
         trafficTotals.value[providerName] = totals
+
+        const daily = dailyTrafficTotals.value[providerName] || { dl: 0, ul: 0 }
+        daily.dl += dDl
+        daily.ul += dUl
+        daily.updatedAt = now
+        dailyTrafficTotals.value[providerName] = daily
       }
 
       connTotals.set(id, { provider: providerName, dl: curDl, ul: curUl })
@@ -210,6 +249,14 @@ watch(
       rec.updatedAt = Number(totals?.updatedAt ?? 0) || undefined
     }
 
+    for (const [providerName, totals] of Object.entries(dailyTrafficTotals.value || {})) {
+      const rec = current[providerName] || (current[providerName] = emptyActivity())
+      rec.todayDownload = Number(totals?.dl ?? 0) || 0
+      rec.todayUpload = Number(totals?.ul ?? 0) || 0
+      rec.todayBytes = rec.todayDownload + rec.todayUpload
+      rec.updatedAt = Math.max(Number(rec.updatedAt || 0), Number(totals?.updatedAt ?? 0) || 0) || undefined
+    }
+
     for (const [key, value] of Object.entries(perProxyBytes)) {
       const idx = key.indexOf('|')
       if (idx < 0) continue
@@ -224,25 +271,15 @@ watch(
     }
 
     providerActivityCurrent.value = current
-    save()
+    saveTrafficTotals()
+    saveDailyTrafficTotals()
   },
   { immediate: true, deep: false },
 )
 
-/**
- * Best-effort provider activity map inferred from active connections.
- * `bytes` is the accumulated session traffic observed for the provider.
- */
-export const providerActivityByName = computed<Record<string, ProviderActivity>>(() => {
-  return providerActivityCurrent.value || {}
-})
+export const providerActivityByName = computed<Record<string, ProviderActivity>>(() => providerActivityCurrent.value || {})
 
-/**
- * Throttled snapshot used for sorting providers by activity.
- * Without this, the Providers tab can constantly re-order on every connections tick.
- */
 export const providerActivitySnapshot = ref<Record<string, ProviderActivity>>({})
-
 watch(
   providerActivityByName,
   throttle(
@@ -255,48 +292,35 @@ watch(
   { immediate: true, deep: true },
 )
 
-export const clearProviderTrafficSession = () => {
-  trafficTotals.value = {}
-  connTotals.clear()
-  providerActivityCurrent.value = {}
-  if (typeof localStorage === 'undefined') return
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch {
-    // ignore
-  }
-}
-
-
-/**
- * Live provider activity resolved independently per provider card/filter.
- * This avoids false negatives when different providers contain nodes with identical names
- * or when a global proxy->provider map becomes ambiguous.
- */
 export const providerLiveStatusByName = computed<Record<string, ProviderLiveStatus>>(() => {
   const out: Record<string, ProviderLiveStatus> = {}
   const list = activeConnections.value || []
-
   for (const provider of proxyProviederList.value || []) {
     const providerName = String((provider as any)?.name || '').trim()
     if (!providerName) continue
-
     const names = new Set(providerProxyNames(provider as any))
     if (!names.size) {
       out[providerName] = { connections: 0, active: false }
       continue
     }
-
     let connections = 0
     for (const c of list) {
       if (connectionMatchesProviderProxyNames(c as any, names)) connections += 1
     }
-
-    out[providerName] = {
-      connections,
-      active: connections > 0,
-    }
+    out[providerName] = { connections, active: connections > 0 }
   }
-
   return out
 })
+
+export const clearProviderTrafficSession = () => {
+  trafficTotals.value = {}
+  connTotals.clear()
+  providerActivityCurrent.value = {}
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+  }
+}
