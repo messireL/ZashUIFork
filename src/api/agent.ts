@@ -628,6 +628,11 @@ export type AgentRestoreStatus = {
   scope?: string
   includeEnv?: boolean
   source?: string
+  stage?: string
+  progressPct?: number
+  bytesDone?: number
+  bytesTotal?: number
+  detail?: string
   error?: string
 }
 

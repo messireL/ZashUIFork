@@ -250,6 +250,21 @@
       <button type="button" class="btn btn-ghost btn-xs" @click="refreshRestore" :disabled="restoreLoading">↻</button>
     </div>
 
+    <div v-if="restore.running || restore.stage || restore.detail" class="mt-2 rounded-lg border border-base-300/60 bg-base-200/40 p-2 text-xs">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="opacity-70">{{ $t('agentRestoreStage') }}:</span>
+          <span class="font-medium">{{ restoreStageLabel }}</span>
+        </div>
+        <span v-if="restoreProgressPct !== null" class="font-mono">{{ restoreProgressPct }}%</span>
+      </div>
+      <progress v-if="restoreProgressPct !== null" class="progress progress-info mt-2 w-full" :value="restoreProgressPct" max="100"></progress>
+      <div class="mt-1 flex flex-wrap items-center justify-between gap-2 opacity-80">
+        <span>{{ restore.detail || ' ' }}</span>
+        <span v-if="restoreBytesLabel" class="font-mono">{{ restoreBytesLabel }}</span>
+      </div>
+    </div>
+
     <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
       <label class="flex flex-col gap-1">
         <span class="text-xs opacity-80">{{ $t('agentRestoreSource') }}</span>
@@ -345,7 +360,7 @@ import {
 import { prettyBytesHelper } from '@/helper/utils'
 import { showNotification } from '@/helper/notification'
 import dayjs from 'dayjs'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const status = ref<{ ok: boolean; version?: string; serverVersion?: string; tc?: boolean; wan?: string; lan?: string }>({ ok: false })
@@ -474,6 +489,39 @@ const formatCloudTime = (value?: string) => {
   const d = dayjs(value)
   return d.isValid() ? d.format('YYYY-MM-DD HH:mm:ss') : String(value)
 }
+
+
+const restoreProgressPct = computed<number | null>(() => {
+  const n = Number(restore.value?.progressPct)
+  if (!Number.isFinite(n)) return null
+  return Math.min(100, Math.max(0, Math.round(n)))
+})
+
+const restoreBytesLabel = computed(() => {
+  const done = Number(restore.value?.bytesDone)
+  const total = Number(restore.value?.bytesTotal)
+  if (Number.isFinite(total) && total > 0) {
+    const left = Number.isFinite(done) && done >= 0 ? formatBackupSize(done) : '0 B'
+    return `${left} / ${formatBackupSize(total)}`
+  }
+  if (Number.isFinite(done) && done > 0) return formatBackupSize(done)
+  return ''
+})
+
+const restoreStageLabel = computed(() => {
+  const stage = String(restore.value?.stage || '').trim()
+  const map: Record<string, string> = {
+    queued: t('agentRestoreStageQueued'),
+    'resolve-cloud': t('agentRestoreStageResolveCloud'),
+    downloading: t('agentRestoreStageDownloading'),
+    downloaded: t('agentRestoreStageDownloaded'),
+    preparing: t('agentRestoreStagePreparing'),
+    restoring: t('agentRestoreStageRestoring'),
+    done: t('agentRestoreStageDone'),
+    failed: t('agentRestoreStageFailed'),
+  }
+  return map[stage] || restore.value?.detail || stage || '—'
+})
 
 const selectBackupForRestore = (name: string) => {
   restoreSource.value = 'local'
@@ -632,6 +680,7 @@ const refreshRestore = async () => {
   restoreLoading.value = true
   restore.value = await agentRestoreStatusAPI()
   restoreLoading.value = false
+  syncRestoreSource()
 }
 
 const loadRestoreLog = async () => {
@@ -679,6 +728,9 @@ const runRestore = async () => {
     showNotification({ content: 'agentRestoreFail', type: 'alert-error', timeout: 2200 })
   }
   await refreshRestore()
+  if (restore.value?.running) {
+    await loadRestoreLog()
+  }
   restoreLoading.value = false
 }
 
@@ -737,7 +789,24 @@ const refresh = async () => {
   await refreshRestore()
 }
 
+let liveTimer: number | undefined
+
 onMounted(() => {
   refresh()
+  liveTimer = window.setInterval(() => {
+    if (restore.value?.running) {
+      refreshRestore()
+    }
+    if (backup.value?.running) {
+      refreshBackup()
+    }
+  }, 2000)
+})
+
+onUnmounted(() => {
+  if (liveTimer) {
+    window.clearInterval(liveTimer)
+    liveTimer = undefined
+  }
 })
 </script>

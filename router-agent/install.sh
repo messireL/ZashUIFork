@@ -1600,7 +1600,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.25","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.26","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -1911,7 +1911,7 @@ restore_start_json() {
     *) source="local" ;;
   esac
 
-  printf '{"ok":true,"running":true,"startedAt":"%s","source":"%s"}' "$esc_started" "$source" > "$sf" 2>/dev/null || true
+  printf '{\"ok\":true,\"running\":true,\"startedAt\":\"%s\",\"source\":\"%s\",\"stage\":\"queued\",\"progressPct\":0}' "$esc_started" "$source" > "$sf" 2>/dev/null || true
 
   # Run in background so CGI returns immediately.
   ( "$runner" "$f" "$scope" "$env" > /opt/zash-agent/var/restore.last.log 2>&1 & ) >/dev/null 2>&1 || true
@@ -2356,6 +2356,29 @@ write_status() {
   printf '%s' "$1" > "$RESTORE_STATUS_FILE" 2>/dev/null || true
 }
 
+write_running_status() {
+  stage="$1"
+  pct="$2"
+  detail="$3"
+  bytes_done="$4"
+  bytes_total="$5"
+  file_name="$6"
+  printf '%s' "$pct" | grep -qE '^[0-9]+$' || pct=0
+  printf '%s' "$bytes_done" | grep -qE '^[0-9]+$' || bytes_done=0
+  printf '%s' "$bytes_total" | grep -qE '^[0-9]+$' || bytes_total=0
+  write_status "$(printf '{\"ok\":true,\"running\":true,\"startedAt\":\"%s\",\"file\":\"%s\",\"source\":\"cloud\",\"stage\":\"%s\",\"progressPct\":%s,\"bytesDone\":%s,\"bytesTotal\":%s,\"detail\":\"%s\"}' \
+    "$(json_escape "$started_at")" "$(json_escape "$file_name")" "$(json_escape "$stage")" "$pct" "$bytes_done" "$bytes_total" "$(json_escape "$detail")")"
+}
+
+file_size() {
+  f="$1"
+  [ -f "$f" ] || {
+    echo 0
+    return 0
+  }
+  stat -c %s "$f" 2>/dev/null || stat -f %z "$f" 2>/dev/null || wc -c < "$f" 2>/dev/null || echo 0
+}
+
 log() {
   echo "$@"
 }
@@ -2371,7 +2394,7 @@ finish() {
   finished_at="$(date -Iseconds 2>/dev/null || date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo now)"
   if [ $code -ne 0 ] || [ $success -ne 1 ]; then
     e="${err:-exit $code}"
-    write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":false,\"file\":\"%s\",\"source\":\"cloud\",\"error\":\"%s\"}' \
+    write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":false,\"file\":\"%s\",\"source\":\"cloud\",\"stage\":\"failed\",\"error\":\"%s\"}' \
       "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$used_file")" "$(json_escape "$e")")"
     exit $code
   fi
@@ -2391,6 +2414,8 @@ fi
 
 remote_dir="$RCLONE_REMOTE:"
 [ -n "$RCLONE_PATH" ] && remote_dir="$RCLONE_REMOTE:$RCLONE_PATH"
+
+write_running_status "resolve-cloud" 2 "Resolving cloud backup" 0 0 "$file_arg"
 
 if [ -z "$file_arg" ] || [ "$file_arg" = "latest" ]; then
   # shellcheck disable=SC2086
@@ -2413,18 +2438,51 @@ local_file="$BACKUP_TMP_DIR/$remote_name"
 tmp_file="$local_file.part.$$"
 rm -f "$tmp_file" >/dev/null 2>&1 || true
 
+remote_size=0
+# shellcheck disable=SC2086
+remote_size="$(rclone $rcfg lsl "$remote_file" 2>/dev/null | awk 'NR==1{print $1}' | tr -d '\r')"
+printf '%s' "$remote_size" | grep -qE '^[0-9]+$' || remote_size=0
+
 log "[restore-cloud] remote: $remote_file"
 log "[restore-cloud] local:  $local_file"
+write_running_status "downloading" 5 "Downloading from cloud" 0 "$remote_size" "$remote_name"
+
+copy_log="/opt/zash-agent/var/restore-cloud.copy.log"
+: > "$copy_log" 2>/dev/null || true
 # shellcheck disable=SC2086
-rclone $rcfg copyto "$remote_file" "$tmp_file" --transfers 1 --checkers 1 --retries 2
+rclone $rcfg copyto "$remote_file" "$tmp_file" --transfers 1 --checkers 1 --retries 2 > "$copy_log" 2>&1 &
+copy_pid=$!
+
+while kill -0 "$copy_pid" 2>/dev/null; do
+  done_bytes="$(file_size "$tmp_file")"
+  pct=5
+  if [ "$remote_size" -gt 0 ]; then
+    pct=$(( done_bytes * 100 / remote_size ))
+    [ "$pct" -lt 5 ] && pct=5
+    [ "$pct" -gt 95 ] && pct=95
+  fi
+  write_running_status "downloading" "$pct" "Downloading from cloud" "$done_bytes" "$remote_size" "$remote_name"
+  sleep 1
+done
+
+if ! wait "$copy_pid"; then
+  err="cloud-download-failed"
+  tail_line="$(tail -n 1 "$copy_log" 2>/dev/null || true)"
+  [ -n "$tail_line" ] && err="$err: $tail_line"
+  log "[restore-cloud] ERROR: download failed"
+  exit 1
+fi
+
 mv -f "$tmp_file" "$local_file"
+done_bytes="$(file_size "$local_file")"
 log "[restore-cloud] downloaded: $local_file"
+write_running_status "downloaded" 100 "Archive downloaded" "$done_bytes" "$remote_size" "$remote_name"
 
 success=1
 trap - EXIT
-/opt/zash-agent/restore.sh "$remote_name" "$scope" "$include_env" "cloud"
-exit $?
+exec /opt/zash-agent/restore.sh "$remote_name" "$scope" "$include_env" "cloud"
 
+EOF
 EOF
 
 chmod +x "$AGENT_DIR/restore-cloud.sh"
@@ -2463,12 +2521,18 @@ write_status() {
   printf '%s' "$1" > "$RESTORE_STATUS_FILE" 2>/dev/null || true
 }
 
+write_running_status() {
+  stage="$1"
+  pct="$2"
+  detail="$3"
+  printf '%s' "$pct" | grep -qE '^[0-9]+$' || pct=0
+  write_status "$(printf '{\"ok\":true,\"running\":true,\"startedAt\":\"%s\",\"file\":\"%s\",\"scope\":\"%s\",\"source\":\"%s\",\"includeEnv\":%s,\"stage\":\"%s\",\"progressPct\":%s,\"detail\":\"%s\"}' \
+    "$(json_escape "$started_at")" "$(json_escape "$used_file")" "$(json_escape "$scope")" "$(json_escape "$source")" "$include_env" "$(json_escape "$stage")" "$pct" "$(json_escape "$detail")")"
+}
+
 log() {
   echo "$@" | tee -a "$RESTORE_LOG_FILE" >/dev/null 2>&1 || true
 }
-
-# Mark as running
-write_status "$(printf '{\"ok\":true,\"running\":true,\"startedAt\":\"%s\",\"source\":\"%s\"}' "$(json_escape "$started_at")" "$(json_escape "$source")")"
 
 success=0
 used_file=""
@@ -2480,11 +2544,11 @@ finish() {
   finished_at="$(date -Iseconds 2>/dev/null || date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo now)"
   if [ $code -ne 0 ] || [ $success -ne 1 ]; then
     e="${err:-exit $code}"
-    write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":false,\"file\":\"%s\",\"source\":\"%s\",\"error\":\"%s\"}' \
-      "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$used_file")" "$(json_escape "$source")" "$(json_escape "$e")")"
+    write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":false,\"file\":\"%s\",\"scope\":\"%s\",\"source\":\"%s\",\"includeEnv\":%s,\"stage\":\"failed\",\"progressPct\":100,\"error\":\"%s\"}' \
+      "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$used_file")" "$(json_escape "$scope")" "$(json_escape "$source")" "$include_env" "$(json_escape "$e")")"
     exit $code
   fi
-  write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":true,\"file\":\"%s\",\"scope\":\"%s\",\"source\":\"%s\",\"includeEnv\":%s}' \
+  write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":true,\"file\":\"%s\",\"scope\":\"%s\",\"source\":\"%s\",\"includeEnv\":%s,\"stage\":\"done\",\"progressPct\":100}' \
     "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$used_file")" "$(json_escape "$scope")" "$(json_escape "$source")" "$include_env")"
 }
 trap finish EXIT
@@ -2511,6 +2575,7 @@ fi
 used_file="$archive"
 log "[restore] using backup: $archive"
 log "[restore] scope=$scope include_env=$include_env source=$source"
+write_running_status "preparing" 96 "Preparing restore"
 
 tmp="/opt/zash-agent/var/restore.tmp.$$"
 rm -rf "$tmp" >/dev/null 2>&1 || true
@@ -2610,6 +2675,7 @@ fi
 rm -f "$list" >/dev/null 2>&1 || true
 
 # Apply restore
+write_running_status "restoring" 98 "Applying files"
 if [ $want_mihomo -eq 1 ]; then
   restore_file "$(src_of "$MIHOMO_CONFIG")" "$MIHOMO_CONFIG"
   restore_file "$(src_of "/opt/etc/mihomo/GeoIP.dat")" "/opt/etc/mihomo/GeoIP.dat"
@@ -2635,6 +2701,7 @@ rm -rf "$tmp" >/dev/null 2>&1 || true
 success=1
 log "[restore] done"
 
+EOF
 EOF
 
 chmod +x "$AGENT_DIR/restore.sh"
