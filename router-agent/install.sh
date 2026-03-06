@@ -1587,7 +1587,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.20","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.21","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -2088,6 +2088,8 @@ RCLONE_REMOTE="${RCLONE_REMOTE:-}"
 RCLONE_PATH="${RCLONE_PATH:-NetcrazeBackups/zash-agent}"
 RCLONE_KEEP_DAYS="${RCLONE_KEEP_DAYS:-30}"
 
+BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-${RCLONE_KEEP_DAYS:-30}}"
+
 # Optional: include current UI build (dist.zip) into the backup.
 # NOTE: BusyBox wget may not support https; prefer /opt/bin/wget.
 UI_ZIP_URL="${UI_ZIP_URL:-}"
@@ -2189,6 +2191,11 @@ fi
 rm -f "$list" 2>/dev/null || true
 
 echo "[backup] created: $out" | tee -a "$BACKUP_LOG_FILE" >/dev/null 2>&1 || true
+
+# local retention (best-effort)
+if echo "$BACKUP_KEEP_DAYS" | grep -qE '^[0-9]+$' && [ "$BACKUP_KEEP_DAYS" -gt 0 ]; then
+  find "$BACKUP_TMP_DIR" -maxdepth 1 -type f \( -name "zash-backup-*.tar.gz" -o -name "ui-dist-*.zip" \) -mtime +"$BACKUP_KEEP_DAYS" -print -delete 2>/dev/null || true
+fi
 
 if [ -n "$RCLONE_REMOTE" ] && command -v rclone >/dev/null 2>&1; then
   dst="$RCLONE_REMOTE:$RCLONE_PATH"

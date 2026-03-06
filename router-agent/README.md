@@ -78,10 +78,16 @@ rclone config
 Edit `/opt/zash-agent/agent.env` and set:
 
 ```sh
-UI_ZIP_URL="https://github.com/messireL/ZashUIFork/releases/download/rolling/dist.zip"  # optional, to include UI dist.zip
+# optional, to include UI dist.zip in the archive
+UI_ZIP_URL="https://github.com/messireL/ZashUIFork/releases/download/rolling/dist.zip"
+
+# local retention (days)
+BACKUP_KEEP_DAYS="30"
+
+# cloud upload via rclone
 RCLONE_REMOTE="gdrive"     # or yandex
 RCLONE_PATH="NetcrazeBackups/zash-agent"
-RCLONE_KEEP_DAYS="30"
+RCLONE_KEEP_DAYS="30"      # remote retention (best-effort)
 ```
 
 ### 3) Run once

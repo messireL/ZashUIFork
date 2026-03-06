@@ -168,6 +168,9 @@ vi /opt/zash-agent/agent.env
 # куда складывать локальные архивы
 BACKUP_TMP_DIR="/opt/zash-agent/var/backups"
 
+# локальная ротация (удалять локальные файлы старше N дней)
+BACKUP_KEEP_DAYS="30"
+
 # (опционально) положить внутрь архива текущий UI dist.zip
 UI_ZIP_URL="https://github.com/messireL/ZashUIFork/releases/download/rolling/dist.zip"
 
@@ -177,8 +180,7 @@ RCLONE_PATH="NetcrazeBackups/zash-agent"
 RCLONE_KEEP_DAYS="30"             # удалять из облака старше N дней (best-effort)
 ```
 
-> Локальная ротация по дням пока не включена (архивы копятся в `BACKUP_TMP_DIR`).
-> Если нужно — добавим автоочистку локальной папки по `KEEP_DAYS`.
+> Локальная ротация включена: установи `BACKUP_KEEP_DAYS` (в днях), чтобы удалять локальные архивы старше указанного срока.
 
 Перезапусти агент:
 
