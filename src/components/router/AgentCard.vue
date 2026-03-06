@@ -136,9 +136,18 @@
                       type="button"
                       class="btn btn-ghost btn-xs"
                       @click="selectBackupForRestore(item.name)"
-                      :disabled="!agentEnabled || !status.ok"
+                      :disabled="!agentEnabled || !status.ok || backup.running || restore.running || deleteLoadingName === item.name"
                     >
                       {{ $t('agentBackupUseForRestore') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-error"
+                      @click="deleteBackup(item.name)"
+                      :disabled="!agentEnabled || !status.ok || backup.running || restore.running || deleteLoadingName === item.name"
+                    >
+                      <span v-if="deleteLoadingName === item.name" class="loading loading-spinner loading-xs"></span>
+                      <span v-else>{{ $t('delete') }}</span>
                     </button>
                   </div>
                 </div>
@@ -268,6 +277,7 @@ import {
   agentBackupCloudStatusAPI,
   agentBackupCronGetAPI,
   agentBackupCronSetAPI,
+  agentBackupDeleteAPI,
   agentBackupListAPI,
   agentBackupLogAPI,
   agentBackupStartAPI,
@@ -329,6 +339,7 @@ const cloudLoading = ref(false)
 const backupList = ref<any[]>([])
 const backupDir = ref('')
 const backupListLoading = ref(false)
+const deleteLoadingName = ref('')
 
 const restore = ref<any>({ ok: true, running: false })
 const restoreLog = ref('')
@@ -400,6 +411,26 @@ const formatBackupTime = (mtime?: number) => {
 const selectBackupForRestore = (name: string) => {
   restoreSelected.value = name
   showNotification({ content: 'agentBackupUseForRestoreDone', type: 'alert-success', timeout: 1400 })
+}
+
+const deleteBackup = async (name: string) => {
+  const file = String(name || '').trim()
+  if (!file || !agentEnabled.value || !status.value?.ok) return
+
+  const ok = window.confirm(String(t('agentBackupDeleteConfirm', { name: file })))
+  if (!ok) return
+
+  deleteLoadingName.value = file
+  const res = await agentBackupDeleteAPI(file)
+  if (res?.ok && res?.deleted) {
+    if (restoreSelected.value === file) restoreSelected.value = 'latest'
+    showNotification({ content: 'agentBackupDeleteDone', type: 'alert-success', timeout: 1600 })
+    await refreshBackupList()
+    await refreshBackup()
+  } else {
+    showNotification({ content: 'agentBackupDeleteFail', type: 'alert-error', timeout: 2400 })
+  }
+  deleteLoadingName.value = ''
 }
 
 const refreshCloud = async () => {

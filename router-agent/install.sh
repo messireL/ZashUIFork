@@ -1594,7 +1594,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.22","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.23","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -1850,6 +1850,35 @@ backup_list_json() {
   reply_ok "$(printf '{"ok":true,"dir":"%s","items":[%s]}' "$esc_dir" "$items")"
 }
 
+backup_delete_json() {
+  dir="$BACKUP_TMP_DIR"
+  [ -n "$dir" ] || dir="/opt/zash-agent/var/backups"
+  mkdir -p "$dir" >/dev/null 2>&1 || true
+
+  f="${file_q:-}"
+  name="$(basename "$f" 2>/dev/null || echo "")"
+
+  case "$name" in
+    zash-backup-*.tar.gz|ui-dist-*.zip) ;;
+    *)
+      reply_ok '{"ok":false,"error":"invalid-file"}'
+      return
+      ;;
+  esac
+
+  target="$dir/$name"
+  if [ ! -f "$target" ]; then
+    reply_ok "$(printf '{"ok":false,"error":"not-found","name":"%s"}' "$(jesc "$name")")"
+    return
+  fi
+
+  if rm -f -- "$target" 2>/dev/null; then
+    reply_ok "$(printf '{"ok":true,"deleted":true,"name":"%s"}' "$(jesc "$name")")"
+  else
+    reply_ok "$(printf '{"ok":false,"error":"delete-failed","name":"%s"}' "$(jesc "$name")")"
+  fi
+}
+
 restore_status_json() {
   sf="/opt/zash-agent/var/restore.last.json"
   if [ -f "$sf" ]; then
@@ -2091,6 +2120,9 @@ case "$cmd" in
     ;;
   backup_list)
     backup_list_json
+    ;;
+  backup_delete)
+    backup_delete_json
     ;;
   restore_start)
     restore_start_json

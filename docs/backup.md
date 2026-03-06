@@ -337,3 +337,8 @@ ls -1t /opt/zash-agent/var/backups/zash-backup-*.tar.gz | head
 ```sh
 du -sh /opt/zash-agent/var/backups
 ```
+
+
+## Удаление старых архивов
+
+В UI: **Router → Router agent → Backup history** можно удалить старые локальные архивы по одному. Это не требует SSH и не зависит от `rclone`.
