@@ -59,6 +59,8 @@ In addition to capability flags (tc/iptables/hashlimit), `status` also reports b
 
 ## Backups (Google Drive / Yandex Disk)
 
+Подробная инструкция: `../docs/backup.md`.
+
 The installer also creates `/opt/zash-agent/backup.sh` — it archives Mihomo config + zash-agent state (including `users-db.json`) and can optionally upload it to a cloud drive via **rclone**.
 
 ### 1) Install & configure rclone (Entware)
