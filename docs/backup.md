@@ -206,6 +206,7 @@ RCLONE_KEEP_DAYS="30"                    # удалять из облака ст
 
 Router → Router agent:
 - блок **Cloud backup** покажет, видит ли агент `rclone`, какой `remote:path` используется и какой путь к `rclone` config обнаружен
+- в списках **Backup history** и **Cloud backups** можно выбрать архив для восстановления или удалить его прямо из UI
 - блок **Backup schedule** позволяет менять время (по умолчанию **04:00**) и применять cron‑строку на роутере (`# zash-backup`)
 
 ### Вручную

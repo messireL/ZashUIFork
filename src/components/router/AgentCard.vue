@@ -140,6 +140,15 @@
                     >
                       {{ $t('agentBackupUseForRestore') }}
                     </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-error"
+                      @click="deleteLocalBackup(item.name)"
+                      :disabled="!agentEnabled || !status.ok || !!backup.running || !!restore.running || deletingLocalBackup === item.name"
+                    >
+                      <span v-if="deletingLocalBackup === item.name" class="loading loading-spinner loading-xs"></span>
+                      <span v-else>{{ $t('delete') }}</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -186,6 +195,15 @@
                       :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady"
                     >
                       {{ $t('agentBackupUseForRestore') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-error"
+                      @click="deleteCloudBackup(item.Name || item.Path || '')"
+                      :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady || !!backup.running || !!restore.running || deletingCloudBackup === ((item.Name || item.Path || '').split('/').pop() || '')"
+                    >
+                      <span v-if="deletingCloudBackup === ((item.Name || item.Path || '').split('/').pop() || '')" class="loading loading-spinner loading-xs"></span>
+                      <span v-else>{{ $t('delete') }}</span>
                     </button>
                   </div>
                 </div>
@@ -336,10 +354,12 @@
 
 <script setup lang="ts">
 import {
+  agentBackupCloudDeleteAPI,
   agentBackupCloudListAPI,
   agentBackupCloudStatusAPI,
   agentBackupCronGetAPI,
   agentBackupCronSetAPI,
+  agentBackupDeleteAPI,
   agentBackupListAPI,
   agentBackupLogAPI,
   agentBackupStartAPI,
@@ -403,6 +423,8 @@ const backupDir = ref('')
 const backupListLoading = ref(false)
 const cloudList = ref<any[]>([])
 const cloudListLoading = ref(false)
+const deletingLocalBackup = ref('')
+const deletingCloudBackup = ref('')
 
 const restore = ref<any>({ ok: true, running: false })
 const restoreLog = ref('')
@@ -570,6 +592,42 @@ const onCloudHistoryToggle = async (e: any) => {
     await refreshBackupList()
     await refreshCloudHistory()
   }
+}
+
+const deleteLocalBackup = async (name: string) => {
+  const file = String(name || '').trim()
+  if (!file || !agentEnabled.value || !status.value?.ok) return
+  if (backup.value?.running || restore.value?.running) return
+  const ok = window.confirm(String(t('agentBackupDeleteConfirm', { name: file })))
+  if (!ok) return
+
+  deletingLocalBackup.value = file
+  const res = await agentBackupDeleteAPI(file)
+  if (res?.ok) {
+    showNotification({ content: 'agentBackupDeleteDone', type: 'alert-success', timeout: 1800 })
+    await refreshBackupList()
+  } else {
+    showNotification({ content: 'agentBackupDeleteFail', type: 'alert-error', timeout: 2200 })
+  }
+  deletingLocalBackup.value = ''
+}
+
+const deleteCloudBackup = async (name: string) => {
+  const file = String(name || '').split('/').pop() || ''
+  if (!file || !agentEnabled.value || !status.value?.ok || !cloudStatus.value?.cloudReady) return
+  if (backup.value?.running || restore.value?.running) return
+  const ok = window.confirm(String(t('agentBackupCloudDeleteConfirm', { name: file })))
+  if (!ok) return
+
+  deletingCloudBackup.value = file
+  const res = await agentBackupCloudDeleteAPI(file)
+  if (res?.ok) {
+    showNotification({ content: 'agentBackupCloudDeleteDone', type: 'alert-success', timeout: 1800 })
+    await refreshCloudHistory()
+  } else {
+    showNotification({ content: 'agentBackupCloudDeleteFail', type: 'alert-error', timeout: 2200 })
+  }
+  deletingCloudBackup.value = ''
 }
 
 const syncRestoreSource = () => {

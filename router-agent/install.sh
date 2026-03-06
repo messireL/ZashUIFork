@@ -1600,7 +1600,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.26","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.27","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -1884,6 +1884,74 @@ backup_list_json() {
   reply_ok "$(printf '{"ok":true,"dir":"%s","items":[%s]}' "$esc_dir" "$items")"
 }
 
+backup_delete_json() {
+  dir="$BACKUP_TMP_DIR"
+  [ -n "$dir" ] || dir="/opt/zash-agent/var/backups"
+  mkdir -p "$dir" >/dev/null 2>&1 || true
+
+  req="${file_q:-}"
+  name="$(basename "$req" 2>/dev/null || printf '%s' "$req")"
+  case "$name" in
+    zash-backup-*.tar.gz|ui-dist-*.zip) ;;
+    *)
+      reply_err 'invalid backup file'
+      return
+      ;;
+  esac
+
+  target="$dir/$name"
+  if [ ! -f "$target" ]; then
+    reply_ok "$(printf '{"ok":true,"deleted":false,"name":"%s"}' "$(jesc "$name")")"
+    return
+  fi
+
+  rm -f "$target" >/dev/null 2>&1 || {
+    reply_err 'delete failed'
+    return
+  }
+
+  reply_ok "$(printf '{"ok":true,"deleted":true,"name":"%s"}' "$(jesc "$name")")"
+}
+
+backup_cloud_delete_json() {
+  remote="$RCLONE_REMOTE"
+  path="$(normalize_rclone_path "$RCLONE_PATH")"
+  req="${file_q:-}"
+  name="$(basename "$req" 2>/dev/null || printf '%s' "$req")"
+  case "$name" in
+    zash-backup-*.tar.gz|ui-dist-*.zip) ;;
+    *)
+      reply_err 'invalid backup file'
+      return
+      ;;
+  esac
+
+  if ! command -v rclone >/dev/null 2>&1; then
+    reply_err 'rclone is not installed'
+    return
+  fi
+  if [ -z "$remote" ]; then
+    reply_err 'cloud backup is not configured'
+    return
+  fi
+
+  dst="$remote:$name"
+  [ -n "$path" ] && dst="$remote:$path/$name"
+
+  rcfg=""
+  if [ -n "$RCLONE_CONFIG" ]; then
+    rcfg="--config $RCLONE_CONFIG"
+  fi
+
+  # shellcheck disable=SC2086
+  if ! rclone $rcfg deletefile "$dst" >/dev/null 2>&1; then
+    reply_err 'cloud delete failed'
+    return
+  fi
+
+  reply_ok "$(printf '{"ok":true,"deleted":true,"name":"%s"}' "$(jesc "$name")")"
+}
+
 restore_status_json() {
   sf="/opt/zash-agent/var/restore.last.json"
   if [ -f "$sf" ]; then
@@ -2135,6 +2203,12 @@ case "$cmd" in
     ;;
   backup_list)
     backup_list_json
+    ;;
+  backup_delete)
+    backup_delete_json
+    ;;
+  backup_cloud_delete)
+    backup_cloud_delete_json
     ;;
   restore_start)
     restore_start_json

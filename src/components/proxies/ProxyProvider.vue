@@ -136,12 +136,15 @@
           >{{ subscriptionInfo.raw }}</pre>
 
           <div
-            v-if="providerStats.connections > 0 || providerStats.bytes > 0"
+            v-if="providerStats.connections > 0 || providerStats.bytes > 0 || providerStats.currentBytes > 0"
             class="mt-1 text-xs opacity-70"
           >
             {{ $t('connections') }}: {{ providerStats.connections }}
             · {{ $t('proxies') }}: {{ proxiesCount }}
             · {{ $t('traffic') }}: {{ prettyBytesHelper(providerStats.bytes, { binary: true }) }}
+            <template v-if="providerStats.currentBytes > 0">
+              · {{ $t('providerTrafficLive') }}: {{ prettyBytesHelper(providerStats.currentBytes, { binary: true }) }}
+            </template>
             <template v-if="providerStats.speed > 0">
               ({{ prettyBytesHelper(providerStats.speed, { binary: true }) }}/s)
             </template>
@@ -365,6 +368,7 @@ import { normalizeProviderIcon } from '@/helper/providerIcon'
 import { normalizeProxyProtoKey, protoLabel } from '@/helper/proxyProto'
 import { fetchProxyProviderByNameOnly, getLatencyByName, getTestUrl, proxyLatencyTest, proxyMap, proxyProviederList } from '@/store/proxies'
 import { activeConnections } from '@/store/connections'
+import { providerActivityByName } from '@/store/providerActivity'
 import { NOT_CONNECTED, ROUTE_NAME } from '@/constant'
 import { proxyProviderIconMap, proxyProviderPanelUrlMap, proxyProviderSslWarnDaysMap, sslNearExpiryDaysDefault, twoColumnProxyGroup } from '@/store/settings'
 import ProviderIconBadge from '@/components/common/ProviderIconBadge.vue'
@@ -449,20 +453,15 @@ const providerHealth = computed(() => {
 })
 
 const providerStats = computed(() => {
-  const set = new Set(allProxies.value || [])
-  let connections = 0
-  let bytes = 0
-  let speed = 0
-
-  for (const c of activeConnections.value || []) {
-    const proxy = (c as any)?.chains?.[0]
-    if (!proxy || !set.has(proxy)) continue
-    connections++
-    bytes += (Number((c as any).download) || 0) + (Number((c as any).upload) || 0)
-    speed += (Number((c as any).downloadSpeed) || 0) + (Number((c as any).uploadSpeed) || 0)
+  const rec = (providerActivityByName.value || {})[props.name]
+  return {
+    connections: Number((rec as any)?.connections || 0),
+    bytes: Number((rec as any)?.bytes || 0),
+    speed: Number((rec as any)?.speed || 0),
+    currentBytes: Number((rec as any)?.currentBytes || 0),
+    download: Number((rec as any)?.download || 0),
+    upload: Number((rec as any)?.upload || 0),
   }
-
-  return { connections, bytes, speed }
 })
 
 // Highlight the "currently used" proxy inside this provider.
