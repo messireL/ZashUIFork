@@ -95,7 +95,9 @@ watch(
       if (!providerName) continue
       current[providerName] = emptyActivity()
       for (const node of ((p as any)?.proxies || []) as any[]) {
-        const proxyName = String((node as any)?.name || '').trim()
+        const proxyName = typeof node === 'string'
+          ? String(node || '').trim()
+          : String((node as any)?.name || '').trim()
         if (proxyName) proxyToProvider[proxyName] = providerName
       }
     }
