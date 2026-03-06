@@ -114,7 +114,10 @@
               </div>
             </div>
 
-<details class="mt-2" @toggle="onRestoreToggle">
+
+          </details>
+
+          <details class="mt-2" @toggle="onRestoreToggle">
   <summary class="cursor-pointer text-xs opacity-80">{{ $t('agentRestore') }}</summary>
 
   <div class="mt-2">
@@ -175,7 +178,6 @@
     </details>
   </div>
 </details>
-          </details>
 
         </div>
       </div>
