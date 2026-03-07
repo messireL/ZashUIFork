@@ -1600,7 +1600,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.29","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.30","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -2001,15 +2001,19 @@ restore_log_json() {
 
 
 cron_tab_path() {
-  if [ -d /opt/etc/crontabs ]; then
+  if [ -f /opt/etc/crontabs/root ] || [ -d /opt/etc/crontabs ]; then
     echo "/opt/etc/crontabs/root"
     return 0
   fi
-  if [ -d /etc/crontabs ]; then
+  if [ -f /opt/var/spool/cron/crontabs/root ] || [ -d /opt/var/spool/cron/crontabs ]; then
+    echo "/opt/var/spool/cron/crontabs/root"
+    return 0
+  fi
+  if [ -f /etc/crontabs/root ] || [ -d /etc/crontabs ]; then
     echo "/etc/crontabs/root"
     return 0
   fi
-  if [ -d /var/spool/cron/crontabs ]; then
+  if [ -f /var/spool/cron/crontabs/root ] || [ -d /var/spool/cron/crontabs ]; then
     echo "/var/spool/cron/crontabs/root"
     return 0
   fi
