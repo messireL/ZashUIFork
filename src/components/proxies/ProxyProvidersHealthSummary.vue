@@ -67,10 +67,13 @@ const providers = computed(() => {
   if (showOnlyTrafficProxyProviders.value) {
     list = list.filter((p) => {
       const act = (providerActivityByName.value || {})[p.name]
+      const live = (providerLiveStatusByName.value || {})[p.name]
       return Number((act as any)?.todayBytes ?? 0) > 0
         || Number((act as any)?.bytes ?? 0) > 0
         || Number((act as any)?.currentBytes ?? 0) > 0
         || Number((act as any)?.speed ?? 0) > 0
+        || Boolean((live as any)?.active)
+        || Number((live as any)?.connections ?? 0) > 0
     })
   }
 
@@ -208,7 +211,8 @@ const trafficProvidersCount = computed(() => {
   let n = 0
   for (const p of providers.value || []) {
     const act = (providerActivityByName.value[p.name] as any) || {}
-    if (Number(act.todayBytes || 0) > 0 || Number(act.bytes || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0) n += 1
+    const live = (providerLiveStatusByName.value[p.name] as any) || {}
+    if (Number(act.todayBytes || 0) > 0 || Number(act.bytes || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0 || Boolean(live.active) || Number(live.connections || 0) > 0) n += 1
   }
   return n
 })

@@ -4,7 +4,7 @@ import { isHiddenGroup } from '@/helper'
 import { normalizeProxyProtoKey } from '@/helper/proxyProto'
 import { getProviderHealth } from '@/helper/providerHealth'
 import { configs } from '@/store/config'
-import { providerActivityByName, providerActivitySnapshot } from '@/store/providerActivity'
+import { providerActivityByName, providerActivitySnapshot, providerLiveStatusByName } from '@/store/providerActivity'
 import { proxiesTabShow, proxyGroupList, proxyMap, proxyProviederList } from '@/store/proxies'
 import {
   customGlobalNode,
@@ -104,15 +104,32 @@ export const renderGroups = computed(() => {
     if (showOnlyActiveProxyProviders.value) {
       list = list.filter((p: any) => {
         const act = (providerActivityByName.value[p.name] as any) || {}
-        return Boolean(act.active) || Number(act.connections || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0
+        const live = (providerLiveStatusByName.value[p.name] as any) || {}
+        return Boolean(live.active)
+          || Number(live.connections || 0) > 0
+          || Boolean(act.active)
+          || Number(act.connections || 0) > 0
+          || Number(act.currentBytes || 0) > 0
+          || Number(act.speed || 0) > 0
       })
     }
 
     // Optional quick filter for providers that already have observed traffic counters.
+    // IMPORTANT: rely on both aggregated counters and direct live connection matching.
+    // Some providers (especially inside load-balance chains) may already carry traffic
+    // while per-provider deltas are still incomplete or ambiguous. In that case
+    // providerLiveStatusByName still sees active mapped connections and should keep
+    // the provider visible under the “Only with traffic” filter.
     if (showOnlyTrafficProxyProviders.value) {
       list = list.filter((p: any) => {
         const act = (providerActivityByName.value[p.name] as any) || {}
-        return Number(act.todayBytes || 0) > 0 || Number(act.bytes || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0
+        const live = (providerLiveStatusByName.value[p.name] as any) || {}
+        return Number(act.todayBytes || 0) > 0
+          || Number(act.bytes || 0) > 0
+          || Number(act.currentBytes || 0) > 0
+          || Number(act.speed || 0) > 0
+          || Boolean(live.active)
+          || Number(live.connections || 0) > 0
       })
     }
 

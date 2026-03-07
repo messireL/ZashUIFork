@@ -102,6 +102,113 @@
             </div>
           </div>
 
+
+          <details class="mt-2" @toggle="onUnifiedHistoryToggle">
+            <summary class="cursor-pointer text-xs opacity-80">{{ $t('agentBackupUnifiedHistory') }}</summary>
+            <div class="mt-2 rounded-lg bg-base-200/60 p-2 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="opacity-60">{{ $t('agentBackupCount') }}:</span>
+                <span class="font-mono">{{ unifiedArchives.length }}</span>
+                <span class="opacity-60">{{ $t('agentRestoreSourceLocal') }}:</span>
+                <span class="font-mono">{{ backupList.length }}</span>
+                <span class="opacity-60">{{ $t('agentRestoreSourceCloud') }}:</span>
+                <span class="font-mono">{{ cloudList.length }}</span>
+                <button type="button" class="btn btn-ghost btn-xs" @click="refreshUnifiedArchives" :disabled="backupListLoading || cloudLoading || cloudListLoading">↻</button>
+              </div>
+
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'all' ? '' : 'btn-outline'" @click="backupArchiveView = 'all'">{{ $t('all') }}</button>
+                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'local' ? '' : 'btn-outline'" @click="backupArchiveView = 'local'">{{ $t('agentRestoreSourceLocal') }}</button>
+                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'cloud' ? '' : 'btn-outline'" @click="backupArchiveView = 'cloud'">{{ $t('agentRestoreSourceCloud') }}</button>
+                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'both' ? '' : 'btn-outline'" @click="backupArchiveView = 'both'">{{ $t('agentBackupBothLocations') }}</button>
+              </div>
+
+              <div v-if="filteredUnifiedArchives.length" class="mt-2 max-h-72 overflow-auto rounded-lg border border-base-300/50 bg-base-100/70">
+                <div
+                  v-for="item in filteredUnifiedArchives"
+                  :key="item.name"
+                  class="flex flex-col gap-2 border-b border-base-300/50 px-3 py-2 last:border-b-0"
+                >
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="truncate font-mono text-[11px] sm:text-xs">{{ item.name }}</span>
+                      <span v-if="isCurrentBackup(item.name)" class="badge badge-info badge-sm">{{ $t('agentBackupCurrent') }}</span>
+                      <span v-if="item.hasLocal && item.hasCloud" class="badge badge-success badge-sm">{{ $t('agentBackupBothLocations') }}</span>
+                      <span v-else class="badge badge-ghost badge-sm">{{ item.hasLocal ? $t('agentRestoreSourceLocal') : $t('agentRestoreSourceCloud') }}</span>
+                    </div>
+
+                    <div class="mt-1 flex flex-wrap items-center gap-3 opacity-70">
+                      <span>{{ formatBackupSize(item.displaySize) }}</span>
+                      <span class="font-mono">{{ item.displayTime }}</span>
+                    </div>
+
+                    <div v-if="item.hasLocal && item.hasCloud" class="mt-1 flex flex-wrap items-center gap-3 text-[11px] opacity-60">
+                      <span>{{ $t('agentRestoreSourceLocal') }}: <span class="font-mono">{{ formatBackupTime(item.local?.mtime) }}</span></span>
+                      <span>{{ $t('agentRestoreSourceCloud') }}: <span class="font-mono">{{ formatCloudTime(item.cloud?.ModTime) }}</span></span>
+                    </div>
+                  </div>
+
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      @click="selectUnifiedArchiveForRestore(item)"
+                      :disabled="!agentEnabled || !status.ok"
+                    >
+                      {{ $t('agentBackupUseForRestore') }}
+                    </button>
+
+                    <button
+                      v-if="item.hasLocal"
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      @click="selectBackupForRestore(item.name)"
+                      :disabled="!agentEnabled || !status.ok"
+                      :title="$t('agentRestoreSourceLocal')"
+                    >
+                      {{ $t('agentRestoreSourceLocal') }}
+                    </button>
+
+                    <button
+                      v-if="item.hasCloud"
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      @click="selectCloudBackupForRestore(item.name)"
+                      :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady"
+                      :title="$t('agentRestoreSourceCloud')"
+                    >
+                      {{ $t('agentRestoreSourceCloud') }}
+                    </button>
+
+                    <button
+                      v-if="item.hasLocal"
+                      type="button"
+                      class="btn btn-ghost btn-xs text-error"
+                      @click="deleteLocalBackup(item.name)"
+                      :disabled="!agentEnabled || !status.ok || !!backup.running || !!restore.running || deletingLocalBackup === item.name"
+                    >
+                      <span v-if="deletingLocalBackup === item.name" class="loading loading-spinner loading-xs"></span>
+                      <span v-else>{{ $t('delete') }} {{ $t('agentRestoreSourceLocal') }}</span>
+                    </button>
+
+                    <button
+                      v-if="item.hasCloud"
+                      type="button"
+                      class="btn btn-ghost btn-xs text-error"
+                      @click="deleteCloudBackup(item.name)"
+                      :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady || !!backup.running || !!restore.running || deletingCloudBackup === item.name"
+                    >
+                      <span v-if="deletingCloudBackup === item.name" class="loading loading-spinner loading-xs"></span>
+                      <span v-else>{{ $t('delete') }} {{ $t('agentRestoreSourceCloud') }}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="mt-2 opacity-70">{{ $t('agentBackupNoItems') }}</div>
+            </div>
+          </details>
+
           <details class="mt-2" @toggle="onBackupHistoryToggle">
             <summary class="cursor-pointer text-xs opacity-80">{{ $t('agentBackupHistory') }}</summary>
             <div class="mt-2 rounded-lg bg-base-200/60 p-2 text-xs">
@@ -425,6 +532,7 @@ const cloudList = ref<any[]>([])
 const cloudListLoading = ref(false)
 const deletingLocalBackup = ref('')
 const deletingCloudBackup = ref('')
+const backupArchiveView = ref<'all' | 'local' | 'cloud' | 'both'>('all')
 
 const restore = ref<any>({ ok: true, running: false })
 const restoreLog = ref('')
@@ -494,6 +602,67 @@ const cloudBackupNames = computed(() =>
 
 const restoreItems = computed(() => (restoreSource.value === 'cloud' ? cloudBackupNames.value : backupList.value.map((item: any) => String(item?.name || '')).filter(Boolean)))
 
+const cloudItemName = (item: any) => String(item?.Name || item?.Path || '').split('/').pop() || ''
+
+const cloudItemTs = (item: any) => {
+  const raw = String(item?.ModTime || '').trim()
+  if (!raw) return 0
+  const d = dayjs(raw)
+  return d.isValid() ? d.valueOf() : 0
+}
+
+const unifiedArchives = computed(() => {
+  const map = new Map<string, any>()
+
+  for (const item of backupList.value || []) {
+    const name = String(item?.name || '').trim()
+    if (!name) continue
+    const rec = map.get(name) || { name, hasLocal: false, hasCloud: false, local: null, cloud: null }
+    rec.local = item
+    rec.hasLocal = true
+    map.set(name, rec)
+  }
+
+  for (const item of cloudList.value || []) {
+    const name = cloudItemName(item)
+    if (!name) continue
+    const rec = map.get(name) || { name, hasLocal: false, hasCloud: false, local: null, cloud: null }
+    rec.cloud = item
+    rec.hasCloud = true
+    map.set(name, rec)
+  }
+
+  return Array.from(map.values())
+    .map((rec: any) => {
+      const localTs = Number(rec?.local?.mtime || 0) > 0 ? Number(rec.local.mtime) * 1000 : 0
+      const cloudTs = cloudItemTs(rec?.cloud)
+      const sortTs = Math.max(localTs, cloudTs)
+      const displayTime = sortTs > 0 ? dayjs(sortTs).format('YYYY-MM-DD HH:mm:ss') : '—'
+      const localSize = Number(rec?.local?.size || 0)
+      const cloudSize = Number(rec?.cloud?.Size || 0)
+      return {
+        ...rec,
+        sortTs,
+        displayTime,
+        displaySize: Math.max(localSize, cloudSize, 0),
+      }
+    })
+    .sort((a: any, b: any) => {
+      if ((b.sortTs || 0) !== (a.sortTs || 0)) return (b.sortTs || 0) - (a.sortTs || 0)
+      return String(a.name || '').localeCompare(String(b.name || ''))
+    })
+})
+
+const filteredUnifiedArchives = computed(() => {
+  const mode = backupArchiveView.value || 'all'
+  return (unifiedArchives.value || []).filter((item: any) => {
+    if (mode === 'local') return !!item.hasLocal && !item.hasCloud
+    if (mode === 'cloud') return !!item.hasCloud && !item.hasLocal
+    if (mode === 'both') return !!item.hasLocal && !!item.hasCloud
+    return true
+  })
+})
+
 const formatBackupSize = (size?: number) => {
   const n = Number(size)
   if (!Number.isFinite(n) || n <= 0) return '0 B'
@@ -555,6 +724,28 @@ const selectCloudBackupForRestore = (name: string) => {
   restoreSource.value = 'cloud'
   restoreSelected.value = String(name || '').split('/').pop() || 'latest'
   showNotification({ content: 'agentBackupUseForRestoreDone', type: 'alert-success', timeout: 1400 })
+}
+
+const selectUnifiedArchiveForRestore = (item: any) => {
+  if (item?.hasLocal) {
+    selectBackupForRestore(item.name)
+    return
+  }
+  if (item?.hasCloud) {
+    selectCloudBackupForRestore(item.name)
+  }
+}
+
+const refreshUnifiedArchives = async () => {
+  await refreshBackupList()
+  await refreshCloud()
+  await refreshCloudHistory()
+}
+
+const onUnifiedHistoryToggle = async (e: any) => {
+  if (e?.target?.open) {
+    await refreshUnifiedArchives()
+  }
 }
 
 const refreshCloud = async () => {
