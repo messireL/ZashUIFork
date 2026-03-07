@@ -1601,7 +1601,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.32","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.33","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -1860,7 +1860,7 @@ backup_log_json() {
   txt="$(printf '%s' "$txt" | tail -c 204800 2>/dev/null || printf '%s' "$txt")"
   b64="$(printf '%s' "$txt" | b64enc)"
   esc_path="$(printf '%s' "$lf" | sed 's/"/\\"/g')"
-  reply_ok "$(printf '{\"ok\":true,\"path\":\"%s\",\"contentB64\":\"%s\"}' "$esc_path" "$b64")"
+  reply_ok "$(printf '{"ok":true,"path":"%s","contentB64":"%s"}' "$esc_path" "$b64")"
 }
 
 backup_list_json() {
@@ -1980,7 +1980,7 @@ restore_start_json() {
     *) source="local" ;;
   esac
 
-  printf '{\"ok\":true,\"running\":true,\"startedAt\":\"%s\",\"source\":\"%s\",\"stage\":\"queued\",\"progressPct\":0}' "$esc_started" "$source" > "$sf" 2>/dev/null || true
+  printf '{"ok":true,"running":true,"startedAt":"%s","source":"%s","stage":"queued","progressPct":0}' "$esc_started" "$source" > "$sf" 2>/dev/null || true
 
   # Run in background so CGI returns immediately.
   ( "$runner" "$f" "$scope" "$env" > /opt/zash-agent/var/restore.last.log 2>&1 & ) >/dev/null 2>&1 || true
@@ -2058,16 +2058,16 @@ backup_cron_get_json() {
   fi
 
   if [ ! -f "$tab" ]; then
-    reply_ok "$(printf '{\"ok\":true,\"enabled\":false,\"path\":\"%s\"}' "$(jesc "$tab")")"
+    reply_ok "$(printf '{"ok":true,"enabled":false,"path":"%s"}' "$(jesc "$tab")")"
     return
   fi
 
   line="$(grep -E 'zash-backup' "$tab" 2>/dev/null | tail -n 1 2>/dev/null)"
   if [ -n "$line" ]; then
     sched="$(printf '%s' "$line" | awk '{print $1" "$2" "$3" "$4" "$5}' 2>/dev/null)"
-    reply_ok "$(printf '{\"ok\":true,\"enabled\":true,\"schedule\":\"%s\",\"line\":\"%s\",\"path\":\"%s\"}' "$(jesc "$sched")" "$(jesc "$line")" "$(jesc "$tab")")"
+    reply_ok "$(printf '{"ok":true,"enabled":true,"schedule":"%s","line":"%s","path":"%s"}' "$(jesc "$sched")" "$(jesc "$line")" "$(jesc "$tab")")"
   else
-    reply_ok "$(printf '{\"ok\":true,\"enabled\":false,\"path\":\"%s\"}' "$(jesc "$tab")")"
+    reply_ok "$(printf '{"ok":true,"enabled":false,"path":"%s"}' "$(jesc "$tab")")"
   fi
 }
 
@@ -2119,9 +2119,9 @@ backup_cron_set_json() {
   cron_reload_best_effort >/dev/null 2>&1 || true
 
   if [ "$enabled" -eq 1 ]; then
-    reply_ok "$(printf '{\"ok\":true,\"enabled\":true,\"schedule\":\"%s\",\"path\":\"%s\"}' "$(jesc "$sched")" "$(jesc "$tab")")"
+    reply_ok "$(printf '{"ok":true,"enabled":true,"schedule":"%s","path":"%s"}' "$(jesc "$sched")" "$(jesc "$tab")")"
   else
-    reply_ok "$(printf '{\"ok\":true,\"enabled\":false,\"schedule\":\"%s\",\"path\":\"%s\"}' "$(jesc "$sched")" "$(jesc "$tab")")"
+    reply_ok "$(printf '{"ok":true,"enabled":false,"schedule":"%s","path":"%s"}' "$(jesc "$sched")" "$(jesc "$tab")")"
   fi
 }
 
@@ -2315,7 +2315,7 @@ write_status() {
 }
 
 # Mark as running
-write_status "$(printf '{\"ok\":true,\"running\":true,\"startedAt\":\"%s\"}' "$(json_escape "$started_at")")"
+write_status "$(printf '{"ok":true,"running":true,"startedAt":"%s"}' "$(json_escape "$started_at")")"
 
 success=0
 uploaded=false
@@ -2328,12 +2328,12 @@ finish() {
   finished_at="$(date -Iseconds 2>/dev/null || date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo now)"
   if [ $code -ne 0 ] || [ $success -ne 1 ]; then
     e="${err:-exit $code}"
-    write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":false,\"error\":\"%s\"}' \
+    write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":false,"error":"%s"}' \
       "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$e")")"
     exit $code
   fi
 
-  write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":true,\"file\":\"%s\",\"uploaded\":%s}' \
+  write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":true,"file":"%s","uploaded":%s}' \
     "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$out")" "$uploaded")"
 }
 trap finish EXIT
@@ -2475,7 +2475,7 @@ write_running_status() {
   printf '%s' "$pct" | grep -qE '^[0-9]+$' || pct=0
   printf '%s' "$bytes_done" | grep -qE '^[0-9]+$' || bytes_done=0
   printf '%s' "$bytes_total" | grep -qE '^[0-9]+$' || bytes_total=0
-  write_status "$(printf '{\"ok\":true,\"running\":true,\"startedAt\":\"%s\",\"file\":\"%s\",\"source\":\"cloud\",\"stage\":\"%s\",\"progressPct\":%s,\"bytesDone\":%s,\"bytesTotal\":%s,\"detail\":\"%s\"}' \
+  write_status "$(printf '{"ok":true,"running":true,"startedAt":"%s","file":"%s","source":"cloud","stage":"%s","progressPct":%s,"bytesDone":%s,"bytesTotal":%s,"detail":"%s"}' \
     "$(json_escape "$started_at")" "$(json_escape "$file_name")" "$(json_escape "$stage")" "$pct" "$bytes_done" "$bytes_total" "$(json_escape "$detail")")"
 }
 
@@ -2503,7 +2503,7 @@ finish() {
   finished_at="$(date -Iseconds 2>/dev/null || date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo now)"
   if [ $code -ne 0 ] || [ $success -ne 1 ]; then
     e="${err:-exit $code}"
-    write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":false,\"file\":\"%s\",\"source\":\"cloud\",\"stage\":\"failed\",\"error\":\"%s\"}' \
+    write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":false,"file":"%s","source":"cloud","stage":"failed","error":"%s"}' \
       "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$used_file")" "$(json_escape "$e")")"
     exit $code
   fi
@@ -2634,7 +2634,7 @@ write_running_status() {
   pct="$2"
   detail="$3"
   printf '%s' "$pct" | grep -qE '^[0-9]+$' || pct=0
-  write_status "$(printf '{\"ok\":true,\"running\":true,\"startedAt\":\"%s\",\"file\":\"%s\",\"scope\":\"%s\",\"source\":\"%s\",\"includeEnv\":%s,\"stage\":\"%s\",\"progressPct\":%s,\"detail\":\"%s\"}' \
+  write_status "$(printf '{"ok":true,"running":true,"startedAt":"%s","file":"%s","scope":"%s","source":"%s","includeEnv":%s,"stage":"%s","progressPct":%s,"detail":"%s"}' \
     "$(json_escape "$started_at")" "$(json_escape "$used_file")" "$(json_escape "$scope")" "$(json_escape "$source")" "$include_env" "$(json_escape "$stage")" "$pct" "$(json_escape "$detail")")"
 }
 
@@ -2652,11 +2652,11 @@ finish() {
   finished_at="$(date -Iseconds 2>/dev/null || date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo now)"
   if [ $code -ne 0 ] || [ $success -ne 1 ]; then
     e="${err:-exit $code}"
-    write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":false,\"file\":\"%s\",\"scope\":\"%s\",\"source\":\"%s\",\"includeEnv\":%s,\"stage\":\"failed\",\"progressPct\":100,\"error\":\"%s\"}' \
+    write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":false,"file":"%s","scope":"%s","source":"%s","includeEnv":%s,"stage":"failed","progressPct":100,"error":"%s"}' \
       "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$used_file")" "$(json_escape "$scope")" "$(json_escape "$source")" "$include_env" "$(json_escape "$e")")"
     exit $code
   fi
-  write_status "$(printf '{\"ok\":true,\"running\":false,\"startedAt\":\"%s\",\"finishedAt\":\"%s\",\"success\":true,\"file\":\"%s\",\"scope\":\"%s\",\"source\":\"%s\",\"includeEnv\":%s,\"stage\":\"done\",\"progressPct\":100}' \
+  write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":true,"file":"%s","scope":"%s","source":"%s","includeEnv":%s,"stage":"done","progressPct":100}' \
     "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$used_file")" "$(json_escape "$scope")" "$(json_escape "$source")" "$include_env")"
 }
 trap finish EXIT

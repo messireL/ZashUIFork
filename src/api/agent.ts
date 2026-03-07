@@ -30,6 +30,14 @@ const parseMaybeCgiJson = (data: any) => {
   try {
     return JSON.parse(jsonStr)
   } catch {
+    /* noop */
+  }
+  // Some router CGI scripts accidentally return pseudo-JSON with escaped quotes,
+  // e.g. {"ok":true}. Best-effort normalize it for the UI.
+  try {
+    const normalized = jsonStr.replace(/\"/g, '"')
+    return JSON.parse(normalized)
+  } catch {
     return data
   }
 }
