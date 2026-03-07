@@ -1604,7 +1604,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.36","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.37","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -1794,6 +1794,26 @@ rclone_list_remotes() {
   fi
 }
 
+rclone_known_remotes() {
+  cfg_path="$1"
+  known="$(rclone_list_remotes)"
+  if [ -n "$known" ]; then
+    printf '%s\n' "$known"
+    return 0
+  fi
+  [ -n "$cfg_path" ] || cfg_path="$RCLONE_CONFIG"
+  if [ -n "$cfg_path" ] && [ -f "$cfg_path" ]; then
+    awk '
+      /^[[:space:]]*\[[^]]+\][[:space:]]*$/ {
+        name=$0
+        sub(/^[[:space:]]*\[/, "", name)
+        sub(/\][[:space:]]*$/, "", name)
+        if (name != "") print name ":"
+      }
+    ' "$cfg_path" | awk '!seen[$0]++'
+  fi
+}
+
 rclone_json_bool() {
   [ "$1" = "true" ] && printf true || printf false
 }
@@ -1887,7 +1907,7 @@ backup_cloud_status_json() {
 
   if command -v rclone >/dev/null 2>&1; then
     rclone_installed=true
-    known="$(rclone_list_remotes)"
+    known="$(rclone_known_remotes "$cfg")"
     items=""
     oldIFS="$IFS"
     IFS='
@@ -2517,7 +2537,10 @@ rclone_configured_remotes() {
   if [ -z "$src" ]; then
     src="$RCLONE_REMOTE"
   fi
-  printf '%s' "$src" | tr ',;' '\\n' | tr ' ' '\\n' | sed 's/:$//; s/^ *//; s/ *$//' | awk 'NF && !seen[$0]++ {print $0}'
+  printf '%s' "$src" \
+    | sed 's/[;,[:space:]]\+/\n/g' \
+    | sed 's/:$//; s/^ *//; s/ *$//' \
+    | awk 'NF && !seen[$0]++ {print $0}'
 }
 
 RCLONE_PATH="$(normalize_rclone_path "$RCLONE_PATH")"
@@ -2710,7 +2733,10 @@ rclone_configured_remotes() {
   if [ -z "$src" ]; then
     src="$RCLONE_REMOTE"
   fi
-  printf '%s' "$src" | tr ',;' '\\n' | tr ' ' '\\n' | sed 's/:$//; s/^ *//; s/ *$//' | awk 'NF && !seen[$0]++ {print $0}'
+  printf '%s' "$src" \
+    | sed 's/[;,[:space:]]\+/\n/g' \
+    | sed 's/:$//; s/^ *//; s/ *$//' \
+    | awk 'NF && !seen[$0]++ {print $0}'
 }
 
 rclone_find_file_remote() {
