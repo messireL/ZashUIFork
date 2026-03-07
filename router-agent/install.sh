@@ -1604,7 +1604,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.37","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.38","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -1818,6 +1818,32 @@ rclone_json_bool() {
   [ "$1" = "true" ] && printf true || printf false
 }
 
+rclone_remote_accessible() {
+  remote="$1"
+  test_path="$2"
+  [ -n "$remote" ] || return 1
+  if ! command -v rclone >/dev/null 2>&1; then
+    return 1
+  fi
+  rcfg=""
+  if [ -n "$RCLONE_CONFIG" ]; then
+    rcfg="--config $RCLONE_CONFIG"
+  fi
+  root_target="$remote:"
+  # shellcheck disable=SC2086
+  if rclone $rcfg lsf "$root_target" --max-depth 1 >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -n "$test_path" ]; then
+    path_target="$remote:$test_path"
+    # shellcheck disable=SC2086
+    if rclone $rcfg lsf "$path_target" --max-depth 1 >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
 rclone_find_file_remote() {
   name="$1"
   path="$2"
@@ -1918,6 +1944,10 @@ backup_cloud_status_json() {
       exists=false
       if printf '%s\n' "$known" | grep -Fxq "$remote:"; then
         exists=true
+      elif rclone_remote_accessible "$remote" "$path"; then
+        exists=true
+      fi
+      if [ "$exists" = true ]; then
         cloud_ready=true
       fi
       [ "$remote" = "$primary_remote" ] && primary_exists="$exists"
