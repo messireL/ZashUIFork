@@ -20,7 +20,7 @@ import {
   providerHealthFilter,
   proxyProvidersSortMode,
   showOnlyActiveProxyProviders,
-
+  showOnlyTrafficProxyProviders,
   proxyProvidersProtoFilter,
 } from '@/store/providerHealth'
 import { isEmpty } from 'lodash'
@@ -102,7 +102,18 @@ export const renderGroups = computed(() => {
 
     // Optionally show only providers with active connections (best-effort).
     if (showOnlyActiveProxyProviders.value) {
-      list = list.filter((p: any) => Boolean((providerActivityByName.value[p.name] as any)?.active) || Number((providerActivityByName.value[p.name] as any)?.connections || 0) > 0 || Number((providerActivityByName.value[p.name] as any)?.currentBytes || 0) > 0 || Number((providerActivityByName.value[p.name] as any)?.speed || 0) > 0)
+      list = list.filter((p: any) => {
+        const act = (providerActivityByName.value[p.name] as any) || {}
+        return Boolean(act.active) || Number(act.connections || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0
+      })
+    }
+
+    // Optional quick filter for providers that already have observed traffic counters.
+    if (showOnlyTrafficProxyProviders.value) {
+      list = list.filter((p: any) => {
+        const act = (providerActivityByName.value[p.name] as any) || {}
+        return Number(act.todayBytes || 0) > 0 || Number(act.bytes || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0
+      })
     }
 
     // Optional protocol filter sub-tab (wg/vless/ss/...)
@@ -127,16 +138,31 @@ export const renderGroups = computed(() => {
       `autoHealth:${autoSortProxyProvidersByHealth.value ? 1 : 0}`,
       `healthFilter:${providerHealthFilter.value || ''}`,
       `onlyActive:${showOnlyActiveProxyProviders.value ? 1 : 0}`,
+      `onlyTraffic:${showOnlyTrafficProxyProviders.value ? 1 : 0}`,
       `hideUnused:${hideUnusedProxyProviders.value ? 1 : 0}`,
+      `proto:${proxyProvidersProtoFilter.value || 'all'}`,
     ].join('|')
 
-    if (mode === 'activity') {
+    if (mode === 'traffic') {
+      list = [...list].sort((a: any, b: any) => {
+        const aa = (providerActivitySnapshot.value as any)[a.name] || { todayBytes: 0, bytes: 0, currentBytes: 0, speed: 0, connections: 0 }
+        const bb = (providerActivitySnapshot.value as any)[b.name] || { todayBytes: 0, bytes: 0, currentBytes: 0, speed: 0, connections: 0 }
+        if ((bb.todayBytes || 0) !== (aa.todayBytes || 0)) return (bb.todayBytes || 0) - (aa.todayBytes || 0)
+        if ((bb.bytes || 0) !== (aa.bytes || 0)) return (bb.bytes || 0) - (aa.bytes || 0)
+        if ((bb.currentBytes || 0) !== (aa.currentBytes || 0)) return (bb.currentBytes || 0) - (aa.currentBytes || 0)
+        if ((bb.speed || 0) !== (aa.speed || 0)) return (bb.speed || 0) - (aa.speed || 0)
+        if ((bb.connections || 0) !== (aa.connections || 0)) return (bb.connections || 0) - (aa.connections || 0)
+        return String(a.name).localeCompare(String(b.name))
+      })
+    } else if (mode === 'activity') {
       list = [...list].sort((a: any, b: any) => {
         // Use throttled snapshot to avoid constant UI re-ordering.
-        const aa = (providerActivitySnapshot.value as any)[a.name] || { bytes: 0, connections: 0 }
-        const bb = (providerActivitySnapshot.value as any)[b.name] || { bytes: 0, connections: 0 }
-        if (bb.bytes !== aa.bytes) return bb.bytes - aa.bytes
-        if (bb.connections !== aa.connections) return bb.connections - aa.connections
+        const aa = (providerActivitySnapshot.value as any)[a.name] || { bytes: 0, currentBytes: 0, speed: 0, connections: 0 }
+        const bb = (providerActivitySnapshot.value as any)[b.name] || { bytes: 0, currentBytes: 0, speed: 0, connections: 0 }
+        if ((bb.connections || 0) !== (aa.connections || 0)) return (bb.connections || 0) - (aa.connections || 0)
+        if ((bb.speed || 0) !== (aa.speed || 0)) return (bb.speed || 0) - (aa.speed || 0)
+        if ((bb.currentBytes || 0) !== (aa.currentBytes || 0)) return (bb.currentBytes || 0) - (aa.currentBytes || 0)
+        if ((bb.bytes || 0) !== (aa.bytes || 0)) return (bb.bytes || 0) - (aa.bytes || 0)
         return String(a.name).localeCompare(String(b.name))
       })
     } else if (mode === 'name') {

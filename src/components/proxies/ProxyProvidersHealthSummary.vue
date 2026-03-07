@@ -15,6 +15,7 @@ import {
   providerHealthFilter,
   proxyProvidersSortMode,
   showOnlyActiveProxyProviders,
+  showOnlyTrafficProxyProviders,
   proxyProvidersProtoFilter,
 } from '@/store/providerHealth'
 import dayjs from 'dayjs'
@@ -60,6 +61,16 @@ const providers = computed(() => {
         || Number((act as any)?.currentBytes ?? 0) > 0
         || Number((act as any)?.speed ?? 0) > 0
         || Number((act as any)?.bytes ?? 0) > 0
+    })
+  }
+
+  if (showOnlyTrafficProxyProviders.value) {
+    list = list.filter((p) => {
+      const act = (providerActivityByName.value || {})[p.name]
+      return Number((act as any)?.todayBytes ?? 0) > 0
+        || Number((act as any)?.bytes ?? 0) > 0
+        || Number((act as any)?.currentBytes ?? 0) > 0
+        || Number((act as any)?.speed ?? 0) > 0
     })
   }
 
@@ -189,6 +200,15 @@ const activeProvidersCount = computed(() => {
     const act = (providerActivityByName.value[p.name] as any) || {}
     const live = (providerLiveStatusByName.value[p.name] as any) || {}
     if (Boolean(live.active) || Number(live.connections || 0) > 0 || Boolean(act.active) || Number(act.connections || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0 || Number(act.bytes || 0) > 0) n += 1
+  }
+  return n
+})
+
+const trafficProvidersCount = computed(() => {
+  let n = 0
+  for (const p of providers.value || []) {
+    const act = (providerActivityByName.value[p.name] as any) || {}
+    if (Number(act.todayBytes || 0) > 0 || Number(act.bytes || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0) n += 1
   }
   return n
 })
@@ -346,12 +366,22 @@ const show = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
           {{ $t('providerOnlyActive') }}: {{ activeProvidersCount }}
         </button>
 
+        <button
+          class="badge badge-neutral cursor-pointer"
+          :class="showOnlyTrafficProxyProviders ? '' : 'badge-outline'"
+          @click="showOnlyTrafficProxyProviders = !showOnlyTrafficProxyProviders"
+          :title="$t('providerOnlyTrafficTip')"
+        >
+          {{ $t('providerOnlyTraffic') }}: {{ trafficProvidersCount }}
+        </button>
+
         <select
           class="select select-bordered select-xs"
           v-model="proxyProvidersSortMode"
           :title="$t('sortBy')"
         >
           <option value="health">{{ $t('providerSortHealth') }}</option>
+          <option value="traffic">{{ $t('providerSortTraffic') }}</option>
           <option value="activity">{{ $t('providerSortActivity') }}</option>
           <option value="name">{{ $t('providerSortName') }}</option>
         </select>

@@ -70,7 +70,7 @@ import { cleanupExpiredPendingPageFocus, clearPendingPageFocus, flashNavHighligh
 import { isMiddleScreen } from '@/helper/utils'
 import { fetchProxies, proxyGroupList, proxyMap, proxiesTabShow } from '@/store/proxies'
 import { collapseGroupMap, twoColumnProxyGroup, hideUnusedProxyProviders } from '@/store/settings'
-import { providerHealthFilter, proxyProvidersProtoFilter, showOnlyActiveProxyProviders } from '@/store/providerHealth'
+import { providerHealthFilter, proxyProvidersProtoFilter, showOnlyActiveProxyProviders, showOnlyTrafficProxyProviders } from '@/store/providerHealth'
 import { useElementSize, useSessionStorage } from '@vueuse/core'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
@@ -162,6 +162,7 @@ const resetProviderFilters = () => {
   providerHealthFilter.value = ''
   proxyProvidersProtoFilter.value = 'all'
   showOnlyActiveProxyProviders.value = false
+  showOnlyTrafficProxyProviders.value = false
   hideUnusedProxyProviders.value = false
 }
 

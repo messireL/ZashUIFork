@@ -11,7 +11,7 @@ export const autoSortProxyProvidersByHealth = useStorage<boolean>(
 )
 
 /** Provider list sort mode on the Providers tab. */
-export const proxyProvidersSortMode = useStorage<'health' | 'activity' | 'name'>(
+export const proxyProvidersSortMode = useStorage<'health' | 'activity' | 'traffic' | 'name'>(
   'config/proxy-providers-sort-mode',
   'health',
 )
@@ -19,6 +19,12 @@ export const proxyProvidersSortMode = useStorage<'health' | 'activity' | 'name'>
 /** Show only providers that currently have active connections (best-effort). */
 export const showOnlyActiveProxyProviders = useStorage<boolean>(
   'config/show-only-active-proxy-providers',
+  false,
+)
+
+/** Show only providers that already have observed traffic (today/session/live). */
+export const showOnlyTrafficProxyProviders = useStorage<boolean>(
+  'config/show-only-traffic-proxy-providers',
   false,
 )
 
