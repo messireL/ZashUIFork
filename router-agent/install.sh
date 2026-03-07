@@ -1601,7 +1601,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.31","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.32","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -2592,7 +2592,6 @@ trap - EXIT
 exec /opt/zash-agent/restore.sh "$remote_name" "$scope" "$include_env" "cloud"
 
 EOF
-EOF
 
 chmod +x "$AGENT_DIR/restore-cloud.sh"
 
@@ -2810,7 +2809,6 @@ rm -rf "$tmp" >/dev/null 2>&1 || true
 success=1
 log "[restore] done"
 
-EOF
 EOF
 
 chmod +x "$AGENT_DIR/restore.sh"
