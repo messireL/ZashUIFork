@@ -21,7 +21,7 @@
           :title="$t('agentBackupNow')"
         >
           <span v-if="backupLoading || backup.running" class="loading loading-spinner loading-xs"></span>
-          <span v-else>{{ $t('agentBackup') }}</span>
+          <span v-else>{{ $t('agentBackupNow') }}</span>
         </button>
       </div>
     </div>
@@ -347,13 +347,26 @@
                   <span v-else>{{ $t('apply') }}</span>
                 </button>
                 <button type="button" class="btn btn-xs btn-outline" @click="removeCron" :disabled="!agentEnabled || !status.ok || cronApplying">{{ $t('delete') }}</button>
+                <button type="button" class="btn btn-xs btn-outline" @click="runBackup" :disabled="!agentEnabled || !status.ok || backupLoading || backup.running || cronApplying">
+                  <span v-if="backupLoading || backup.running" class="loading loading-spinner loading-xs"></span>
+                  <span v-else>{{ $t('agentBackupNow') }}</span>
+                </button>
                 <button type="button" class="btn btn-ghost btn-xs" @click="refreshCron" :disabled="cronApplying">↻</button>
 
                 <span class="opacity-60">{{ $t('agentBackupCronOnRouter') }}:</span>
-                <span v-if="cronStatus.ok && cronStatus.enabled" class="badge badge-success badge-sm">on</span>
-                <span v-else-if="cronStatus.ok && cronStatus.enabled === false" class="badge badge-ghost badge-sm">off</span>
-                <span v-else class="badge badge-warning badge-sm">?</span>
+                <span class="badge badge-sm" :class="cronStateBadgeClass">{{ cronStateBadgeText }}</span>
                 <span v-if="cronStatus.ok && cronStatus.schedule" class="font-mono opacity-70">{{ cronStatus.schedule }}</span>
+                <span v-else-if="cronStatus.error" class="text-warning break-all">{{ cronStatus.error }}</span>
+              </div>
+              <div v-if="cronStatus.path || cronStatus.line" class="mt-1 flex flex-col gap-1 text-[11px] opacity-70">
+                <div v-if="cronStatus.path">
+                  <span class="opacity-60">Path:</span>
+                  <span class="font-mono break-all">{{ cronStatus.path }}</span>
+                </div>
+                <div v-if="cronStatus.line">
+                  <span class="opacity-60">Line:</span>
+                  <span class="font-mono break-all">{{ cronStatus.line }}</span>
+                </div>
               </div>
             </div>
 
@@ -520,6 +533,23 @@ const cronLine = computed(() => {
   const s = cronSchedule.value
   if (!s) return ''
   return `${s} /opt/zash-agent/backup.sh >/opt/zash-agent/var/backup.cron.log 2>&1 # zash-backup`
+})
+
+
+const cronStateBadgeText = computed(() => {
+  if (cronApplying.value) return '…'
+  if (cronStatus.value?.ok && cronStatus.value?.enabled) return 'on'
+  if (cronStatus.value?.ok && cronStatus.value?.enabled === false) return 'off'
+  if (cronStatus.value?.error) return 'error'
+  return '?'
+})
+
+const cronStateBadgeClass = computed(() => {
+  if (cronApplying.value) return 'badge-info'
+  if (cronStatus.value?.ok && cronStatus.value?.enabled) return 'badge-success'
+  if (cronStatus.value?.ok && cronStatus.value?.enabled === false) return 'badge-ghost'
+  if (cronStatus.value?.error) return 'badge-error'
+  return 'badge-warning'
 })
 
 const backup = ref<any>({ ok: true, running: false })
@@ -869,18 +899,40 @@ const refreshCron = async () => {
 const applyCron = async () => {
   if (!agentEnabled.value || !status.value?.ok) return
   cronApplying.value = true
-  await agentBackupCronSetAPI(!!backupAutoEnabled.value, cronSchedule.value)
+  const res = await agentBackupCronSetAPI(!!backupAutoEnabled.value, cronSchedule.value)
   await refreshCron()
   cronApplying.value = false
+
+  if (res?.ok) {
+    showNotification({ content: 'agentBackupCronApplyDone', type: 'alert-success', timeout: 1800 })
+  } else {
+    showNotification({
+      content: 'agentBackupCronApplyFail',
+      params: { error: String(res?.error || 'failed') },
+      type: 'alert-error',
+      timeout: 2600,
+    })
+  }
 }
 
 const removeCron = async () => {
   if (!agentEnabled.value || !status.value?.ok) return
   cronApplying.value = true
   backupAutoEnabled.value = false
-  await agentBackupCronSetAPI(false, cronSchedule.value)
+  const res = await agentBackupCronSetAPI(false, cronSchedule.value)
   await refreshCron()
   cronApplying.value = false
+
+  if (res?.ok) {
+    showNotification({ content: 'agentBackupCronDeleteDone', type: 'alert-success', timeout: 1800 })
+  } else {
+    showNotification({
+      content: 'agentBackupCronDeleteFail',
+      params: { error: String(res?.error || 'failed') },
+      type: 'alert-error',
+      timeout: 2600,
+    })
+  }
 }
 
 const copyCron = async () => {
@@ -1039,10 +1091,21 @@ const refreshBackup = async () => {
 const runBackup = async () => {
   if (!agentEnabled.value || !status.value?.ok) return
   backupLoading.value = true
-  await agentBackupStartAPI()
+  const res = await agentBackupStartAPI()
   await refreshBackup()
   await refreshBackupList()
   backupLoading.value = false
+
+  if (res?.ok) {
+    showNotification({ content: 'agentBackupRunStarted', type: 'alert-success', timeout: 1800 })
+  } else {
+    showNotification({
+      content: 'agentBackupRunFail',
+      params: { error: String(res?.error || 'failed') },
+      type: 'alert-error',
+      timeout: 2600,
+    })
+  }
 }
 
 const loadBackupLog = async () => {

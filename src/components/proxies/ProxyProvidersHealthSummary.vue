@@ -60,42 +60,55 @@ const providerMatchesProto = (provider: any, protoKeyRaw?: string) => {
   })
 }
 
-const providers = computed(() => {
-  let list = providersAfterHideUnused.value || []
+const selectedProto = computed(() => String(proxyProvidersProtoFilter.value || 'all').trim())
 
-  if (showOnlyActiveProxyProviders.value) {
-    list = list.filter((p) => {
-      const act = (providerActivityByName.value || {})[p.name]
-      const live = (providerLiveStatusByName.value || {})[p.name]
-      return Boolean((live as any)?.active)
-        || Number((live as any)?.connections ?? 0) > 0
-        || Boolean((act as any)?.active)
-        || Number((act as any)?.connections ?? 0) > 0
-        || Number((act as any)?.currentBytes ?? 0) > 0
-        || Number((act as any)?.speed ?? 0) > 0
-        || Number((act as any)?.bytes ?? 0) > 0
-    })
-  }
+const providersProtoScoped = computed(() => {
+  return (providersAfterHideUnused.value || []).filter((p) => providerMatchesProto(p, selectedProto.value))
+})
 
-  if (showOnlyTrafficProxyProviders.value) {
-    list = list.filter((p) => {
-      const act = (providerActivityByName.value || {})[p.name]
-      const live = (providerLiveStatusByName.value || {})[p.name]
-      return Number((act as any)?.todayBytes ?? 0) > 0
-        || Number((act as any)?.bytes ?? 0) > 0
-        || Number((act as any)?.currentBytes ?? 0) > 0
-        || Number((act as any)?.speed ?? 0) > 0
-        || Boolean((live as any)?.active)
-        || Number((live as any)?.connections ?? 0) > 0
-    })
-  }
+const isProviderActive = (provider: any) => {
+  const act = (providerActivityByName.value || {})[provider?.name]
+  const live = (providerLiveStatusByName.value || {})[provider?.name]
+  return Boolean((live as any)?.active)
+    || Number((live as any)?.connections ?? 0) > 0
+    || Boolean((act as any)?.active)
+    || Number((act as any)?.connections ?? 0) > 0
+    || Number((act as any)?.currentBytes ?? 0) > 0
+    || Number((act as any)?.speed ?? 0) > 0
+    || Number((act as any)?.bytes ?? 0) > 0
+}
 
-  return list
+const isProviderWithTraffic = (provider: any) => {
+  const act = (providerActivityByName.value || {})[provider?.name]
+  const live = (providerLiveStatusByName.value || {})[provider?.name]
+  return Number((act as any)?.todayBytes ?? 0) > 0
+    || Number((act as any)?.bytes ?? 0) > 0
+    || Number((act as any)?.currentBytes ?? 0) > 0
+    || Number((act as any)?.speed ?? 0) > 0
+    || Boolean((live as any)?.active)
+    || Number((live as any)?.connections ?? 0) > 0
+}
+
+const activeProvidersScoped = computed(() => {
+  return (providersProtoScoped.value || []).filter((p) => isProviderActive(p))
+})
+
+const trafficProvidersScoped = computed(() => {
+  return (providersProtoScoped.value || []).filter((p) => isProviderWithTraffic(p))
 })
 
 const providersScoped = computed(() => {
-  const proto = String(proxyProvidersProtoFilter.value || 'all').trim()
-  return (providers.value || []).filter((p) => providerMatchesProto(p, proto))
+  let list = providersProtoScoped.value || []
+
+  if (showOnlyActiveProxyProviders.value) {
+    list = list.filter((p) => isProviderActive(p))
+  }
+
+  if (showOnlyTrafficProxyProviders.value) {
+    list = list.filter((p) => isProviderWithTraffic(p))
+  }
+
+  return list
 })
 
 const hiddenUnusedCount = computed(() => {
@@ -119,7 +132,7 @@ const counts = computed(() => {
 const protoTabs = computed(() => {
   const m = new Map<string, number>()
 
-  for (const p of providers.value || []) {
+  for (const p of providersAfterHideUnused.value || []) {
     const seen = new Set<string>()
     for (const n of ((p as any)?.proxies || []) as any[]) {
       const t0 = typeof n === 'string' ? (proxyMap.value[n]?.type as any) : (n as any)?.type
@@ -138,7 +151,7 @@ const protoTabs = computed(() => {
   }))
   arr.sort((a, b) => (b.count - a.count) || a.key.localeCompare(b.key))
 
-  const out: any[] = [{ key: 'all', label: '', count: providers.value.length }]
+  const out: any[] = [{ key: 'all', label: '', count: providersAfterHideUnused.value.length }]
   out.push(...arr)
   return out
 })
@@ -215,25 +228,9 @@ watch(
   },
   { immediate: true },
 )
-const activeProvidersCount = computed(() => {
-  let n = 0
-  for (const p of providersScoped.value || []) {
-    const act = (providerActivityByName.value[p.name] as any) || {}
-    const live = (providerLiveStatusByName.value[p.name] as any) || {}
-    if (Boolean(live.active) || Number(live.connections || 0) > 0 || Boolean(act.active) || Number(act.connections || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0 || Number(act.bytes || 0) > 0) n += 1
-  }
-  return n
-})
+const activeProvidersCount = computed(() => activeProvidersScoped.value.length)
 
-const trafficProvidersCount = computed(() => {
-  let n = 0
-  for (const p of providersScoped.value || []) {
-    const act = (providerActivityByName.value[p.name] as any) || {}
-    const live = (providerLiveStatusByName.value[p.name] as any) || {}
-    if (Number(act.todayBytes || 0) > 0 || Number(act.bytes || 0) > 0 || Number(act.currentBytes || 0) > 0 || Number(act.speed || 0) > 0 || Boolean(live.active) || Number(live.connections || 0) > 0) n += 1
-  }
-  return n
-})
+const trafficProvidersCount = computed(() => trafficProvidersScoped.value.length)
 
 const lastAgentUpdate = computed(() => {
   if (!agentProvidersAt.value) return ''
