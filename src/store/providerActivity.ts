@@ -55,9 +55,9 @@ type PersistedConnTotalStore = {
   entries: Record<string, PersistedConnTotal>
 }
 
-const STORAGE_KEY = 'stats/provider-traffic-session-v4'
-const DAILY_STORAGE_KEY = 'stats/provider-traffic-daily-v3'
-const CONN_TOTALS_STORAGE_KEY = 'stats/provider-traffic-conn-baselines-v3'
+const STORAGE_KEY = 'stats/provider-traffic-session-v5'
+const DAILY_STORAGE_KEY = 'stats/provider-traffic-daily-v4'
+const CONN_TOTALS_STORAGE_KEY = 'stats/provider-traffic-conn-baselines-v4'
 const MAX_PERSISTED_CONN_TOTALS = 5000
 const trafficTotals = ref<Record<string, ProviderTrafficTotals>>({})
 const dailyTrafficTotals = ref<Record<string, ProviderTrafficTotals>>({})
@@ -222,6 +222,8 @@ watch(
     lastTickAt = now
     const current: Record<string, ProviderActivity> = {}
     const providerProxySets = new Map<string, Set<string>>()
+    const liveCurrentByProvider: Record<string, { dl: number; ul: number }> = {}
+    const liveTodayByProvider: Record<string, { dl: number; ul: number }> = {}
 
     for (const p of providers || []) {
       const providerName = String((p as any)?.name || '').trim()
@@ -258,6 +260,17 @@ watch(
         rec.currentBytes += curBytes
         rec.speed += curSpeed
         rec.active = true
+
+        const liveTotals = liveCurrentByProvider[providerName] || { dl: 0, ul: 0 }
+        liveTotals.dl += curDl
+        liveTotals.ul += curUl
+        liveCurrentByProvider[providerName] = liveTotals
+        if (isLocalToday(start)) {
+          const todayLiveTotals = liveTodayByProvider[providerName] || { dl: 0, ul: 0 }
+          todayLiveTotals.dl += curDl
+          todayLiveTotals.ul += curUl
+          liveTodayByProvider[providerName] = todayLiveTotals
+        }
 
         const proxyKey = `${providerName}|${proxyName}`
         perProxyBytes[proxyKey] = (perProxyBytes[proxyKey] || 0) + curBytes
@@ -318,6 +331,47 @@ watch(
       rec.todayUpload = Number(totals?.ul ?? 0) || 0
       rec.todayBytes = rec.todayDownload + rec.todayUpload
       rec.updatedAt = Math.max(Number(rec.updatedAt || 0), Number(totals?.updatedAt ?? 0) || 0) || undefined
+    }
+
+    for (const [providerName, rec] of Object.entries(current)) {
+      const liveTotals = liveCurrentByProvider[providerName]
+      if (liveTotals) {
+        const liveBytes = Math.max(0, Number(liveTotals.dl || 0)) + Math.max(0, Number(liveTotals.ul || 0))
+        if (liveBytes > rec.bytes) {
+          rec.download = Math.max(rec.download, Math.max(0, Number(liveTotals.dl || 0)))
+          rec.upload = Math.max(rec.upload, Math.max(0, Number(liveTotals.ul || 0)))
+          rec.bytes = rec.download + rec.upload
+          const totals = trafficTotals.value[providerName] || { dl: 0, ul: 0 }
+          totals.dl = Math.max(Number(totals.dl || 0), rec.download)
+          totals.ul = Math.max(Number(totals.ul || 0), rec.upload)
+          totals.updatedAt = now
+          trafficTotals.value[providerName] = totals
+          rec.updatedAt = Math.max(Number(rec.updatedAt || 0), now) || undefined
+        }
+      }
+
+      const dailyLiveTotals = liveTodayByProvider[providerName]
+      const dailyLiveBytes = dailyLiveTotals
+        ? Math.max(0, Number(dailyLiveTotals.dl || 0)) + Math.max(0, Number(dailyLiveTotals.ul || 0))
+        : 0
+      const fallbackDailyBytes = rec.todayBytes <= 0 && rec.currentBytes > 0 ? rec.currentBytes : 0
+      if (dailyLiveBytes > rec.todayBytes || fallbackDailyBytes > rec.todayBytes) {
+        const nextTodayDl = dailyLiveBytes > 0
+          ? Math.max(rec.todayDownload, Math.max(0, Number(dailyLiveTotals?.dl || 0)))
+          : Math.max(rec.todayDownload, Math.max(0, Number(liveTotals?.dl || 0)))
+        const nextTodayUl = dailyLiveBytes > 0
+          ? Math.max(rec.todayUpload, Math.max(0, Number(dailyLiveTotals?.ul || 0)))
+          : Math.max(rec.todayUpload, Math.max(0, Number(liveTotals?.ul || 0)))
+        rec.todayDownload = nextTodayDl
+        rec.todayUpload = nextTodayUl
+        rec.todayBytes = rec.todayDownload + rec.todayUpload
+        const daily = dailyTrafficTotals.value[providerName] || { dl: 0, ul: 0 }
+        daily.dl = Math.max(Number(daily.dl || 0), rec.todayDownload)
+        daily.ul = Math.max(Number(daily.ul || 0), rec.todayUpload)
+        daily.updatedAt = now
+        dailyTrafficTotals.value[providerName] = daily
+        rec.updatedAt = Math.max(Number(rec.updatedAt || 0), now) || undefined
+      }
     }
 
     for (const [key, value] of Object.entries(perProxyBytes)) {
