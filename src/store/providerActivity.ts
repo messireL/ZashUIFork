@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { proxyProviederList } from '@/store/proxies'
-import { activeConnections } from '@/store/connections'
+import { activeConnections, closedConnections } from '@/store/connections'
 import { debounce, throttle } from 'lodash'
 
 const FALLBACK_SPEED_MULTIPLIER = 1
@@ -55,9 +55,9 @@ type PersistedConnTotalStore = {
   entries: Record<string, PersistedConnTotal>
 }
 
-const STORAGE_KEY = 'stats/provider-traffic-session-v5'
-const DAILY_STORAGE_KEY = 'stats/provider-traffic-daily-v4'
-const CONN_TOTALS_STORAGE_KEY = 'stats/provider-traffic-conn-baselines-v4'
+const STORAGE_KEY = 'stats/provider-traffic-session-v6'
+const DAILY_STORAGE_KEY = 'stats/provider-traffic-daily-v5'
+const CONN_TOTALS_STORAGE_KEY = 'stats/provider-traffic-conn-baselines-v5'
 const MAX_PERSISTED_CONN_TOTALS = 5000
 const trafficTotals = ref<Record<string, ProviderTrafficTotals>>({})
 const dailyTrafficTotals = ref<Record<string, ProviderTrafficTotals>>({})
@@ -210,8 +210,8 @@ export const connectionMatchesProviderProxyNames = (conn: any, proxyNames: Itera
 }
 
 watch(
-  [activeConnections, proxyProviederList],
-  ([list, providers]) => {
+  [activeConnections, closedConnections, proxyProviederList],
+  ([list, closedList, providers]) => {
     if (todayKey() !== safeParse<DailyTrafficStore>(typeof localStorage === 'undefined' ? null : localStorage.getItem(DAILY_STORAGE_KEY), { day: todayKey(), totals: {} }).day) {
       dailyTrafficTotals.value = {}
       saveDailyTrafficTotals()
@@ -235,14 +235,14 @@ watch(
     const perProxyBytes: Record<string, number> = {}
     const seen = new Set<string>()
 
-    for (const c of list || []) {
+    const processConnection = (c: any, mode: 'active' | 'closed') => {
       const id = String((c as any)?.id || '').trim()
-      if (!id) continue
+      if (!id) return
 
       const curDl = Number((c as any)?.download ?? 0) || 0
       const curUl = Number((c as any)?.upload ?? 0) || 0
-      const curSpeedDl = Number((c as any)?.downloadSpeed ?? 0) || 0
-      const curSpeedUl = Number((c as any)?.uploadSpeed ?? 0) || 0
+      const curSpeedDl = mode === 'active' ? (Number((c as any)?.downloadSpeed ?? 0) || 0) : 0
+      const curSpeedUl = mode === 'active' ? (Number((c as any)?.uploadSpeed ?? 0) || 0) : 0
       const curSpeed = curSpeedDl + curSpeedUl
       const curBytes = curDl + curUl
       const start = String((c as any)?.start || '')
@@ -256,24 +256,26 @@ watch(
         seen.add(seenKey)
 
         const rec = current[providerName] || (current[providerName] = emptyActivity())
-        rec.connections += 1
-        rec.currentBytes += curBytes
-        rec.speed += curSpeed
-        rec.active = true
+        if (mode === 'active') {
+          rec.connections += 1
+          rec.currentBytes += curBytes
+          rec.speed += curSpeed
+          rec.active = true
 
-        const liveTotals = liveCurrentByProvider[providerName] || { dl: 0, ul: 0 }
-        liveTotals.dl += curDl
-        liveTotals.ul += curUl
-        liveCurrentByProvider[providerName] = liveTotals
-        if (isLocalToday(start)) {
-          const todayLiveTotals = liveTodayByProvider[providerName] || { dl: 0, ul: 0 }
-          todayLiveTotals.dl += curDl
-          todayLiveTotals.ul += curUl
-          liveTodayByProvider[providerName] = todayLiveTotals
+          const liveTotals = liveCurrentByProvider[providerName] || { dl: 0, ul: 0 }
+          liveTotals.dl += curDl
+          liveTotals.ul += curUl
+          liveCurrentByProvider[providerName] = liveTotals
+          if (isLocalToday(start)) {
+            const todayLiveTotals = liveTodayByProvider[providerName] || { dl: 0, ul: 0 }
+            todayLiveTotals.dl += curDl
+            todayLiveTotals.ul += curUl
+            liveTodayByProvider[providerName] = todayLiveTotals
+          }
+
+          const proxyKey = `${providerName}|${proxyName}`
+          perProxyBytes[proxyKey] = (perProxyBytes[proxyKey] || 0) + curBytes
         }
-
-        const proxyKey = `${providerName}|${proxyName}`
-        perProxyBytes[proxyKey] = (perProxyBytes[proxyKey] || 0) + curBytes
 
         let prev = connTotals.get(seenKey)
         if (prev && prev.start && start && prev.start !== start) prev = undefined
@@ -290,7 +292,7 @@ watch(
         if (!Number.isFinite(dDl) || dDl < 0) dDl = 0
         if (!Number.isFinite(dUl) || dUl < 0) dUl = 0
 
-        if (dDl <= 0 && dUl <= 0 && (curSpeedDl > 0 || curSpeedUl > 0)) {
+        if (mode === 'active' && dDl <= 0 && dUl <= 0 && (curSpeedDl > 0 || curSpeedUl > 0)) {
           dDl = Math.max(0, curSpeedDl * dt * FALLBACK_SPEED_MULTIPLIER)
           dUl = Math.max(0, curSpeedUl * dt * FALLBACK_SPEED_MULTIPLIER)
         }
@@ -312,6 +314,9 @@ watch(
         connTotals.set(seenKey, { provider: providerName, dl: curDl, ul: curUl, start: start || undefined, seenAt: now })
       }
     }
+
+    for (const c of list || []) processConnection(c, 'active')
+    for (const c of closedList || []) processConnection(c, 'closed')
 
     for (const id of Array.from(connTotals.keys())) {
       if (!seen.has(id)) connTotals.delete(id)
