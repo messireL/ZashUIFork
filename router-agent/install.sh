@@ -1605,7 +1605,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.40","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.41","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -1832,13 +1832,13 @@ rclone_remote_accessible() {
   fi
   root_target="$remote:"
   # shellcheck disable=SC2086
-  if rclone $rcfg lsf "$root_target" --max-depth 1 >/dev/null 2>&1; then
+  if RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsf "$root_target" --max-depth 1 >/dev/null 2>&1; then
     return 0
   fi
   if [ -n "$test_path" ]; then
     path_target="$remote:$test_path"
     # shellcheck disable=SC2086
-    if rclone $rcfg lsf "$path_target" --max-depth 1 >/dev/null 2>&1; then
+    if RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsf "$path_target" --max-depth 1 >/dev/null 2>&1; then
       return 0
     fi
   fi
@@ -1868,7 +1868,7 @@ rclone_find_file_remote() {
       rcfg="--config $RCLONE_CONFIG"
     fi
     # shellcheck disable=SC2086
-    if rclone $rcfg lsf "$src" --max-depth 1 >/dev/null 2>&1; then
+    if RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsf "$src" --max-depth 1 >/dev/null 2>&1; then
       printf '%s' "$remote"
       IFS="$oldIFS"
       return 0
@@ -1902,7 +1902,7 @@ rclone_latest_remote_name() {
     remote_dir="$remote:"
     [ -n "$path" ] && remote_dir="$remote:$path"
     # shellcheck disable=SC2086
-    line="$(rclone $rcfg lsl "$remote_dir" --include 'zash-backup-*.tar.gz' 2>/dev/null | sort -k2,3 | tail -n1)"
+    line="$(RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsl "$remote_dir" --include 'zash-backup-*.tar.gz' 2>/dev/null | sort -k2,3 | tail -n1)"
     [ -n "$line" ] || continue
     name="$(printf '%s' "$line" | awk '{print $4}')"
     key="$(printf '%s' "$line" | awk '{print $2" "$3}')"
@@ -1994,7 +1994,7 @@ backup_cloud_list_json() {
     dst="$remote:"
     [ -n "$path" ] && dst="$remote:$path"
     # shellcheck disable=SC2086
-    json="$(rclone $rcfg lsjson "$dst" --files-only --max-depth 1 2>/dev/null || printf '[]')"
+    json="$(RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsjson "$dst" --files-only --max-depth 1 2>/dev/null || printf '[]')"
     [ -n "$json" ] || json='[]'
     tmp_json="/tmp/zash-cloud-list.$$"
     printf '%s\n' "$json" | sed 's/},{/}\n{/g' > "$tmp_json"
@@ -2156,7 +2156,7 @@ backup_cloud_delete_json() {
     dst="$remote:$name"
     [ -n "$path" ] && dst="$remote:$path/$name"
     # shellcheck disable=SC2086
-    if rclone $rcfg deletefile "$dst" >/dev/null 2>&1; then
+    if RCLONE_CONFIG="$RCLONE_CONFIG" rclone deletefile "$dst" >/dev/null 2>&1; then
       deleted=true
       [ -n "$req_remote" ] && break
     fi
@@ -2216,7 +2216,7 @@ backup_cloud_download_json() {
   fi
 
   # shellcheck disable=SC2086
-  if ! rclone $rcfg copyto "$src" "$local_file" >/dev/null 2>&1; then
+  if ! RCLONE_CONFIG="$RCLONE_CONFIG" rclone copyto "$src" "$local_file" >/dev/null 2>&1; then
     rm -f "$local_file" >/dev/null 2>&1 || true
     reply_err 'cloud download failed'
     return
@@ -2747,9 +2747,9 @@ if [ -n "$rems" ] && command -v rclone >/dev/null 2>&1; then
     echo "[backup] uploading to: $dst" | tee -a "$BACKUP_LOG_FILE" >/dev/null 2>&1 || true
     set +e
     # shellcheck disable=SC2086
-    rclone $rcfg mkdir "$dst" >/dev/null 2>&1
+    RCLONE_CONFIG="$RCLONE_CONFIG" rclone mkdir "$dst" >/dev/null 2>&1
     # shellcheck disable=SC2086
-    rclone $rcfg copy "$out" "$dst" --transfers 1 --checkers 1 --retries 2
+    RCLONE_CONFIG="$RCLONE_CONFIG" rclone copy "$out" "$dst" --transfers 1 --checkers 1 --retries 2
     rc=$?
     set -e
     if [ $rc -eq 0 ]; then
@@ -2759,7 +2759,7 @@ if [ -n "$rems" ] && command -v rclone >/dev/null 2>&1; then
       if echo "$RCLONE_KEEP_DAYS" | grep -qE '^[0-9]+$' && [ "$RCLONE_KEEP_DAYS" -gt 0 ]; then
         set +e
         # shellcheck disable=SC2086
-        rclone $rcfg delete "$dst" --min-age "${RCLONE_KEEP_DAYS}d" --include "zash-backup-*.tar.gz" >/dev/null 2>&1
+        RCLONE_CONFIG="$RCLONE_CONFIG" rclone delete "$dst" --min-age "${RCLONE_KEEP_DAYS}d" --include "zash-backup-*.tar.gz" >/dev/null 2>&1
         set -e
       fi
     else
@@ -2850,7 +2850,7 @@ rclone_find_file_remote() {
     src="$remote:$name"
     [ -n "$path" ] && src="$remote:$path/$name"
     # shellcheck disable=SC2086
-    if rclone $rcfg lsf "$src" --max-depth 1 >/dev/null 2>&1; then
+    if RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsf "$src" --max-depth 1 >/dev/null 2>&1; then
       printf '%s' "$remote"
       IFS="$oldIFS"
       return 0
@@ -2884,7 +2884,7 @@ rclone_latest_remote_name() {
     remote_dir="$remote:"
     [ -n "$path" ] && remote_dir="$remote:$path"
     # shellcheck disable=SC2086
-    line="$(rclone $rcfg lsl "$remote_dir" --include 'zash-backup-*.tar.gz' 2>/dev/null | sort -k2,3 | tail -n1)"
+    line="$(RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsl "$remote_dir" --include 'zash-backup-*.tar.gz' 2>/dev/null | sort -k2,3 | tail -n1)"
     [ -n "$line" ] || continue
     name="$(printf '%s' "$line" | awk '{print $4}')"
     key="$(printf '%s' "$line" | awk '{print $2" "$3}')"
@@ -2976,7 +2976,7 @@ if [ -z "$file_arg" ] || [ "$file_arg" = "latest" ]; then
     remote_dir="$remote_req:"
     [ -n "$RCLONE_PATH" ] && remote_dir="$remote_req:$RCLONE_PATH"
     # shellcheck disable=SC2086
-    remote_name="$(rclone $rcfg lsl "$remote_dir" --include 'zash-backup-*.tar.gz' 2>/dev/null | sort -k2,3 | tail -n1 | awk '{print $4}')"
+    remote_name="$(RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsl "$remote_dir" --include 'zash-backup-*.tar.gz' 2>/dev/null | sort -k2,3 | tail -n1 | awk '{print $4}')"
     selected_remote="$remote_req"
   else
     best_line="$(rclone_latest_remote_name "$RCLONE_PATH" "")"
@@ -3008,7 +3008,7 @@ rm -f "$tmp_file" >/dev/null 2>&1 || true
 
 remote_size=0
 # shellcheck disable=SC2086
-remote_size="$(rclone $rcfg lsl "$remote_file" 2>/dev/null | awk 'NR==1{print $1}' | tr -d '\r')"
+remote_size="$(RCLONE_CONFIG="$RCLONE_CONFIG" rclone lsl "$remote_file" 2>/dev/null | awk 'NR==1{print $1}' | tr -d '\r')"
 printf '%s' "$remote_size" | grep -qE '^[0-9]+$' || remote_size=0
 
 log "[restore-cloud] remote: $remote_file"
@@ -3019,7 +3019,7 @@ write_running_status "downloading" 5 "Downloading from cloud" 0 "$remote_size" "
 copy_log="/opt/zash-agent/var/restore-cloud.copy.log"
 : > "$copy_log" 2>/dev/null || true
 # shellcheck disable=SC2086
-rclone $rcfg copyto "$remote_file" "$tmp_file" --transfers 1 --checkers 1 --retries 2 > "$copy_log" 2>&1 &
+RCLONE_CONFIG="$RCLONE_CONFIG" rclone copyto "$remote_file" "$tmp_file" --transfers 1 --checkers 1 --retries 2 > "$copy_log" 2>&1 &
 copy_pid=$!
 
 while kill -0 "$copy_pid" 2>/dev/null; do

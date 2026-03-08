@@ -117,13 +117,13 @@ echo "[backup] created: $out" | tee -a "$BACKUP_LOG_FILE" >/dev/null 2>&1 || tru
 
 if [ -n "$RCLONE_REMOTE" ] && command -v rclone >/dev/null 2>&1; then
   dst="$RCLONE_REMOTE:$RCLONE_PATH"
-  rclone mkdir "$dst" >/dev/null 2>&1 || true
-  rclone copy "$out" "$dst" --transfers 1 --checkers 1 --retries 2
+  RCLONE_CONFIG="$RCLONE_CONFIG" rclone mkdir "$dst" >/dev/null 2>&1 || true
+  RCLONE_CONFIG="$RCLONE_CONFIG" rclone copy "$out" "$dst" --transfers 1 --checkers 1 --retries 2
   uploaded=true
   echo "[backup] uploaded to: $dst" | tee -a "$BACKUP_LOG_FILE" >/dev/null 2>&1 || true
   # retention (best-effort)
   if echo "$RCLONE_KEEP_DAYS" | grep -qE '^[0-9]+$' && [ "$RCLONE_KEEP_DAYS" -gt 0 ]; then
-    rclone delete "$dst" --min-age "${RCLONE_KEEP_DAYS}d" --include "zash-backup-*.tar.gz" >/dev/null 2>&1 || true
+    RCLONE_CONFIG="$RCLONE_CONFIG" rclone delete "$dst" --min-age "${RCLONE_KEEP_DAYS}d" --include "zash-backup-*.tar.gz" >/dev/null 2>&1 || true
   fi
 else
   echo "[backup] rclone is not configured; set RCLONE_REMOTE in $ENV_FILE to enable cloud upload" | tee -a "$BACKUP_LOG_FILE" >/dev/null 2>&1 || true
