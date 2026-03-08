@@ -132,9 +132,9 @@ export const getColorForLatency = (latency: number) => {
 
 export const renderRoutes = computed(() => {
   return [
+    ROUTE_NAME.overview,
     ROUTE_NAME.proxies,
     ROUTE_NAME.proxyProviders,
-    ROUTE_NAME.overview,
     ROUTE_NAME.router,
     ROUTE_NAME.tasks,
     ROUTE_NAME.connections,
