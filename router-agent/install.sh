@@ -1090,7 +1090,7 @@ if [ "$REQUEST_METHOD" = "OPTIONS" ]; then
 fi
 
 # Parse query string (key=value&...)
-cmd=""; ip=""; up=""; down=""; mac=""; ports=""; token_q=""; type=""; lines=""; offset=""; rev_q=""; enabled_q=""; schedule_q=""; remote_q=""
+cmd=""; ip=""; up=""; down=""; mac=""; ports=""; token_q=""; type=""; lines=""; offset=""; rev_q=""; enabled_q=""; schedule_q=""; remote_q=""; remotes_q=""
 IFS='&'
 for kv in $QUERY_STRING; do
   key="${kv%%=*}"
@@ -1116,6 +1116,7 @@ for kv in $QUERY_STRING; do
     scope) scope_q="$val" ;;
     env) env_q="$val" ;;
     remote) remote_q="$val" ;;
+    remotes) remotes_q="$val" ;;
   esac
 done
 unset IFS
@@ -1604,7 +1605,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.38","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
+  reply_ok "$(printf '{"ok":true,"version":"0.5.40","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memUsedPct":%s}' \
     "$server_ver" "$WAN_IF" "$LAN_IF" \
     $( [ $have_tc -eq 1 ] && echo true || echo false ) \
     $( [ $have_iptables -eq 1 ] && echo true || echo false ) \
@@ -2031,11 +2032,21 @@ backup_start_json() {
   mkdir -p /opt/zash-agent/var >/dev/null 2>&1 || true
   sf="/opt/zash-agent/var/backup.last.json"
   started="$(date -Iseconds 2>/dev/null || date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo now)"
-  esc_started="$(printf '%s' "$started" | sed 's/"/\\"/g')"
-  printf '{"ok":true,"running":true,"startedAt":"%s"}' "$esc_started" > "$sf" 2>/dev/null || true
+  req_remotes="${remotes_q:-}"
+  esc_started="$(jesc "$started")"
+  esc_req_remotes="$(jesc "$req_remotes")"
+  if [ -n "$req_remotes" ]; then
+    printf '{"ok":true,"running":true,"startedAt":"%s","requestedRemotes":"%s"}' "$esc_started" "$esc_req_remotes" > "$sf" 2>/dev/null || true
+  else
+    printf '{"ok":true,"running":true,"startedAt":"%s"}' "$esc_started" > "$sf" 2>/dev/null || true
+  fi
   # Run in background so CGI returns immediately.
-  ( /opt/zash-agent/backup.sh > /opt/zash-agent/var/backup.last.log 2>&1 & ) >/dev/null 2>&1 || true
-  reply_ok '{"ok":true,"running":true}'
+  ( /opt/zash-agent/backup.sh "$req_remotes" > /opt/zash-agent/var/backup.last.log 2>&1 & ) >/dev/null 2>&1 || true
+  if [ -n "$req_remotes" ]; then
+    reply_ok "$(printf '{"ok":true,"running":true,"requestedRemotes":"%s"}' "$(jesc "$req_remotes")")"
+  else
+    reply_ok '{"ok":true,"running":true}'
+  fi
 }
 
 backup_log_json() {
@@ -2231,7 +2242,7 @@ restore_start_json() {
   mkdir -p /opt/zash-agent/var >/dev/null 2>&1 || true
   sf="/opt/zash-agent/var/restore.last.json"
   started="$(date -Iseconds 2>/dev/null || date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo now)"
-  esc_started="$(printf '%s' "$started" | sed 's/"/\"/g')"
+  esc_started="$(jesc "$started")"
 
   f="${file_q:-}"
   scope="${scope_q:-all}"
@@ -2555,6 +2566,7 @@ RCLONE_REMOTE="${RCLONE_REMOTE:-}"
 RCLONE_REMOTES="${RCLONE_REMOTES:-}"
 RCLONE_PATH="${RCLONE_PATH:-NetcrazeBackups/zash-agent}"
 RCLONE_KEEP_DAYS="${RCLONE_KEEP_DAYS:-30}"
+REQUESTED_REMOTES="${1:-}"
 
 normalize_rclone_path() {
   p="$1"
@@ -2597,13 +2609,41 @@ write_status() {
   printf '%s' "$1" > "$BACKUP_STATUS_FILE" 2>/dev/null || true
 }
 
+append_upload_result() {
+  remote_name="$1"
+  remote_ok="$2"
+  remote_error="$3"
+  item="$(printf '{\"remote\":\"%s\",\"ok\":%s' "$(json_escape "$remote_name")" "$remote_ok")"
+  if [ -n "$remote_error" ]; then
+    item="$item$(printf ' ,"error":"%s" ' "$(json_escape "$remote_error")")"
+  fi
+  item="$item}"
+  if [ -n "$upload_results" ]; then
+    upload_results="$upload_results,$item"
+  else
+    upload_results="$item"
+  fi
+  if [ "$remote_ok" = "true" ]; then
+    upload_ok_count=$((upload_ok_count + 1))
+  else
+    upload_fail_count=$((upload_fail_count + 1))
+  fi
+}
+
 # Mark as running
-write_status "$(printf '{"ok":true,"running":true,"startedAt":"%s"}' "$(json_escape "$started_at")")"
+if [ -n "$REQUESTED_REMOTES" ]; then
+  write_status "$(printf '{"ok":true,"running":true,"startedAt":"%s","requestedRemotes":"%s"}' "$(json_escape "$started_at")" "$(json_escape "$REQUESTED_REMOTES")")"
+else
+  write_status "$(printf '{"ok":true,"running":true,"startedAt":"%s"}' "$(json_escape "$started_at")")"
+fi
 
 success=0
 uploaded=false
 out=""
 err=""
+upload_results=""
+upload_ok_count=0
+upload_fail_count=0
 
 finish() {
   code=$?
@@ -2611,13 +2651,13 @@ finish() {
   finished_at="$(date -Iseconds 2>/dev/null || date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo now)"
   if [ $code -ne 0 ] || [ $success -ne 1 ]; then
     e="${err:-exit $code}"
-    write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":false,"error":"%s"}' \
-      "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$e")")"
+    write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":false,"error":"%s","uploadOkCount":%s,"uploadFailCount":%s,"uploadResults":[%s],"requestedRemotes":"%s"}' \
+      "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$e")" "$upload_ok_count" "$upload_fail_count" "$upload_results" "$(json_escape "$REQUESTED_REMOTES")")"
     exit $code
   fi
 
-  write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":true,"file":"%s","uploaded":%s}' \
-    "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$out")" "$uploaded")"
+  write_status "$(printf '{"ok":true,"running":false,"startedAt":"%s","finishedAt":"%s","success":true,"file":"%s","uploaded":%s,"uploadOkCount":%s,"uploadFailCount":%s,"uploadResults":[%s],"requestedRemotes":"%s"}' \
+    "$(json_escape "$started_at")" "$(json_escape "$finished_at")" "$(json_escape "$out")" "$uploaded" "$upload_ok_count" "$upload_fail_count" "$upload_results" "$(json_escape "$REQUESTED_REMOTES")")"
 }
 trap finish EXIT
 
@@ -2684,7 +2724,14 @@ if echo "$BACKUP_KEEP_DAYS" | grep -qE '^[0-9]+$' && [ "$BACKUP_KEEP_DAYS" -gt 0
   find "$BACKUP_TMP_DIR" -maxdepth 1 -type f \( -name "zash-backup-*.tar.gz" -o -name "ui-dist-*.zip" \) -mtime +"$BACKUP_KEEP_DAYS" -print -delete 2>/dev/null || true
 fi
 
-rems="$(rclone_configured_remotes)"
+rems_source="$REQUESTED_REMOTES"
+if [ -z "$rems_source" ]; then
+  rems_source="$RCLONE_REMOTES"
+fi
+if [ -z "$rems_source" ]; then
+  rems_source="$RCLONE_REMOTE"
+fi
+rems="$(printf '%s' "$rems_source" | sed 's/[;,[:space:]]\+/\n/g' | sed 's/:$//; s/^ *//; s/ *$//' | awk 'NF && !seen[$0]++ {print $0}')"
 if [ -n "$rems" ] && command -v rclone >/dev/null 2>&1; then
   rcfg=""
   if [ -n "$RCLONE_CONFIG" ]; then
@@ -2707,6 +2754,7 @@ if [ -n "$rems" ] && command -v rclone >/dev/null 2>&1; then
     set -e
     if [ $rc -eq 0 ]; then
       upload_ok=1
+      append_upload_result "$remote" true ""
       echo "[backup] uploaded to: $dst" | tee -a "$BACKUP_LOG_FILE" >/dev/null 2>&1 || true
       if echo "$RCLONE_KEEP_DAYS" | grep -qE '^[0-9]+$' && [ "$RCLONE_KEEP_DAYS" -gt 0 ]; then
         set +e
@@ -2715,12 +2763,22 @@ if [ -n "$rems" ] && command -v rclone >/dev/null 2>&1; then
         set -e
       fi
     else
+      append_upload_result "$remote" false "upload failed"
       echo "[backup] upload failed: $dst" | tee -a "$BACKUP_LOG_FILE" >/dev/null 2>&1 || true
     fi
   done
   IFS="$oldIFS"
   [ $upload_ok -eq 1 ] && uploaded=true || uploaded=false
 else
+  if [ -n "$rems" ] && ! command -v rclone >/dev/null 2>&1; then
+    oldIFS="$IFS"
+    IFS=$(printf '\n_'); IFS=${IFS%_}
+    for remote in $rems; do
+      [ -n "$remote" ] || continue
+      append_upload_result "$remote" false "rclone missing"
+    done
+    IFS="$oldIFS"
+  fi
   echo "[backup] rclone is not configured; set RCLONE_REMOTES (or RCLONE_REMOTE) in $ENV_FILE to enable cloud upload" | tee -a "$BACKUP_LOG_FILE" >/dev/null 2>&1 || true
 fi
 

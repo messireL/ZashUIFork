@@ -519,6 +519,10 @@ export type AgentBackupStatus = {
   success?: boolean
   file?: string
   uploaded?: boolean
+  uploadOkCount?: number
+  uploadFailCount?: number
+  uploadResults?: Array<{ remote?: string; ok?: boolean; error?: string }>
+  requestedRemotes?: string
   error?: string
 }
 
@@ -561,10 +565,13 @@ export const agentBackupCloudStatusAPI = async (): Promise<AgentBackupCloudStatu
   }
 }
 
-export const agentBackupStartAPI = async (): Promise<{ ok: boolean; running?: boolean; error?: string }> => {
+export const agentBackupStartAPI = async (remotes?: string | string[]): Promise<{ ok: boolean; running?: boolean; requestedRemotes?: string; error?: string }> => {
   try {
+    const selected = Array.isArray(remotes) ? remotes.map((it) => String(it || '').trim()).filter(Boolean).join(',') : String(remotes || '').trim()
+    const params: Record<string, string> = { cmd: 'backup_start' }
+    if (selected) params.remotes = selected
     const { data } = await agentAxios().get('/cgi-bin/api.sh', {
-      params: { cmd: 'backup_start' },
+      params,
       timeout: 8000,
     })
     return (data || { ok: true }) as any

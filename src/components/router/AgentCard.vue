@@ -11,17 +11,28 @@
         <span v-if="agentEnabled && status.ok && !status.tc" class="badge badge-warning">no-tc</span>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-end gap-2">
         <button type="button" class="btn btn-sm" @click="refresh">{{ $t('test') }}</button>
+        <label v-if="configuredCloudRemotes.length" class="flex items-center gap-2 text-xs opacity-80">
+          <span>{{ $t('agentBackupTargets') }}</span>
+          <select
+            v-model="backupTargetRemote"
+            class="select select-sm min-w-[180px]"
+            :disabled="!agentEnabled || !status.ok || backupLoading || backup.running"
+          >
+            <option value="">{{ $t('agentBackupTargetAll') }}</option>
+            <option v-for="remote in readyCloudRemotes" :key="`backup-target-${remote}`" :value="remote">{{ remote }}</option>
+          </select>
+        </label>
         <button
           type="button"
           class="btn btn-sm btn-outline"
           @click="runBackup"
           :disabled="!agentEnabled || !status.ok || backupLoading || backup.running"
-          :title="$t('agentBackupNow')"
+          :title="backupTargetLabel ? `${$t('agentBackupNow')} · ${backupTargetLabel}` : $t('agentBackupNow')"
         >
           <span v-if="backupLoading || backup.running" class="loading loading-spinner loading-xs"></span>
-          <span v-else>{{ $t('agentBackupNow') }}</span>
+          <span v-else>{{ backupTargetLabel ? `${$t('agentBackupNow')} · ${backupTargetLabel}` : $t('agentBackupNow') }}</span>
         </button>
       </div>
     </div>
@@ -70,6 +81,7 @@
             <span v-else-if="backup.finishedAt || backup.startedAt" class="badge badge-warning badge-sm">{{ $t('agentBackupFail') }}</span>
             <span v-if="backup.finishedAt || backup.startedAt" class="font-mono">{{ backup.finishedAt || backup.startedAt }}</span>
             <span v-if="backup.file" class="opacity-60 font-mono">{{ backup.file }}</span>
+            <span v-if="backup.requestedRemotes" class="badge badge-ghost badge-sm">{{ $t('agentBackupTargets') }}: {{ backup.requestedRemotes }}</span>
             <button type="button" class="btn btn-ghost btn-xs" @click="refreshBackup" :disabled="backupLoading">↻</button>
           </div>
           <details class="mt-1" @toggle="onBackupLogToggle">
@@ -100,6 +112,40 @@
                 <div class="mt-1 flex flex-wrap items-center gap-1">
                   <span v-for="it in configuredCloudRemotes" :key="it.name" class="badge badge-sm" :class="it.exists ? 'badge-success' : 'badge-warning'">{{ it.name }}</span>
                 </div>
+                <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div
+                    v-for="it in configuredCloudRemotes"
+                    :key="`status-${it.name}`"
+                    class="rounded-lg border border-base-300/50 bg-base-100/60 px-2 py-1.5"
+                  >
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <span class="font-mono text-[11px] sm:text-xs">{{ it.name }}</span>
+                      <span class="badge badge-xs" :class="remoteStatusBadgeClass(it.name)">
+                        {{ it.exists ? $t('agentBackupCloudReady') : $t('agentBackupCloudMissingRemote') }}
+                      </span>
+                    </div>
+                    <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] opacity-70">
+                      <span>{{ $t('agentBackupCloudCount') }}: {{ remoteArchiveCount(it.name) }}</span>
+                      <span v-if="restoreSource === 'cloud' && restoreCloudRemote === it.name" class="badge badge-info badge-xs">restore</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="sm:col-span-2" v-if="lastBackupUploadResults.length">
+                <span class="opacity-60">{{ $t('agentBackupCloudLastUpload') }}:</span>
+                <div class="mt-1 flex flex-wrap items-center gap-1">
+                  <span class="badge badge-sm badge-success" v-if="backupUploadOkCount > 0">OK: {{ backupUploadOkCount }}</span>
+                  <span class="badge badge-sm badge-error" v-if="backupUploadFailCount > 0">ERR: {{ backupUploadFailCount }}</span>
+                  <span
+                    v-for="it in lastBackupUploadResults"
+                    :key="`upload-${it.remote}`"
+                    class="badge badge-sm"
+                    :class="uploadStatusBadgeClass(it.ok)"
+                    :title="it.error || ''"
+                  >
+                    {{ it.remote }} · {{ it.ok ? $t('agentBackupRemoteOk') : $t('agentBackupRemoteFail') }}
+                  </span>
+                </div>
               </div>
               <div class="sm:col-span-2" v-if="cloudStatus.configPath">
                 <span class="opacity-60">{{ $t('agentBackupCloudConfig') }}:</span>
@@ -124,9 +170,10 @@
 
               <div class="mt-2 flex flex-wrap items-center gap-2">
                 <button type="button" class="btn btn-xs" :class="backupArchiveView === 'all' ? '' : 'btn-outline'" @click="backupArchiveView = 'all'">{{ $t('all') }}</button>
-                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'local' ? '' : 'btn-outline'" @click="backupArchiveView = 'local'">{{ $t('agentRestoreSourceLocal') }}</button>
-                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'cloud' ? '' : 'btn-outline'" @click="backupArchiveView = 'cloud'">{{ $t('agentRestoreSourceCloud') }}</button>
-                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'both' ? '' : 'btn-outline'" @click="backupArchiveView = 'both'">{{ $t('agentBackupBothLocations') }}</button>
+                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'current' ? '' : 'btn-outline'" @click="backupArchiveView = 'current'">{{ $t('agentBackupFilterCurrent') }}</button>
+                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'local' ? '' : 'btn-outline'" @click="backupArchiveView = 'local'">{{ $t('agentBackupFilterLocalOnly') }}</button>
+                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'cloud' ? '' : 'btn-outline'" @click="backupArchiveView = 'cloud'">{{ $t('agentBackupFilterCloudOnly') }}</button>
+                <button type="button" class="btn btn-xs" :class="backupArchiveView === 'both' ? '' : 'btn-outline'" @click="backupArchiveView = 'both'">{{ $t('agentBackupFilterBoth') }}</button>
               </div>
 
               <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_220px]">
@@ -181,7 +228,14 @@
                     </div>
                     <div v-if="item.hasCloud" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] opacity-80">
                       <span class="opacity-60">Remote:</span>
-                      <span v-for="remote in item.cloudRemotes" :key="remote" class="badge badge-ghost badge-sm">{{ remote }}</span>
+                      <span
+                        v-for="remote in uniqueRemoteNames(item)"
+                        :key="remote"
+                        class="badge badge-sm"
+                        :class="remoteStatusBadgeClass(remote)"
+                      >
+                        {{ remote }}
+                      </span>
                     </div>
                   </div>
 
@@ -206,16 +260,19 @@
                       {{ $t('agentRestoreSourceLocal') }}
                     </button>
 
-                    <button
-                      v-if="item.hasCloud"
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      @click="selectCloudBackupForRestore(item.name, cloudItemRemote(preferredCloudCopy(item)))"
-                      :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady"
-                      :title="$t('agentRestoreSourceCloud')"
-                    >
-                      {{ $t('agentRestoreSourceCloud') }}
-                    </button>
+                    <template v-if="item.hasCloud">
+                      <button
+                        v-for="remote in uniqueRemoteNames(item)"
+                        :key="`restore-${item.name}-${remote}`"
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        @click="selectCloudBackupForRestore(item.name, remote)"
+                        :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady"
+                        :title="`${$t('agentRestoreSourceCloud')}: ${remote}`"
+                      >
+                        {{ $t('agentRestoreSourceCloud') }} · {{ remote }}
+                      </button>
+                    </template>
 
                     <button
                       v-if="item.hasLocal"
@@ -228,27 +285,33 @@
                       <span v-else>{{ $t('delete') }} {{ $t('agentRestoreSourceLocal') }}</span>
                     </button>
 
-                    <button
-                      v-if="item.hasCloud && !item.hasLocal"
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      @click="downloadCloudBackupToLocal(item.name, cloudItemRemote(preferredCloudCopy(item)))"
-                      :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady || !!backup.running || !!restore.running || downloadingCloudBackup === `${cloudItemRemote(preferredCloudCopy(item))}::${item.name}`"
-                    >
-                      <span v-if="downloadingCloudBackup === `${cloudItemRemote(preferredCloudCopy(item))}::${item.name}`" class="loading loading-spinner loading-xs"></span>
-                      <span v-else>{{ $t('agentBackupDownloadToLocal') }}</span>
-                    </button>
+                    <template v-if="item.hasCloud && !item.hasLocal">
+                      <button
+                        v-for="remote in uniqueRemoteNames(item)"
+                        :key="`download-${item.name}-${remote}`"
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        @click="downloadCloudBackupToLocal(item.name, remote)"
+                        :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady || !!backup.running || !!restore.running || downloadingCloudBackup === `${remote}::${item.name}`"
+                      >
+                        <span v-if="downloadingCloudBackup === `${remote}::${item.name}`" class="loading loading-spinner loading-xs"></span>
+                        <span v-else>{{ $t('agentBackupDownloadToLocal') }} · {{ remote }}</span>
+                      </button>
+                    </template>
 
-                    <button
-                      v-if="item.hasCloud"
-                      type="button"
-                      class="btn btn-ghost btn-xs text-error"
-                      @click="deleteCloudBackup(item.name, cloudItemRemote(preferredCloudCopy(item)))"
-                      :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady || !!backup.running || !!restore.running || deletingCloudBackup === `${cloudItemRemote(preferredCloudCopy(item))}::${item.name}`"
-                    >
-                      <span v-if="deletingCloudBackup === `${cloudItemRemote(preferredCloudCopy(item))}::${item.name}`" class="loading loading-spinner loading-xs"></span>
-                      <span v-else>{{ $t('delete') }} {{ $t('agentRestoreSourceCloud') }}</span>
-                    </button>
+                    <template v-if="item.hasCloud">
+                      <button
+                        v-for="remote in uniqueRemoteNames(item)"
+                        :key="`delete-cloud-${item.name}-${remote}`"
+                        type="button"
+                        class="btn btn-ghost btn-xs text-error"
+                        @click="deleteCloudBackup(item.name, remote)"
+                        :disabled="!agentEnabled || !status.ok || !cloudStatus.cloudReady || !!backup.running || !!restore.running || deletingCloudBackup === `${remote}::${item.name}`"
+                      >
+                        <span v-if="deletingCloudBackup === `${remote}::${item.name}`" class="loading loading-spinner loading-xs"></span>
+                        <span v-else>{{ $t('delete') }} {{ remote }}</span>
+                      </button>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -474,7 +537,7 @@
       <label v-if="restoreSource === 'cloud' && readyCloudRemotes.length > 1" class="flex flex-col gap-1">
         <span class="text-xs opacity-80">{{ $t('agentBackupCloudRemote') }}</span>
         <select class="select select-sm" v-model="restoreCloudRemote" :disabled="!agentEnabled || !status.ok || restoreLoading || restore.running">
-          <option value="">auto</option>
+          <option value="">{{ $t('agentRestoreCloudRemoteAuto') }}</option>
           <option v-for="remote in readyCloudRemotes" :key="remote" :value="remote">{{ remote }}</option>
         </select>
       </label>
@@ -495,6 +558,31 @@
           <option value="agent">{{ $t('agentRestoreScopeAgent') }}</option>
         </select>
       </label>
+    </div>
+
+    <div v-if="restoreSource === 'cloud'" class="mt-2 rounded-lg border border-base-300/60 bg-base-200/30 p-2 text-xs">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="opacity-60">{{ $t('agentBackupCloudRemote') }}:</span>
+        <span
+          v-for="remote in readyCloudRemotes"
+          :key="`ready-remote-${remote}`"
+          class="badge badge-sm"
+          :class="restoreCloudRemote === remote ? 'badge-info' : 'badge-ghost'"
+        >
+          {{ remote }}
+        </span>
+      </div>
+      <div v-if="restoreSelected !== 'latest' && selectedCloudArchiveCopies.length" class="mt-2 flex flex-wrap items-center gap-2">
+        <span class="opacity-60">{{ $t('agentRestoreFrom') }}:</span>
+        <span
+          v-for="copy in selectedCloudArchiveCopies"
+          :key="`selected-copy-${cloudItemKey(copy)}`"
+          class="badge badge-sm"
+          :class="restoreCloudRemote && restoreCloudRemote === cloudItemRemote(copy) ? 'badge-info' : 'badge-ghost'"
+        >
+          {{ cloudItemRemote(copy) }}
+        </span>
+      </div>
     </div>
 
     <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -634,9 +722,10 @@ const cloudListLoading = ref(false)
 const deletingLocalBackup = ref('')
 const deletingCloudBackup = ref('')
 const downloadingCloudBackup = ref('')
-const backupArchiveView = ref<'all' | 'local' | 'cloud' | 'both'>('all')
+const backupArchiveView = ref<'all' | 'current' | 'local' | 'cloud' | 'both'>('all')
 const backupArchiveQuery = useStorage('config/agent-backup-archive-query-v1', '')
 const backupArchiveSort = useStorage<'timeDesc' | 'timeAsc' | 'sizeDesc' | 'sizeAsc' | 'nameAsc' | 'nameDesc'>('config/agent-backup-archive-sort-v1', 'timeDesc')
+const backupTargetRemote = useStorage<string>('config/agent-backup-target-remote-v1', '')
 
 const restore = ref<any>({ ok: true, running: false })
 const restoreLog = ref('')
@@ -684,6 +773,11 @@ const configuredCloudRemotes = computed(() => {
 
 const readyCloudRemotes = computed(() => configuredCloudRemotes.value.filter((it: any) => it.exists).map((it: any) => it.name))
 
+const backupTargetLabel = computed(() => {
+  const remote = String(backupTargetRemote.value || '').trim()
+  return remote || ''
+})
+
 const cloudRemoteLabel = computed(() => {
   const path = String(cloudStatus.value?.path || '').trim()
   const names = configuredCloudRemotes.value.map((it: any) => it.name)
@@ -696,6 +790,50 @@ const cloudKeepLabel = computed(() => {
   const local = String(cloudStatus.value?.localKeepDays || '').trim() || '—'
   const cloud = String(cloudStatus.value?.keepDays || '').trim() || '—'
   return `${local} / ${cloud} d`
+})
+
+
+const cloudArchiveCountByRemote = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const item of cloudList.value || []) {
+    const remote = cloudItemRemote(item)
+    if (!remote) continue
+    counts[remote] = (counts[remote] || 0) + 1
+  }
+  return counts
+})
+
+const lastBackupUploadResults = computed(() => {
+  const raw = Array.isArray(backup.value?.uploadResults) ? backup.value.uploadResults : []
+  return raw
+    .map((it: any) => ({
+      remote: String(it?.remote || '').trim(),
+      ok: !!it?.ok,
+      error: String(it?.error || '').trim(),
+    }))
+    .filter((it: any) => !!it.remote)
+})
+
+const backupUploadOkCount = computed(() => Number(backup.value?.uploadOkCount || 0))
+const backupUploadFailCount = computed(() => Number(backup.value?.uploadFailCount || 0))
+
+const remoteArchiveCount = (remote: string) => Number(cloudArchiveCountByRemote.value[String(remote || '').trim()] || 0)
+const remoteIsReady = (remote: string) => configuredCloudRemotes.value.some((it: any) => it.name === remote && it.exists)
+const remoteStatusBadgeClass = (remote: string) => (remoteIsReady(remote) ? 'badge-success' : 'badge-warning')
+const uploadStatusBadgeClass = (ok: boolean) => (ok ? 'badge-success' : 'badge-error')
+
+const uniqueRemoteNames = (item: any) => {
+  const names = (Array.isArray(item?.cloudCopies) ? item.cloudCopies : [])
+    .map((it: any) => cloudItemRemote(it))
+    .filter(Boolean)
+  return Array.from(new Set(names))
+}
+
+const selectedCloudArchiveCopies = computed(() => {
+  const selected = String(restoreSelected.value || '').trim()
+  if (!selected || selected === 'latest') return []
+  const item = (unifiedArchives.value || []).find((it: any) => String(it?.name || '') === selected)
+  return item && Array.isArray(item.cloudCopies) ? item.cloudCopies : []
 })
 
 const currentBackupName = computed(() => {
@@ -808,6 +946,7 @@ const filteredUnifiedArchives = computed(() => {
 
   return (unifiedArchives.value || [])
     .filter((item: any) => {
+      if (mode === 'current' && !isCurrentBackup(item?.name || '')) return false
       if (mode === 'local' && (!item.hasLocal || item.hasCloud)) return false
       if (mode === 'cloud' && (!item.hasCloud || item.hasLocal)) return false
       if (mode === 'both' && (!item.hasLocal || !item.hasCloud)) return false
@@ -1043,6 +1182,9 @@ const syncRestoreSource = () => {
       restoreCloudRemote.value = ready[0]
     }
   }
+  if (backupTargetRemote.value && ready.length && !ready.includes(backupTargetRemote.value)) {
+    backupTargetRemote.value = ''
+  }
   if (restoreSelected.value !== 'latest' && !restoreItems.value.includes(restoreSelected.value)) {
     restoreSelected.value = 'latest'
   }
@@ -1276,13 +1418,20 @@ const refreshBackup = async () => {
 const runBackup = async () => {
   if (!agentEnabled.value || !status.value?.ok) return
   backupLoading.value = true
-  const res = await agentBackupStartAPI()
+  const selectedRemote = String(backupTargetRemote.value || '').trim()
+  const res = await agentBackupStartAPI(selectedRemote || undefined)
   await refreshBackup()
   await refreshBackupList()
+  await refreshCloudHistory()
   backupLoading.value = false
 
   if (res?.ok) {
-    showNotification({ content: 'agentBackupRunStarted', type: 'alert-success', timeout: 1800 })
+    showNotification({
+      content: 'agentBackupRunStarted',
+      params: selectedRemote ? { target: selectedRemote } : undefined,
+      type: 'alert-success',
+      timeout: 2000,
+    })
   } else {
     showNotification({
       content: 'agentBackupRunFail',
