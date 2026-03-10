@@ -130,14 +130,16 @@ const renderComponent = computed(() => {
 const isProviderTab = computed(() => proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER)
 
 const providerCardsAutoGrid = computed(() => {
-  // Providers tab: make provider cards auto-fit to screen width.
-  // Controlled by the existing twoColumnProxyGroup switch.
-  return isProviderTab.value && twoColumnProxyGroup.value && renderGroups.value.length > 1
+  // Providers tab: render provider cards in a stable 2-column grid.
+  // This avoids the auto-fit layout jumping to 3 cards in a row and breaking on narrower screens.
+  return isProviderTab.value && renderGroups.value.length > 1
 })
 
 const providerGridStyle = computed(() => {
-  // Prevent horizontal overflow on small screens: min(520px, 100%).
-  return 'grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr));'
+  // Keep provider cards two per row on desktop/tablet, single column on very narrow screens.
+  return width.value < 640
+    ? 'grid-template-columns: minmax(0, 1fr);'
+    : 'grid-template-columns: repeat(2, minmax(0, 1fr));'
 })
 
 const displayTwoColumns = computed(() => {
