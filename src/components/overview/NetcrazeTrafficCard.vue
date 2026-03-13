@@ -23,12 +23,12 @@
         <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
           <div class="mb-1 text-xs opacity-60">{{ $t('routerTrafficTotal') }}</div>
           <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-sky-500" />
+            <span class="h-2.5 w-2.5 rounded-full bg-blue-600" />
             <span class="opacity-80">{{ $t('download') }}:</span>
             <span class="font-mono">{{ currentRouterDownloadLabel }}</span>
           </div>
           <div class="mt-1 flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            <span class="h-2.5 w-2.5 rounded-full bg-teal-500" />
             <span class="opacity-80">{{ $t('upload') }}:</span>
             <span class="font-mono">{{ currentRouterUploadLabel }}</span>
           </div>
@@ -37,12 +37,12 @@
         <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
           <div class="mb-1 text-xs opacity-60">{{ $t('mihomoVersion') }}</div>
           <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-cyan-300" />
+            <span class="h-2.5 w-2.5 rounded-full bg-violet-500" />
             <span class="opacity-80">{{ $t('download') }}:</span>
             <span class="font-mono">{{ currentMihomoDownloadLabel }}</span>
           </div>
           <div class="mt-1 flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-lime-300" />
+            <span class="h-2.5 w-2.5 rounded-full bg-pink-500" />
             <span class="opacity-80">{{ $t('upload') }}:</span>
             <span class="font-mono">{{ currentMihomoUploadLabel }}</span>
           </div>
@@ -51,12 +51,12 @@
         <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
           <div class="mb-1 text-xs opacity-60">{{ $t('routerTrafficOutsideMihomo') }}</div>
           <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-fuchsia-500" />
+            <span class="h-2.5 w-2.5 rounded-full bg-amber-500" />
             <span class="opacity-80">{{ $t('download') }}:</span>
             <span class="font-mono">{{ currentOtherDownloadLabel }}</span>
           </div>
           <div class="mt-1 flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-amber-500" />
+            <span class="h-2.5 w-2.5 rounded-full bg-rose-500" />
             <span class="opacity-80">{{ $t('upload') }}:</span>
             <span class="font-mono">{{ currentOtherUploadLabel }}</span>
           </div>
@@ -289,12 +289,12 @@ const options = computed(() => ({
       smooth: true,
       symbol: 'none',
       data: routerDownloadHistory.value.map((item) => item.value),
-      color: '#38bdf8',
+      color: '#2563eb',
       lineStyle: { width: 2.4 },
       areaStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(56,189,248,0.36)' },
-          { offset: 1, color: 'rgba(56,189,248,0.04)' },
+          { offset: 0, color: 'rgba(37,99,235,0.30)' },
+          { offset: 1, color: 'rgba(37,99,235,0.05)' },
         ]),
       },
       emphasis: { focus: 'series' },
@@ -305,12 +305,12 @@ const options = computed(() => ({
       smooth: true,
       symbol: 'none',
       data: routerUploadHistory.value.map((item) => item.value),
-      color: '#10b981',
+      color: '#0d9488',
       lineStyle: { width: 2.4 },
       areaStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(16,185,129,0.32)' },
-          { offset: 1, color: 'rgba(16,185,129,0.04)' },
+          { offset: 0, color: 'rgba(13,148,136,0.28)' },
+          { offset: 1, color: 'rgba(13,148,136,0.05)' },
         ]),
       },
       emphasis: { focus: 'series' },
@@ -321,7 +321,7 @@ const options = computed(() => ({
       smooth: true,
       symbol: 'none',
       data: mihomoDownloadHistory.value.map((item) => item.value),
-      color: '#67e8f9',
+      color: '#7c3aed',
       lineStyle: { width: 1.8, type: 'dashed' },
       emphasis: { focus: 'series' },
     },
@@ -331,7 +331,7 @@ const options = computed(() => ({
       smooth: true,
       symbol: 'none',
       data: mihomoUploadHistory.value.map((item) => item.value),
-      color: '#bef264',
+      color: '#db2777',
       lineStyle: { width: 1.8, type: 'dashed' },
       emphasis: { focus: 'series' },
     },
@@ -341,7 +341,7 @@ const options = computed(() => ({
       smooth: true,
       symbol: 'none',
       data: otherDownloadHistory.value.map((item) => item.value),
-      color: '#d946ef',
+      color: '#f59e0b',
       lineStyle: { width: 2 },
       emphasis: { focus: 'series' },
     },
@@ -351,7 +351,7 @@ const options = computed(() => ({
       smooth: true,
       symbol: 'none',
       data: otherUploadHistory.value.map((item) => item.value),
-      color: '#f59e0b',
+      color: '#e11d48',
       lineStyle: { width: 2 },
       emphasis: { focus: 'series' },
     },
