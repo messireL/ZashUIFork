@@ -10,8 +10,8 @@
       </div>
     </div>
 
-    <div class="card-body gap-2 pt-2">
-      <div class="relative h-56 w-full overflow-hidden rounded-lg border border-base-content/10 bg-base-200/30">
+    <div class="card-body gap-3 pt-2">
+      <div class="relative h-64 w-full overflow-hidden rounded-lg border border-base-content/10 bg-base-200/30">
         <div ref="chartRef" class="h-full w-full" />
         <span
           ref="colorRef"
@@ -19,16 +19,47 @@
         />
       </div>
 
-      <div class="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-sm">
-        <div class="flex items-center gap-2">
-          <span class="h-2.5 w-2.5 rounded-full bg-success" />
-          <span class="opacity-80">{{ $t('upload') }}:</span>
-          <span class="font-mono">{{ currentUploadLabel }}</span>
+      <div class="grid gap-2 px-1 text-sm sm:grid-cols-3">
+        <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
+          <div class="mb-1 text-xs opacity-60">{{ $t('routerTrafficTotal') }}</div>
+          <div class="flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full bg-sky-500" />
+            <span class="opacity-80">{{ $t('download') }}:</span>
+            <span class="font-mono">{{ currentRouterDownloadLabel }}</span>
+          </div>
+          <div class="mt-1 flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            <span class="opacity-80">{{ $t('upload') }}:</span>
+            <span class="font-mono">{{ currentRouterUploadLabel }}</span>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <span class="h-2.5 w-2.5 rounded-full bg-info" />
-          <span class="opacity-80">{{ $t('download') }}:</span>
-          <span class="font-mono">{{ currentDownloadLabel }}</span>
+
+        <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
+          <div class="mb-1 text-xs opacity-60">{{ $t('mihomoVersion') }}</div>
+          <div class="flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full bg-cyan-300" />
+            <span class="opacity-80">{{ $t('download') }}:</span>
+            <span class="font-mono">{{ currentMihomoDownloadLabel }}</span>
+          </div>
+          <div class="mt-1 flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full bg-lime-300" />
+            <span class="opacity-80">{{ $t('upload') }}:</span>
+            <span class="font-mono">{{ currentMihomoUploadLabel }}</span>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
+          <div class="mb-1 text-xs opacity-60">{{ $t('routerTrafficOutsideMihomo') }}</div>
+          <div class="flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full bg-fuchsia-500" />
+            <span class="opacity-80">{{ $t('download') }}:</span>
+            <span class="font-mono">{{ currentOtherDownloadLabel }}</span>
+          </div>
+          <div class="mt-1 flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full bg-amber-500" />
+            <span class="opacity-80">{{ $t('upload') }}:</span>
+            <span class="font-mono">{{ currentOtherUploadLabel }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -36,23 +67,35 @@
 </template>
 
 <script setup lang="ts">
+import { agentTrafficLiveAPI } from '@/api/agent'
 import { prettyBytesHelper } from '@/helper/utils'
+import { agentEnabled } from '@/store/agent'
+import { downloadSpeed, timeSaved, uploadSpeed } from '@/store/overview'
 import { font, theme } from '@/store/settings'
-import { downloadSpeedHistory, uploadSpeedHistory } from '@/store/overview'
 import { useElementSize } from '@vueuse/core'
 import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { debounce } from 'lodash'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer])
+echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+
+type Point = { name: number; value: number }
 
 const { t } = useI18n()
 const chartRef = ref<HTMLElement | null>(null)
 const colorRef = ref<HTMLElement | null>(null)
+
+const initValue = () => new Array(timeSaved).fill(0).map((v, i) => ({ name: i, value: v }))
+const routerDownloadHistory = ref<Point[]>(initValue())
+const routerUploadHistory = ref<Point[]>(initValue())
+const mihomoDownloadHistory = ref<Point[]>(initValue())
+const mihomoUploadHistory = ref<Point[]>(initValue())
+const otherDownloadHistory = ref<Point[]>(initValue())
+const otherUploadHistory = ref<Point[]>(initValue())
 
 const colorSet = {
   baseContent: '',
@@ -64,6 +107,10 @@ const colorSet = {
   info60: '',
 }
 let fontFamily = ''
+let pollTimer: number | null = null
+let lastRxBytes: number | null = null
+let lastTxBytes: number | null = null
+let lastSampleTs: number | null = null
 
 const updateColorSet = () => {
   if (!colorRef.value) return
@@ -82,7 +129,7 @@ const updateFontFamily = () => {
   fontFamily = getComputedStyle(colorRef.value).fontFamily
 }
 
-const latestValue = (items: { value: number }[]) => {
+const latestValue = (items: Point[]) => {
   for (let i = items.length - 1; i >= 0; i -= 1) {
     const v = Number(items[i]?.value || 0)
     if (Number.isFinite(v)) return v
@@ -90,10 +137,33 @@ const latestValue = (items: { value: number }[]) => {
   return 0
 }
 
-const maxObserved = computed(() => {
-  const values = [...downloadSpeedHistory.value, ...uploadSpeedHistory.value].map((item) => Number(item?.value || 0))
-  return Math.max(0, ...values)
-})
+const pushHistory = (target: typeof routerDownloadHistory, timestamp: number, value: number) => {
+  target.value.push({ name: timestamp, value: Math.max(0, Number(value) || 0) })
+  target.value = target.value.slice(-1 * timeSaved)
+}
+
+const speedLabel = (value: number) => `${prettyBytesHelper(value, {
+  maximumFractionDigits: value >= 1024 * 1024 ? 2 : 0,
+  binary: false,
+})}/s`
+
+const currentRouterUploadLabel = computed(() => speedLabel(latestValue(routerUploadHistory.value)))
+const currentRouterDownloadLabel = computed(() => speedLabel(latestValue(routerDownloadHistory.value)))
+const currentMihomoUploadLabel = computed(() => speedLabel(latestValue(mihomoUploadHistory.value)))
+const currentMihomoDownloadLabel = computed(() => speedLabel(latestValue(mihomoDownloadHistory.value)))
+const currentOtherUploadLabel = computed(() => speedLabel(latestValue(otherUploadHistory.value)))
+const currentOtherDownloadLabel = computed(() => speedLabel(latestValue(otherDownloadHistory.value)))
+
+const allSeriesValues = computed(() => [
+  ...routerDownloadHistory.value,
+  ...routerUploadHistory.value,
+  ...mihomoDownloadHistory.value,
+  ...mihomoUploadHistory.value,
+  ...otherDownloadHistory.value,
+  ...otherUploadHistory.value,
+].map((item) => Number(item?.value || 0)))
+
+const maxObserved = computed(() => Math.max(0, ...allSeriesValues.value))
 
 const roundedPeak = computed(() => {
   const raw = Math.max(maxObserved.value * 1.15, 1024 * 1024)
@@ -101,13 +171,6 @@ const roundedPeak = computed(() => {
   return Math.ceil(raw / step) * step
 })
 
-const speedLabel = (value: number) => `${prettyBytesHelper(value, {
-  maximumFractionDigits: value >= 1024 * 1024 ? 2 : 0,
-  binary: false,
-})}/s`
-
-const currentUploadLabel = computed(() => speedLabel(latestValue(uploadSpeedHistory.value)))
-const currentDownloadLabel = computed(() => speedLabel(latestValue(downloadSpeedHistory.value)))
 const maxLabel = computed(() => `${t('peakScale')}: ${speedLabel(roundedPeak.value)}`)
 
 const formatTime = (value: number) => {
@@ -119,13 +182,40 @@ const formatTime = (value: number) => {
   return `${hh}:${mm}:${ss}`
 }
 
+const routerDownLabel = computed(() => t('routerTrafficLegendRouterDown'))
+const routerUpLabel = computed(() => t('routerTrafficLegendRouterUp'))
+const mihomoDownLabel = computed(() => t('routerTrafficLegendMihomoDown'))
+const mihomoUpLabel = computed(() => t('routerTrafficLegendMihomoUp'))
+const otherDownLabel = computed(() => t('routerTrafficLegendOtherDown'))
+const otherUpLabel = computed(() => t('routerTrafficLegendOtherUp'))
+
 const options = computed(() => ({
   grid: {
     left: 12,
-    top: 12,
+    top: 42,
     right: 12,
     bottom: 26,
     containLabel: true,
+  },
+  legend: {
+    top: 8,
+    left: 12,
+    right: 12,
+    itemWidth: 12,
+    itemHeight: 8,
+    textStyle: {
+      color: colorSet.baseContent,
+      fontFamily,
+      fontSize: 11,
+    },
+    data: [
+      routerDownLabel.value,
+      routerUpLabel.value,
+      mihomoDownLabel.value,
+      mihomoUpLabel.value,
+      otherDownLabel.value,
+      otherUpLabel.value,
+    ],
   },
   tooltip: {
     trigger: 'axis',
@@ -137,7 +227,7 @@ const options = computed(() => ({
       fontFamily,
     },
     formatter: (params: ToolTipParams[]) => {
-      const time = formatTime(Number(params?.[0]?.name || 0))
+      const time = formatTime(Number(params?.[0]?.axisValue || 0))
       const lines = [
         `<div style="padding:6px 8px">`,
         `<div style="font-size:12px;opacity:.75;margin-bottom:4px">${time}</div>`,
@@ -157,7 +247,7 @@ const options = computed(() => ({
   xAxis: {
     type: 'category',
     boundaryGap: false,
-    data: downloadSpeedHistory.value.map((item) => item.name),
+    data: routerDownloadHistory.value.map((item) => item.name),
     axisLine: {
       lineStyle: { color: colorSet.baseContent10 },
     },
@@ -166,7 +256,7 @@ const options = computed(() => ({
       color: colorSet.baseContent,
       fontFamily,
       formatter: (value: number, index: number) => {
-        const last = downloadSpeedHistory.value.length - 1
+        const last = routerDownloadHistory.value.length - 1
         return index === 0 || index === last ? formatTime(Number(value)) : ''
       },
     },
@@ -194,39 +284,132 @@ const options = computed(() => ({
   },
   series: [
     {
-      name: t('upload'),
+      name: routerDownLabel.value,
       type: 'line',
       smooth: true,
       symbol: 'none',
-      data: uploadSpeedHistory.value,
-      color: '#22c55e',
-      lineStyle: { width: 2 },
+      data: routerDownloadHistory.value.map((item) => item.value),
+      color: '#38bdf8',
+      lineStyle: { width: 2.4 },
       areaStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: colorSet.success60 || 'rgba(34,197,94,0.55)' },
-          { offset: 1, color: colorSet.success25 || 'rgba(34,197,94,0.08)' },
+          { offset: 0, color: 'rgba(56,189,248,0.36)' },
+          { offset: 1, color: 'rgba(56,189,248,0.04)' },
         ]),
       },
       emphasis: { focus: 'series' },
     },
     {
-      name: t('download'),
+      name: routerUpLabel.value,
       type: 'line',
       smooth: true,
       symbol: 'none',
-      data: downloadSpeedHistory.value,
-      color: colorSet.info60 || '#60a5fa',
-      lineStyle: { width: 2 },
+      data: routerUploadHistory.value.map((item) => item.value),
+      color: '#10b981',
+      lineStyle: { width: 2.4 },
       areaStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: colorSet.info60 || 'rgba(96,165,250,0.55)' },
-          { offset: 1, color: colorSet.info30 || 'rgba(96,165,250,0.08)' },
+          { offset: 0, color: 'rgba(16,185,129,0.32)' },
+          { offset: 1, color: 'rgba(16,185,129,0.04)' },
         ]),
       },
       emphasis: { focus: 'series' },
     },
+    {
+      name: mihomoDownLabel.value,
+      type: 'line',
+      smooth: true,
+      symbol: 'none',
+      data: mihomoDownloadHistory.value.map((item) => item.value),
+      color: '#67e8f9',
+      lineStyle: { width: 1.8, type: 'dashed' },
+      emphasis: { focus: 'series' },
+    },
+    {
+      name: mihomoUpLabel.value,
+      type: 'line',
+      smooth: true,
+      symbol: 'none',
+      data: mihomoUploadHistory.value.map((item) => item.value),
+      color: '#bef264',
+      lineStyle: { width: 1.8, type: 'dashed' },
+      emphasis: { focus: 'series' },
+    },
+    {
+      name: otherDownLabel.value,
+      type: 'line',
+      smooth: true,
+      symbol: 'none',
+      data: otherDownloadHistory.value.map((item) => item.value),
+      color: '#d946ef',
+      lineStyle: { width: 2 },
+      emphasis: { focus: 'series' },
+    },
+    {
+      name: otherUpLabel.value,
+      type: 'line',
+      smooth: true,
+      symbol: 'none',
+      data: otherUploadHistory.value.map((item) => item.value),
+      color: '#f59e0b',
+      lineStyle: { width: 2 },
+      emphasis: { focus: 'series' },
+    },
   ],
 }))
+
+const stopPolling = () => {
+  if (pollTimer !== null) {
+    window.clearTimeout(pollTimer)
+    pollTimer = null
+  }
+}
+
+const scheduleNextPoll = () => {
+  stopPolling()
+  pollTimer = window.setTimeout(pollTraffic, 2000)
+}
+
+const pollTraffic = async () => {
+  const timestamp = Date.now()
+  const mihomoDown = Math.max(0, Number(downloadSpeed.value || 0))
+  const mihomoUp = Math.max(0, Number(uploadSpeed.value || 0))
+
+  let routerDown = 0
+  let routerUp = 0
+
+  if (agentEnabled.value) {
+    const live = await agentTrafficLiveAPI()
+    const rxBytes = Number(live?.rxBytes || 0)
+    const txBytes = Number(live?.txBytes || 0)
+    const ts = Number(live?.ts || timestamp)
+
+    if (live.ok && Number.isFinite(rxBytes) && Number.isFinite(txBytes)) {
+      if (lastRxBytes !== null && lastTxBytes !== null && lastSampleTs !== null && ts > lastSampleTs) {
+        const dtSec = Math.max((ts - lastSampleTs) / 1000, 1)
+        const rxDelta = Math.max(rxBytes - lastRxBytes, 0)
+        const txDelta = Math.max(txBytes - lastTxBytes, 0)
+        routerDown = rxDelta / dtSec
+        routerUp = txDelta / dtSec
+      }
+      lastRxBytes = rxBytes
+      lastTxBytes = txBytes
+      lastSampleTs = ts
+    }
+  }
+
+  const otherDown = Math.max(routerDown - mihomoDown, 0)
+  const otherUp = Math.max(routerUp - mihomoUp, 0)
+
+  pushHistory(routerDownloadHistory, timestamp, routerDown)
+  pushHistory(routerUploadHistory, timestamp, routerUp)
+  pushHistory(mihomoDownloadHistory, timestamp, mihomoDown)
+  pushHistory(mihomoUploadHistory, timestamp, mihomoUp)
+  pushHistory(otherDownloadHistory, timestamp, otherDown)
+  pushHistory(otherUploadHistory, timestamp, otherUp)
+
+  scheduleNextPoll()
+}
 
 onMounted(() => {
   updateColorSet()
@@ -244,5 +427,11 @@ onMounted(() => {
   const { width } = useElementSize(chartRef)
   const resize = debounce(() => chart.resize(), 100)
   watch(width, resize)
+
+  pollTraffic()
+})
+
+onBeforeUnmount(() => {
+  stopPolling()
 })
 </script>

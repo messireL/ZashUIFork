@@ -323,6 +323,35 @@ firmware_check_json() {
   reply_ok "$(firmware_check_cached_json "$force")"
 }
 
+read_iface_counter() {
+  iface="$1"
+  dir="$2"
+  file="/sys/class/net/$iface/statistics/${dir}_bytes"
+  if [ -r "$file" ]; then
+    value="$(cat "$file" 2>/dev/null | tr -d '\r\n ')"
+    echo "$value" | grep -qE '^[0-9]+$' || value=0
+    printf '%s' "$value"
+    return 0
+  fi
+  printf '0'
+}
+
+traffic_live_json() {
+  iface="$WAN_IF"
+  [ -n "$iface" ] || iface="eth0"
+  if ! ip link show "$iface" >/dev/null 2>&1; then
+    iface="$(ip -4 route show default 2>/dev/null | awk '{print $5}' | head -n1)"
+  fi
+  [ -n "$iface" ] || iface="$WAN_IF"
+  [ -n "$iface" ] || iface="eth0"
+
+  rx_bytes="$(read_iface_counter "$iface" rx)"
+  tx_bytes="$(read_iface_counter "$iface" tx)"
+  ts_ms="$(( $(date +%s 2>/dev/null || echo 0) * 1000 ))"
+
+  reply_ok "$(printf '{"ok":true,"iface":"%s","rxBytes":%s,"txBytes":%s,"ts":%s}' "$(jesc "$iface")" "$rx_bytes" "$tx_bytes" "$ts_ms")"
+}
+
 mihomo_config_json() {
   if [ ! -f "$MIHOMO_CONFIG" ]; then
     reply_ok '{"ok":false,"error":"config-not-found"}'
@@ -1766,7 +1795,7 @@ status() {
 
   server_ver="$(remote_agent_version 2>/dev/null || true)"
 
-  reply_ok "$(printf '{"ok":true,"version":"0.5.46","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","load5":"%s","load15":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memFree":%s,"memUsedPct":%s,"storagePath":"%s","storageTotal":%s,"storageUsed":%s,"storageFree":%s,"tempC":"%s","hostname":"%s","model":"%s","firmware":"%s","kernel":"%s","arch":"%s","xkeenVersion":"%s","mihomoBinVersion":"%s"}'     "$server_ver" "$WAN_IF" "$LAN_IF"     $( [ $have_tc -eq 1 ] && echo true || echo false )     $( [ $have_iptables -eq 1 ] && echo true || echo false )     $( [ $have_hashlimit -eq 1 ] && echo true || echo false )     "$cpu_pct" "$load1" "$load5" "$load15" "$uptime_sec" "$mem_total_b" "$mem_used_b" "$mem_free_b" "$mem_used_pct" "$(jesc "$storage_path")" "$storage_total_b" "$storage_used_b" "$storage_free_b" "$(jesc "$temp_c")"     "$(jesc "$hostname")" "$(jesc "$model")" "$(jesc "$firmware")" "$(jesc "$kernel")" "$(jesc "$arch")" "$(jesc "$xkeen_ver")" "$(jesc "$mihomo_ver")")"
+  reply_ok "$(printf '{"ok":true,"version":"0.5.47","serverVersion":"%s","wan":"%s","lan":"%s","tc":%s,"iptables":%s,"hashlimit":%s,"usersDb":true,"cpuPct":%s,"load1":"%s","load5":"%s","load15":"%s","uptimeSec":%s,"memTotal":%s,"memUsed":%s,"memFree":%s,"memUsedPct":%s,"storagePath":"%s","storageTotal":%s,"storageUsed":%s,"storageFree":%s,"tempC":"%s","hostname":"%s","model":"%s","firmware":"%s","kernel":"%s","arch":"%s","xkeenVersion":"%s","mihomoBinVersion":"%s"}'     "$server_ver" "$WAN_IF" "$LAN_IF"     $( [ $have_tc -eq 1 ] && echo true || echo false )     $( [ $have_iptables -eq 1 ] && echo true || echo false )     $( [ $have_hashlimit -eq 1 ] && echo true || echo false )     "$cpu_pct" "$load1" "$load5" "$load15" "$uptime_sec" "$mem_total_b" "$mem_used_b" "$mem_free_b" "$mem_used_pct" "$(jesc "$storage_path")" "$storage_total_b" "$storage_used_b" "$storage_free_b" "$(jesc "$temp_c")"     "$(jesc "$hostname")" "$(jesc "$model")" "$(jesc "$firmware")" "$(jesc "$kernel")" "$(jesc "$arch")" "$(jesc "$xkeen_ver")" "$(jesc "$mihomo_ver")")"
 }
 agent_log() {
   # Best-effort command log for troubleshooting.
@@ -2657,6 +2686,9 @@ case "$cmd" in
     ;;
   firmware_check)
     firmware_check_json "$force_q"
+    ;;
+  traffic_live)
+    traffic_live_json
     ;;
   backup_start)
     backup_start_json

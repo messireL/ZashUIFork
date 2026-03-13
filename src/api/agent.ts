@@ -89,6 +89,15 @@ export type AgentFirmwareCheck = {
   error?: string
 }
 
+export type AgentTrafficLive = {
+  ok: boolean
+  iface?: string
+  rxBytes?: number
+  txBytes?: number
+  ts?: number
+  error?: string
+}
+
 const agentAxios = () => {
   const instance = axios.create({
     baseURL: agentUrl.value || '',
@@ -134,6 +143,18 @@ export const agentFirmwareCheckAPI = async (force = false): Promise<AgentFirmwar
       timeout: 8000,
     })
     return (data || { ok: false }) as AgentFirmwareCheck
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'failed' }
+  }
+}
+
+export const agentTrafficLiveAPI = async (): Promise<AgentTrafficLive> => {
+  try {
+    const { data } = await agentAxios().get('/cgi-bin/api.sh', {
+      params: { cmd: 'traffic_live' },
+      timeout: 4000,
+    })
+    return (data || { ok: false }) as AgentTrafficLive
   } catch (e: any) {
     return { ok: false, error: e?.message || 'failed' }
   }
