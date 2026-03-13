@@ -1,7 +1,7 @@
 import { updateProxyProviderAPI } from '@/api'
 import { collapsedBus } from '@/composables/bus'
 import { renderGroups } from '@/composables/proxies'
-import { PROXY_SORT_TYPE, PROXY_TAB_TYPE } from '@/constant'
+import { PROXY_SORT_TYPE, PROXY_TAB_TYPE, ROUTE_NAME } from '@/constant'
 import { getMinCardWidth } from '@/helper/utils'
 import { configs, updateConfigs } from '@/store/config'
 import {
@@ -36,6 +36,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import { every } from 'lodash'
 import { computed, defineComponent, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import DialogWrapper from '../common/DialogWrapper.vue'
 import TextInput from '../common/TextInput.vue'
@@ -110,35 +111,29 @@ export default defineComponent({
       minProxyCardWidth.value = getMinCardWidth(proxyCardSize.value)
     }
 
-    const tabsWithNumbers = computed(() => {
-      return Object.values(PROXY_TAB_TYPE).map((type) => {
-        return {
-          type,
-          count:
-            type === PROXY_TAB_TYPE.PROXIES
-              ? proxyGroupList.value.length
-              : proxyProviederList.value.length,
-        }
-      })
+    const route = useRoute()
+    const activeProxyTab = computed(() => {
+      if (route.name === ROUTE_NAME.proxyProviders) return PROXY_TAB_TYPE.PROVIDER
+      if (route.name === ROUTE_NAME.proxies) return PROXY_TAB_TYPE.PROXIES
+      return proxiesTabShow.value
+    })
+    const activeProxyTabCount = computed(() => {
+      return activeProxyTab.value === PROXY_TAB_TYPE.PROXIES
+        ? proxyGroupList.value.length
+        : proxyProviederList.value.length
     })
     return () => {
-      const tabs = (
+      const activeTabBadge = (
         <div
           role="tablist"
           class="tabs-box tabs tabs-xs"
         >
-          {tabsWithNumbers.value.map(({ type, count }) => {
-            return (
-              <a
-                role="tab"
-                key={type}
-                class={['tab', proxiesTabShow.value === type && 'tab-active']}
-                onClick={() => (proxiesTabShow.value = type)}
-              >
-                {t(type)} ({count})
-              </a>
-            )
-          })}
+          <span
+            role="tab"
+            class={["tab tab-active pointer-events-none"]}
+          >
+            {t(activeProxyTab.value)} ({activeProxyTabCount.value})
+          </span>
         </div>
       )
       const upgradeAllIcon = proxiesTabShow.value === PROXY_TAB_TYPE.PROVIDER && (
@@ -315,7 +310,7 @@ export default defineComponent({
           <div class="flex flex-col gap-2 p-2">
             {hasProviders.value && (
               <div class="flex gap-2">
-                {tabs}
+                {activeTabBadge}
                 {upgradeAllIcon}
               </div>
             )}
