@@ -62,12 +62,35 @@
           </div>
         </div>
       </div>
+
+      <div v-if="currentExtraStats.length" class="grid gap-2 px-1 text-sm sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          v-for="(item, index) in currentExtraStats"
+          :key="`extra-card-${item.name}`"
+          class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2"
+        >
+          <div class="mb-1 flex items-center justify-between gap-2">
+            <div class="min-w-0 truncate text-xs opacity-80">{{ ifaceDisplayName(item.name, item.kind) }}</div>
+            <span class="badge badge-ghost badge-xs uppercase">{{ item.kind || 'vpn' }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: extraColorPair(index).down }" />
+            <span class="opacity-80">{{ $t('download') }}:</span>
+            <span class="font-mono">{{ speedLabel(item.down) }}</span>
+          </div>
+          <div class="mt-1 flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: extraColorPair(index).up }" />
+            <span class="opacity-80">{{ $t('upload') }}:</span>
+            <span class="font-mono">{{ speedLabel(item.up) }}</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { agentTrafficLiveAPI } from '@/api/agent'
+import { agentTrafficLiveAPI, type AgentTrafficLiveIface } from '@/api/agent'
 import { prettyBytesHelper } from '@/helper/utils'
 import { agentEnabled } from '@/store/agent'
 import { downloadSpeed, timeSaved, uploadSpeed } from '@/store/overview'
@@ -84,6 +107,16 @@ import { useI18n } from 'vue-i18n'
 echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 type Point = { name: number; value: number }
+type ToolTipParams = {
+  axisValue?: number
+  seriesName?: string
+  color?: string
+  value?: number
+}
+type ExtraHistoryMap = Record<string, { down: Point[]; up: Point[]; kind?: string }>
+type ExtraCounterState = Record<string, { rxBytes: number; txBytes: number; ts: number; kind?: string }>
+
+type ExtraColorPair = { down: string; up: string }
 
 const { t } = useI18n()
 const chartRef = ref<HTMLElement | null>(null)
@@ -96,6 +129,8 @@ const mihomoDownloadHistory = ref<Point[]>(initValue())
 const mihomoUploadHistory = ref<Point[]>(initValue())
 const otherDownloadHistory = ref<Point[]>(initValue())
 const otherUploadHistory = ref<Point[]>(initValue())
+const extraHistories = ref<ExtraHistoryMap>({})
+const extraOrder = ref<string[]>([])
 
 const colorSet = {
   baseContent: '',
@@ -106,11 +141,22 @@ const colorSet = {
   info30: '',
   info60: '',
 }
+const extraPalette: ExtraColorPair[] = [
+  { down: '#22c55e', up: '#15803d' },
+  { down: '#f97316', up: '#c2410c' },
+  { down: '#06b6d4', up: '#0f766e' },
+  { down: '#8b5cf6', up: '#6d28d9' },
+  { down: '#ef4444', up: '#be123c' },
+  { down: '#84cc16', up: '#4d7c0f' },
+  { down: '#14b8a6', up: '#0f766e' },
+  { down: '#f59e0b', up: '#b45309' },
+]
 let fontFamily = ''
 let pollTimer: number | null = null
 let lastRxBytes: number | null = null
 let lastTxBytes: number | null = null
 let lastSampleTs: number | null = null
+const lastExtraCounters = ref<ExtraCounterState>({})
 
 const updateColorSet = () => {
   if (!colorRef.value) return
@@ -137,7 +183,7 @@ const latestValue = (items: Point[]) => {
   return 0
 }
 
-const pushHistory = (target: typeof routerDownloadHistory, timestamp: number, value: number) => {
+const pushHistory = (target: { value: Point[] }, timestamp: number, value: number) => {
   target.value.push({ name: timestamp, value: Math.max(0, Number(value) || 0) })
   target.value = target.value.slice(-1 * timeSaved)
 }
@@ -154,6 +200,52 @@ const currentMihomoDownloadLabel = computed(() => speedLabel(latestValue(mihomoD
 const currentOtherUploadLabel = computed(() => speedLabel(latestValue(otherUploadHistory.value)))
 const currentOtherDownloadLabel = computed(() => speedLabel(latestValue(otherDownloadHistory.value)))
 
+const ifaceDisplayName = (name: string, kind?: string) => {
+  const upperKind = (kind || '').toLowerCase()
+  if (upperKind === 'xkeen') return `XKeen · ${name}`
+  if (upperKind === 'wireguard') return `WireGuard · ${name}`
+  if (upperKind === 'tailscale') return `Tailscale · ${name}`
+  if (upperKind === 'zerotier') return `ZeroTier · ${name}`
+  if (upperKind === 'ipsec') return `IPsec · ${name}`
+  return name
+}
+
+const ifaceDownLabel = (name: string, kind?: string) => `${ifaceDisplayName(name, kind)} ↓`
+const ifaceUpLabel = (name: string, kind?: string) => `${ifaceDisplayName(name, kind)} ↑`
+const extraColorPair = (index: number) => extraPalette[index % extraPalette.length]
+
+const ensureExtraHistory = (name: string, kind?: string) => {
+  if (!extraHistories.value[name]) {
+    extraHistories.value[name] = { down: initValue(), up: initValue(), kind }
+  }
+  if (!extraOrder.value.includes(name)) {
+    extraOrder.value = [...extraOrder.value, name]
+  }
+  if (kind) extraHistories.value[name].kind = kind
+}
+
+const extraInterfaceKeys = computed(() => extraOrder.value.filter((name) => !!extraHistories.value[name]))
+
+const currentExtraStats = computed(() => {
+  return extraInterfaceKeys.value
+    .map((name) => ({
+      name,
+      kind: extraHistories.value[name]?.kind || 'vpn',
+      down: latestValue(extraHistories.value[name]?.down || []),
+      up: latestValue(extraHistories.value[name]?.up || []),
+    }))
+    .filter((item) => item.down > 0 || item.up > 0 || !!item.kind)
+    .sort((a, b) => (b.down + b.up) - (a.down + a.up))
+})
+
+const extraSeriesValues = computed(() => {
+  return extraInterfaceKeys.value.flatMap((name) => {
+    const hist = extraHistories.value[name]
+    if (!hist) return [] as number[]
+    return [...hist.down, ...hist.up].map((item) => Number(item?.value || 0))
+  })
+})
+
 const allSeriesValues = computed(() => [
   ...routerDownloadHistory.value,
   ...routerUploadHistory.value,
@@ -161,7 +253,7 @@ const allSeriesValues = computed(() => [
   ...mihomoUploadHistory.value,
   ...otherDownloadHistory.value,
   ...otherUploadHistory.value,
-].map((item) => Number(item?.value || 0)))
+].map((item) => Number(item?.value || 0)).concat(extraSeriesValues.value))
 
 const maxObserved = computed(() => Math.max(0, ...allSeriesValues.value))
 
@@ -189,20 +281,60 @@ const mihomoUpLabel = computed(() => t('routerTrafficLegendMihomoUp'))
 const otherDownLabel = computed(() => t('routerTrafficLegendOtherDown'))
 const otherUpLabel = computed(() => t('routerTrafficLegendOtherUp'))
 
+const dynamicLegendItems = computed(() => extraInterfaceKeys.value.flatMap((name) => {
+  const kind = extraHistories.value[name]?.kind
+  return [ifaceDownLabel(name, kind), ifaceUpLabel(name, kind)]
+}))
+
+const dynamicExtraSeries = computed(() => extraInterfaceKeys.value.flatMap((name, index) => {
+  const hist = extraHistories.value[name]
+  if (!hist) return []
+  const colors = extraColorPair(index)
+  return [
+    {
+      name: ifaceDownLabel(name, hist.kind),
+      type: 'line',
+      smooth: true,
+      symbol: 'none',
+      data: hist.down.map((item) => item.value),
+      color: colors.down,
+      lineStyle: { width: 1.8 },
+      emphasis: { focus: 'series' },
+    },
+    {
+      name: ifaceUpLabel(name, hist.kind),
+      type: 'line',
+      smooth: true,
+      symbol: 'none',
+      data: hist.up.map((item) => item.value),
+      color: colors.up,
+      lineStyle: { width: 1.8, type: 'dotted' },
+      emphasis: { focus: 'series' },
+    },
+  ]
+}))
+
 const options = computed(() => ({
   grid: {
     left: 12,
-    top: 42,
+    top: 52,
     right: 12,
     bottom: 26,
     containLabel: true,
   },
   legend: {
+    type: 'scroll',
     top: 8,
     left: 12,
     right: 12,
     itemWidth: 12,
     itemHeight: 8,
+    pageIconColor: colorSet.baseContent,
+    pageTextStyle: {
+      color: colorSet.baseContent,
+      fontFamily,
+      fontSize: 10,
+    },
     textStyle: {
       color: colorSet.baseContent,
       fontFamily,
@@ -215,6 +347,7 @@ const options = computed(() => ({
       mihomoUpLabel.value,
       otherDownLabel.value,
       otherUpLabel.value,
+      ...dynamicLegendItems.value,
     ],
   },
   tooltip: {
@@ -355,6 +488,7 @@ const options = computed(() => ({
       lineStyle: { width: 2 },
       emphasis: { focus: 'series' },
     },
+    ...dynamicExtraSeries.value,
   ],
 }))
 
@@ -370,6 +504,33 @@ const scheduleNextPoll = () => {
   pollTimer = window.setTimeout(pollTraffic, 2000)
 }
 
+const computeExtraSpeeds = (items: AgentTrafficLiveIface[], ts: number) => {
+  const speeds: Record<string, { down: number; up: number; kind?: string }> = {}
+  const nextState: ExtraCounterState = { ...lastExtraCounters.value }
+
+  for (const item of items) {
+    const name = String(item?.name || '').trim()
+    if (!name) continue
+    const kind = item?.kind || 'vpn'
+    const rxBytes = Number(item?.rxBytes || 0)
+    const txBytes = Number(item?.txBytes || 0)
+    const prev = lastExtraCounters.value[name]
+    let down = 0
+    let up = 0
+    if (prev && ts > prev.ts) {
+      const dtSec = Math.max((ts - prev.ts) / 1000, 1)
+      down = Math.max(rxBytes - prev.rxBytes, 0) / dtSec
+      up = Math.max(txBytes - prev.txBytes, 0) / dtSec
+    }
+    speeds[name] = { down, up, kind }
+    nextState[name] = { rxBytes, txBytes, ts, kind }
+    ensureExtraHistory(name, kind)
+  }
+
+  lastExtraCounters.value = nextState
+  return speeds
+}
+
 const pollTraffic = async () => {
   const timestamp = Date.now()
   const mihomoDown = Math.max(0, Number(downloadSpeed.value || 0))
@@ -377,6 +538,7 @@ const pollTraffic = async () => {
 
   let routerDown = 0
   let routerUp = 0
+  let extraSpeeds: Record<string, { down: number; up: number; kind?: string }> = {}
 
   if (agentEnabled.value) {
     const live = await agentTrafficLiveAPI()
@@ -395,6 +557,9 @@ const pollTraffic = async () => {
       lastRxBytes = rxBytes
       lastTxBytes = txBytes
       lastSampleTs = ts
+      if (Array.isArray(live.extraIfaces) && live.extraIfaces.length) {
+        extraSpeeds = computeExtraSpeeds(live.extraIfaces, ts)
+      }
     }
   }
 
@@ -407,6 +572,17 @@ const pollTraffic = async () => {
   pushHistory(mihomoUploadHistory, timestamp, mihomoUp)
   pushHistory(otherDownloadHistory, timestamp, otherDown)
   pushHistory(otherUploadHistory, timestamp, otherUp)
+
+  for (const name of extraInterfaceKeys.value) {
+    const hist = extraHistories.value[name]
+    if (!hist) continue
+    const current = extraSpeeds[name]
+    pushHistory({ value: hist.down }, timestamp, current?.down || 0)
+    hist.down = hist.down.slice(-1 * timeSaved)
+    pushHistory({ value: hist.up }, timestamp, current?.up || 0)
+    hist.up = hist.up.slice(-1 * timeSaved)
+    if (current?.kind) hist.kind = current.kind
+  }
 
   scheduleNextPoll()
 }

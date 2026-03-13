@@ -89,12 +89,20 @@ export type AgentFirmwareCheck = {
   error?: string
 }
 
+export type AgentTrafficLiveIface = {
+  name: string
+  kind?: string
+  rxBytes?: number
+  txBytes?: number
+}
+
 export type AgentTrafficLive = {
   ok: boolean
   iface?: string
   rxBytes?: number
   txBytes?: number
   ts?: number
+  extraIfaces?: AgentTrafficLiveIface[]
   error?: string
 }
 

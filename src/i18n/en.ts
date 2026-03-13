@@ -199,7 +199,7 @@ agentRestoreConfirm: 'Restore from backup? This will overwrite files on the rout
   routerInfo: 'Router info',
   routerInfoTip: 'Best-effort data from router-agent and the router itself.',
   routerTrafficLive: 'Router traffic · live',
-  routerTrafficLiveTip: 'The chart now separates total WAN, Mihomo, and traffic outside Mihomo (for example XKeen or other VPNs) by color.',
+  routerTrafficLiveTip: 'The chart separates total WAN, Mihomo, and traffic outside Mihomo by color, and also shows detected extra VPN/tunnel interfaces as separate series.',
   routerTrafficTotal: 'Total WAN',
   routerTrafficOutsideMihomo: 'Outside Mihomo',
   routerTrafficLegendRouterDown: 'WAN ↓',
