@@ -23,12 +23,12 @@
         <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
           <div class="mb-1 text-xs opacity-60">{{ $t('routerTrafficTotal') }}</div>
           <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-[var(--router-wan-down)]" />
+            <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-wan-down)]" />
             <span class="opacity-80">{{ $t('download') }}:</span>
             <span class="font-mono">{{ currentRouterDownloadLabel }}</span>
           </div>
           <div class="mt-1 flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-[var(--router-wan-up)]" />
+            <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-wan-up)]" />
             <span class="opacity-80">{{ $t('upload') }}:</span>
             <span class="font-mono">{{ currentRouterUploadLabel }}</span>
           </div>
@@ -37,12 +37,12 @@
         <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
           <div class="mb-1 text-xs opacity-60">{{ $t('mihomoVersion') }}</div>
           <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-[var(--router-mihomo-down)]" />
+            <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-mihomo-down)]" />
             <span class="opacity-80">{{ $t('download') }}:</span>
             <span class="font-mono">{{ currentMihomoDownloadLabel }}</span>
           </div>
           <div class="mt-1 flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-[var(--router-mihomo-up)]" />
+            <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-mihomo-up)]" />
             <span class="opacity-80">{{ $t('upload') }}:</span>
             <span class="font-mono">{{ currentMihomoUploadLabel }}</span>
           </div>
@@ -51,12 +51,12 @@
         <div class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-2">
           <div class="mb-1 text-xs opacity-60">{{ $t('routerTrafficOutsideMihomo') }}</div>
           <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-[var(--router-other-down)]" />
+            <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-other-down)]" />
             <span class="opacity-80">{{ $t('download') }}:</span>
             <span class="font-mono">{{ currentOtherDownloadLabel }}</span>
           </div>
           <div class="mt-1 flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-[var(--router-other-up)]" />
+            <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-other-up)]" />
             <span class="opacity-80">{{ $t('upload') }}:</span>
             <span class="font-mono">{{ currentOtherUploadLabel }}</span>
           </div>
@@ -74,12 +74,12 @@
             <span class="badge badge-ghost badge-xs uppercase">{{ item.kind || 'vpn' }}</span>
           </div>
           <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: extraColorPair(index).down }" />
+            <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: extraColorPair(index).down }" />
             <span class="opacity-80">{{ $t('download') }}:</span>
             <span class="font-mono">{{ speedLabel(item.down) }}</span>
           </div>
           <div class="mt-1 flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: extraColorPair(index).up }" />
+            <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: extraColorPair(index).up }" />
             <span class="opacity-80">{{ $t('upload') }}:</span>
             <span class="font-mono">{{ speedLabel(item.up) }}</span>
           </div>
@@ -110,11 +110,11 @@
             </div>
             <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
               <span class="inline-flex items-center gap-2">
-                <span class="h-2.5 w-2.5 rounded-full bg-[var(--router-mihomo-down)]" />
+                <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-mihomo-down)]" />
                 {{ $t('download') }}: <span class="font-mono">{{ speedLabel(item.down) }}</span>
               </span>
               <span class="inline-flex items-center gap-2">
-                <span class="h-2.5 w-2.5 rounded-full bg-[var(--router-mihomo-up)]" />
+                <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-mihomo-up)]" />
                 {{ $t('upload') }}: <span class="font-mono">{{ speedLabel(item.up) }}</span>
               </span>
             </div>
