@@ -86,7 +86,7 @@
         </div>
       </div>
 
-      <div v-if="topTrafficHosts.length" class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-3">
+      <div v-if="stableTrafficHosts.length" class="rounded-lg border border-base-content/10 bg-base-200/20 px-3 py-3">
         <div class="mb-2 flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="text-sm font-medium">{{ $t('routerTrafficTopHosts') }}</div>
@@ -95,31 +95,34 @@
           <span class="badge badge-ghost badge-sm">Mihomo</span>
         </div>
 
-        <div class="grid gap-2 md:grid-cols-2">
+        <div class="overflow-hidden rounded-lg border border-base-content/10 bg-base-100/30">
+          <div class="grid grid-cols-[minmax(0,1.4fr)_96px_96px_72px] items-center gap-3 px-3 py-2 text-[11px] uppercase tracking-wide opacity-60">
+            <div>{{ $t('routerTrafficTopHosts') }}</div>
+            <div>{{ $t('download') }}</div>
+            <div>{{ $t('upload') }}</div>
+            <div class="text-right">{{ $t('connections') }}</div>
+          </div>
+
           <div
-            v-for="item in topTrafficHosts"
+            v-for="item in stableTrafficHosts"
             :key="`traffic-host-${item.ip}`"
-            class="rounded-lg border border-base-content/10 bg-base-100/30 px-3 py-2"
+            class="grid grid-cols-[minmax(0,1.4fr)_96px_96px_72px] items-center gap-3 border-t border-base-content/10 px-3 py-2 text-sm"
           >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="truncate text-sm font-medium">{{ item.label }}</div>
-                <div class="truncate text-[11px] opacity-60">{{ item.ip }}</div>
-              </div>
-              <span class="badge badge-ghost badge-xs">{{ item.connections }} {{ $t('connections') }}</span>
+            <div class="min-w-0">
+              <div class="truncate font-medium">{{ item.label }}</div>
+              <div class="truncate text-[11px] opacity-60">{{ item.ip }}</div>
+              <div v-if="item.targets.length" class="truncate text-[11px] opacity-70">{{ item.targets.join(' · ') }}</div>
             </div>
-            <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-              <span class="inline-flex items-center gap-2">
-                <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-mihomo-down)]" />
-                {{ $t('download') }}: <span class="font-mono">{{ speedLabel(item.down) }}</span>
-              </span>
-              <span class="inline-flex items-center gap-2">
-                <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-mihomo-up)]" />
-                {{ $t('upload') }}: <span class="font-mono">{{ speedLabel(item.up) }}</span>
-              </span>
+            <div class="inline-flex items-center gap-2 font-mono text-xs sm:text-sm">
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-mihomo-down)]" />
+              <span>{{ speedLabel(item.down) }}</span>
             </div>
-            <div v-if="item.targets.length" class="mt-2 truncate text-[11px] opacity-70">
-              {{ item.targets.join(' · ') }}
+            <div class="inline-flex items-center gap-2 font-mono text-xs sm:text-sm">
+              <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--router-mihomo-up)]" />
+              <span>{{ speedLabel(item.up) }}</span>
+            </div>
+            <div class="text-right">
+              <span class="badge badge-ghost badge-xs sm:badge-sm">{{ item.connections }}</span>
             </div>
           </div>
         </div>
@@ -158,6 +161,7 @@ type ExtraCounterState = Record<string, { rxBytes: number; txBytes: number; ts: 
 
 type ExtraColorPair = { down: string; up: string }
 type HostTrafficStat = { label: string; ip: string; down: number; up: number; connections: number; targets: string[] }
+type HostTrafficState = HostTrafficStat & { displayDown: number; displayUp: number; lastSeen: number; score: number; missingTicks: number }
 
 const { t } = useI18n()
 const chartRef = ref<HTMLElement | null>(null)
@@ -282,7 +286,10 @@ const currentExtraStats = computed(() => {
     .sort((a, b) => (b.down + b.up) - (a.down + a.up))
 })
 
-const topTrafficHosts = computed<HostTrafficStat[]>(() => {
+const hostTrafficState = ref<Record<string, HostTrafficState>>({})
+let hostTrafficTimer: number | null = null
+
+const collectHostSnapshot = (): HostTrafficStat[] => {
   const map = new Map<string, { ip: string; label: string; down: number; up: number; connections: number; targets: Set<string> }>()
 
   for (const conn of activeConnections.value) {
@@ -295,7 +302,7 @@ const topTrafficHosts = computed<HostTrafficStat[]>(() => {
     const label = lanHostNames.value[ip] || ip
 
     const current = map.get(ip) || { ip, label, down: 0, up: 0, connections: 0, targets: new Set<string>() }
-    current.label = lanHostNames.value[ip] || current.label || ip
+    current.label = label || current.label || ip
     current.down += down
     current.up += up
     current.connections += 1
@@ -303,17 +310,90 @@ const topTrafficHosts = computed<HostTrafficStat[]>(() => {
     map.set(ip, current)
   }
 
-  return [...map.values()]
-    .filter((item) => item.down > 0 || item.up > 0)
-    .sort((a, b) => (b.down + b.up) - (a.down + a.up))
-    .slice(0, 6)
+  return [...map.values()].map((item) => ({
+    ip: item.ip,
+    label: item.label,
+    down: item.down,
+    up: item.up,
+    connections: item.connections,
+    targets: [...item.targets],
+  }))
+}
+
+const refreshHostTraffic = () => {
+  const now = Date.now()
+  const current = collectHostSnapshot()
+  const seen = new Set<string>()
+  const next: Record<string, HostTrafficState> = { ...hostTrafficState.value }
+
+  for (const item of current) {
+    seen.add(item.ip)
+    const prev = next[item.ip]
+    const alpha = prev ? 0.38 : 1
+    const displayDown = prev ? ((prev.displayDown * (1 - alpha)) + (item.down * alpha)) : item.down
+    const displayUp = prev ? ((prev.displayUp * (1 - alpha)) + (item.up * alpha)) : item.up
+    const scoreBase = item.down + item.up
+    next[item.ip] = {
+      ...item,
+      displayDown,
+      displayUp,
+      lastSeen: now,
+      score: prev ? ((prev.score * 0.7) + (scoreBase * 0.3)) : scoreBase,
+      missingTicks: 0,
+    }
+  }
+
+  for (const [ip, item] of Object.entries(next)) {
+    if (seen.has(ip)) continue
+    const agedMs = now - Number(item.lastSeen || 0)
+    const decay = agedMs > 20000 ? 0.72 : 0.84
+    const displayDown = (item.displayDown || 0) * decay
+    const displayUp = (item.displayUp || 0) * decay
+    const score = (item.score || 0) * decay
+    const missingTicks = (item.missingTicks || 0) + 1
+    if ((displayDown + displayUp) < 256 && missingTicks > 8) {
+      delete next[ip]
+      continue
+    }
+    next[ip] = {
+      ...item,
+      down: displayDown,
+      up: displayUp,
+      displayDown,
+      displayUp,
+      connections: 0,
+      score,
+      missingTicks,
+    }
+  }
+
+  hostTrafficState.value = next
+}
+
+const scheduleHostTrafficRefresh = () => {
+  if (hostTrafficTimer !== null) window.clearTimeout(hostTrafficTimer)
+  hostTrafficTimer = window.setTimeout(() => {
+    refreshHostTraffic()
+    scheduleHostTrafficRefresh()
+  }, 1500)
+}
+
+const stableTrafficHosts = computed<HostTrafficStat[]>(() => {
+  return Object.values(hostTrafficState.value)
+    .filter((item) => (item.displayDown + item.displayUp) > 0)
+    .sort((a, b) => {
+      const scoreDiff = (b.score || 0) - (a.score || 0)
+      if (Math.abs(scoreDiff) > 128) return scoreDiff
+      return (b.lastSeen || 0) - (a.lastSeen || 0)
+    })
+    .slice(0, 8)
     .map((item) => ({
       ip: item.ip,
       label: item.label,
-      down: item.down,
-      up: item.up,
+      down: item.displayDown,
+      up: item.displayUp,
       connections: item.connections,
-      targets: [...item.targets],
+      targets: item.targets,
     }))
 })
 
@@ -707,7 +787,11 @@ onMounted(() => {
 
   refreshLanHosts()
   scheduleHostRefresh()
+  refreshHostTraffic()
+  scheduleHostTrafficRefresh()
   pollTraffic()
+
+  watch(activeConnections, refreshHostTraffic, { deep: true })
 })
 
 onBeforeUnmount(() => {
@@ -715,6 +799,10 @@ onBeforeUnmount(() => {
   if (hostsTimer !== null) {
     window.clearTimeout(hostsTimer)
     hostsTimer = null
+  }
+  if (hostTrafficTimer !== null) {
+    window.clearTimeout(hostTrafficTimer)
+    hostTrafficTimer = null
   }
 })
 </script>
